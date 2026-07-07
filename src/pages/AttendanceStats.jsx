@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 
 function AttendanceStats() {
@@ -10,11 +10,23 @@ function AttendanceStats() {
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
   const [filterMode, setFilterMode] = useState('all')
-  const [selectedPlayer, setSelectedPlayer] = useState(null)
+  const [popupPlayer, setPopupPlayer] = useState(null)
+  const [popupPosition, setPopupPosition] = useState({ top: 0, left: 0 })
+  const popupRef = useRef(null)
 
   useEffect(() => {
     fetchStats()
   }, [filterMode, startDate, endDate])
+
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (popupRef.current && !popupRef.current.contains(e.target)) {
+        setPopupPlayer(null)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
 
   async function fetchStats() {
     setLoading(true)
@@ -78,6 +90,16 @@ function AttendanceStats() {
     setLoading(false)
   }
 
+  function handleNameClick(e, player) {
+    const rect = e.currentTarget.getBoundingClientRect()
+    const scrollTop = window.scrollY
+    setPopupPosition({
+      top: rect.bottom + scrollTop + 8,
+      left: Math.min(rect.left, window.innerWidth - 420),
+    })
+    setPopupPlayer(popupPlayer?.id === player.id ? null : player)
+  }
+
   const sorted = [...stats].sort((a, b) => {
     switch(sortBy) {
       case 'rate': return b.rate - a.rate
@@ -126,9 +148,9 @@ function AttendanceStats() {
     ? Math.round(stats.reduce((sum, s) => sum + s.rate, 0) / stats.length)
     : 0
 
-  const playerRecords = selectedPlayer
+  const popupRecords = popupPlayer
     ? allAttendance
-        .filter(a => a.player_id === selectedPlayer.id)
+        .filter(a => a.player_id === popupPlayer.id)
         .sort((a, b) => b.game_date.localeCompare(a.game_date))
     : []
 
@@ -207,77 +229,6 @@ function AttendanceStats() {
         </div>
       </div>
 
-      {/* 개인 상세 기록 모달 */}
-      {selectedPlayer && (
-        <div className="bg-slate-800 rounded-xl p-6 border border-emerald-500/50 mb-6">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-bold text-white">
-              👤 {selectedPlayer.name} 출석 기록
-            </h2>
-            <button
-              onClick={() => setSelectedPlayer(null)}
-              className="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg text-sm"
-            >
-              ✕ 닫기
-            </button>
-          </div>
-
-          {/* 개인 요약 */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-            <div className="bg-emerald-500/10 rounded-lg p-3 text-center">
-              <p className="text-lg font-bold text-emerald-400">{selectedPlayer.attended}</p>
-              <p className="text-slate-400 text-xs">✅ 출석</p>
-            </div>
-            <div className="bg-yellow-500/10 rounded-lg p-3 text-center">
-              <p className="text-lg font-bold text-yellow-400">{selectedPlayer.late}</p>
-              <p className="text-slate-400 text-xs">⏰ 지각</p>
-            </div>
-            <div className="bg-orange-500/10 rounded-lg p-3 text-center">
-              <p className="text-lg font-bold text-orange-400">{selectedPlayer.earlyLeave}</p>
-              <p className="text-slate-400 text-xs">🏃 조퇴</p>
-            </div>
-            <div className="bg-red-500/10 rounded-lg p-3 text-center">
-              <p className="text-lg font-bold text-red-400">{selectedPlayer.absent}</p>
-              <p className="text-slate-400 text-xs">❌ 불참</p>
-            </div>
-          </div>
-
-          {/* 날짜별 기록 */}
-          <div className="max-h-60 overflow-y-auto">
-            <table className="w-full text-left">
-              <thead>
-                <tr className="border-b border-slate-700">
-                  <th className="px-4 py-2 text-slate-400 text-sm">날짜</th>
-                  <th className="px-4 py-2 text-slate-400 text-sm">팀</th>
-                  <th className="px-4 py-2 text-slate-400 text-sm">상태</th>
-                  <th className="px-4 py-2 text-slate-400 text-sm">시간</th>
-                </tr>
-              </thead>
-              <tbody>
-                {playerRecords.map(record => (
-                  <tr key={record.id} className="border-b border-slate-700/50 hover:bg-slate-700/30">
-                    <td className="px-4 py-2 text-white text-sm">{record.game_date}</td>
-                    <td className="px-4 py-2 text-slate-300 text-sm">{record.team}</td>
-                    <td className="px-4 py-2">
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusBgColor(record.status)}`}>
-                        {statusIcon(record.status)} {record.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2 text-slate-400 text-sm">
-                      {new Date(record.checked_at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {playerRecords.length === 0 && (
-            <p className="text-center text-slate-400 py-4">출석 기록이 없습니다</p>
-          )}
-        </div>
-      )}
-
       {/* 정렬 옵션 */}
       <div className="flex gap-2 mb-4">
         <span className="text-slate-400 text-sm py-2">정렬:</span>
@@ -307,49 +258,125 @@ function AttendanceStats() {
           <p className="text-xl">⏳ 로딩 중...</p>
         </div>
       ) : (
-        <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-x-auto">
-          <table className="w-full text-left">
-            <thead>
-              <tr className="border-b border-slate-700">
-                <th className="px-4 py-3 text-slate-400 text-sm w-12">#</th>
-                <th className="px-4 py-3 text-slate-400 text-sm">이름</th>
-                <th className="px-4 py-3 text-slate-400 text-sm">출석률</th>
-                <th className="px-4 py-3 text-slate-400 text-sm text-center">✅ 출석</th>
-                <th className="px-4 py-3 text-slate-400 text-sm text-center">⏰ 지각</th>
-                <th className="px-4 py-3 text-slate-400 text-sm text-center">🏃 조퇴</th>
-                <th className="px-4 py-3 text-slate-400 text-sm text-center">❌ 불참</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sorted.map((player, idx) => (
-                <tr
-                  key={player.id}
-                  className="border-b border-slate-700/50 hover:bg-slate-700/30 cursor-pointer"
-                  onClick={() => setSelectedPlayer(player)}
-                >
-                  <td className="px-4 py-3 text-slate-500 text-sm">{idx + 1}</td>
-                  <td className="px-4 py-3 text-emerald-400 font-medium underline">{player.name}</td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-3">
-                      <div className="flex-1 bg-slate-700 rounded-full h-2 max-w-[120px]">
-                        <div
-                          className={`h-2 rounded-full ${rateBarColor(player.rate)}`}
-                          style={{ width: `${player.rate}%` }}
-                        />
-                      </div>
-                      <span className={`font-bold text-sm ${rateColor(player.rate)}`}>
-                        {player.rate}%
-                      </span>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-center text-emerald-400">{player.attended}</td>
-                  <td className="px-4 py-3 text-center text-yellow-400">{player.late}</td>
-                  <td className="px-4 py-3 text-center text-orange-400">{player.earlyLeave}</td>
-                  <td className="px-4 py-3 text-center text-red-400">{player.absent}</td>
+        <div className="relative">
+          <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-x-auto">
+            <table className="w-full text-left">
+              <thead>
+                <tr className="border-b border-slate-700">
+                  <th className="px-4 py-3 text-slate-400 text-sm w-12">#</th>
+                  <th className="px-4 py-3 text-slate-400 text-sm">이름</th>
+                  <th className="px-4 py-3 text-slate-400 text-sm">출석률</th>
+                  <th className="px-4 py-3 text-slate-400 text-sm text-center">✅ 출석</th>
+                  <th className="px-4 py-3 text-slate-400 text-sm text-center">⏰ 지각</th>
+                  <th className="px-4 py-3 text-slate-400 text-sm text-center">🏃 조퇴</th>
+                  <th className="px-4 py-3 text-slate-400 text-sm text-center">❌ 불참</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {sorted.map((player, idx) => (
+                  <tr key={player.id} className="border-b border-slate-700/50 hover:bg-slate-700/30">
+                    <td className="px-4 py-3 text-slate-500 text-sm">{idx + 1}</td>
+                    <td className="px-4 py-3">
+                      <button
+                        onClick={(e) => handleNameClick(e, player)}
+                        className={`font-medium underline cursor-pointer transition-colors ${
+                          popupPlayer?.id === player.id ? 'text-white' : 'text-emerald-400 hover:text-emerald-300'
+                        }`}
+                      >
+                        {player.name}
+                      </button>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-3">
+                        <div className="flex-1 bg-slate-700 rounded-full h-2 max-w-[120px]">
+                          <div
+                            className={`h-2 rounded-full ${rateBarColor(player.rate)}`}
+                            style={{ width: `${player.rate}%` }}
+                          />
+                        </div>
+                        <span className={`font-bold text-sm ${rateColor(player.rate)}`}>
+                          {player.rate}%
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-center text-emerald-400">{player.attended}</td>
+                    <td className="px-4 py-3 text-center text-yellow-400">{player.late}</td>
+                    <td className="px-4 py-3 text-center text-orange-400">{player.earlyLeave}</td>
+                    <td className="px-4 py-3 text-center text-red-400">{player.absent}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* 팝업 */}
+          {popupPlayer && (
+            <div
+              ref={popupRef}
+              className="absolute z-50 bg-slate-800 border border-emerald-500/50 rounded-xl shadow-2xl shadow-black/50 w-[400px]"
+              style={{ top: popupPosition.top - document.querySelector('.relative').getBoundingClientRect().top - window.scrollY, left: Math.max(0, popupPosition.left - document.querySelector('.relative').getBoundingClientRect().left) }}
+            >
+              {/* 팝업 헤더 */}
+              <div className="flex justify-between items-center px-4 py-3 border-b border-slate-700">
+                <h3 className="font-bold text-white">👤 {popupPlayer.name}</h3>
+                <button
+                  onClick={() => setPopupPlayer(null)}
+                  className="text-slate-400 hover:text-white text-lg"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* 개인 요약 */}
+              <div className="grid grid-cols-4 gap-2 px-4 py-3 border-b border-slate-700">
+                <div className="text-center">
+                  <p className="text-sm font-bold text-emerald-400">{popupPlayer.attended}</p>
+                  <p className="text-xs text-slate-400">출석</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-sm font-bold text-yellow-400">{popupPlayer.late}</p>
+                  <p className="text-xs text-slate-400">지각</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-sm font-bold text-orange-400">{popupPlayer.earlyLeave}</p>
+                  <p className="text-xs text-slate-400">조퇴</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-sm font-bold text-red-400">{popupPlayer.absent}</p>
+                  <p className="text-xs text-slate-400">불참</p>
+                </div>
+              </div>
+
+              {/* 날짜별 기록 */}
+              <div className="max-h-48 overflow-y-auto">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="border-b border-slate-700">
+                      <th className="px-4 py-2 text-slate-400 text-xs">날짜</th>
+                      <th className="px-4 py-2 text-slate-400 text-xs">팀</th>
+                      <th className="px-4 py-2 text-slate-400 text-xs">상태</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {popupRecords.map(record => (
+                      <tr key={record.id} className="border-b border-slate-700/30 hover:bg-slate-700/20">
+                        <td className="px-4 py-1.5 text-white text-xs">{record.game_date}</td>
+                        <td className="px-4 py-1.5 text-slate-300 text-xs">{record.team}</td>
+                        <td className="px-4 py-1.5">
+                          <span className={`px-2 py-0.5 rounded-full text-xs ${statusBgColor(record.status)}`}>
+                            {statusIcon(record.status)} {record.status}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {popupRecords.length === 0 && (
+                  <p className="text-center text-slate-400 py-4 text-sm">기록 없음</p>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
