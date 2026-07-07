@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase'
 function PlayerList() {
   const [players, setPlayers] = useState([])
   const [search, setSearch] = useState('')
+  const [filterCategory, setFilterCategory] = useState('')
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -39,11 +40,14 @@ function PlayerList() {
     }
   }
 
-  const filtered = players.filter(p =>
-    p.name?.includes(search) ||
-    p.nickname?.includes(search) ||
-    p.position?.includes(search)
-  )
+  const filtered = players.filter(p => {
+    const matchSearch =
+      p.name?.includes(search) ||
+      p.address?.includes(search) ||
+      p.main_position?.includes(search)
+    const matchCategory = filterCategory ? p.category === filterCategory : true
+    return matchSearch && matchCategory
+  })
 
   const positionColor = (pos) => {
     switch(pos) {
@@ -54,6 +58,17 @@ function PlayerList() {
       default: return 'bg-slate-500/20 text-slate-400'
     }
   }
+
+  const categoryColor = (cat) => {
+    switch(cat) {
+      case '정회원': return 'bg-emerald-500/20 text-emerald-400'
+      case '예비회원': return 'bg-orange-500/20 text-orange-400'
+      case '임원': return 'bg-purple-500/20 text-purple-400'
+      default: return 'bg-slate-500/20 text-slate-400'
+    }
+  }
+
+  const currentYear = new Date().getFullYear()
 
   return (
     <div>
@@ -71,18 +86,28 @@ function PlayerList() {
         </Link>
       </div>
 
-      {/* 검색 */}
-      <div className="mb-6">
+      {/* 검색 & 필터 */}
+      <div className="flex flex-col sm:flex-row gap-4 mb-6">
         <input
           type="text"
-          placeholder="🔍 이름, 별명, 포지션으로 검색..."
+          placeholder="🔍 이름, 주소, 포지션으로 검색..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+          className="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
         />
+        <select
+          value={filterCategory}
+          onChange={(e) => setFilterCategory(e.target.value)}
+          className="bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-emerald-500"
+        >
+          <option value="">전체 카테고리</option>
+          <option value="정회원">정회원</option>
+          <option value="예비회원">예비회원</option>
+          <option value="임원">임원</option>
+        </select>
       </div>
 
-      {/* 선수 목록 */}
+      {/* 선수 목록 - 테이블 형태 */}
       {loading ? (
         <div className="text-center py-20 text-slate-400">
           <p className="text-xl">⏳ 로딩 중...</p>
@@ -94,56 +119,62 @@ function PlayerList() {
           <p className="mt-2">위의 "선수 등록" 버튼을 눌러 선수를 추가하세요!</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filtered.map(player => (
-            <div key={player.id} className="bg-slate-800 rounded-xl p-5 border border-slate-700 hover:border-emerald-500/50 transition-colors">
-              <div className="flex justify-between items-start mb-3">
-                <div>
-                  <h3 className="text-lg font-bold text-white">{player.name}</h3>
-                  {player.nickname && (
-                    <p className="text-slate-400 text-sm">"{player.nickname}"</p>
-                  )}
-                </div>
-                {player.back_number && (
-                  <span className="bg-emerald-500/20 text-emerald-400 px-3 py-1 rounded-lg font-bold text-lg">
-                    #{player.back_number}
-                  </span>
-                )}
-              </div>
-
-              <div className="flex flex-wrap gap-2 mb-4">
-                {player.position && (
-                  <span className={`px-3 py-1 rounded-full text-sm font-medium ${positionColor(player.position)}`}>
-                    {player.position}
-                  </span>
-                )}
-                {player.role && player.role !== '일반' && (
-                  <span className="bg-purple-500/20 text-purple-400 px-3 py-1 rounded-full text-sm font-medium">
-                    {player.role}
-                  </span>
-                )}
-              </div>
-
-              {player.phone && (
-                <p className="text-slate-400 text-sm mb-4">📱 {player.phone}</p>
-              )}
-
-              <div className="flex gap-2">
-                <Link
-                  to={`/players/${player.id}/edit`}
-                  className="flex-1 text-center bg-slate-700 hover:bg-slate-600 text-white py-2 rounded-lg text-sm transition-colors"
-                >
-                  ✏️ 수정
-                </Link>
-                <button
-                  onClick={() => deletePlayer(player.id)}
-                  className="flex-1 bg-red-500/10 hover:bg-red-500/20 text-red-400 py-2 rounded-lg text-sm transition-colors"
-                >
-                  🗑️ 삭제
-                </button>
-              </div>
-            </div>
-          ))}
+        <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-x-auto">
+          <table className="w-full text-left">
+            <thead>
+              <tr className="border-b border-slate-700 bg-slate-800/80">
+                <th className="px-4 py-3 text-slate-400 text-sm font-medium">카테고리</th>
+                <th className="px-4 py-3 text-slate-400 text-sm font-medium">이름</th>
+                <th className="px-4 py-3 text-slate-400 text-sm font-medium">주소</th>
+                <th className="px-4 py-3 text-slate-400 text-sm font-medium">나이</th>
+                <th className="px-4 py-3 text-slate-400 text-sm font-medium">주포지션</th>
+                <th className="px-4 py-3 text-slate-400 text-sm font-medium">가입연월</th>
+                <th className="px-4 py-3 text-slate-400 text-sm font-medium">연락처</th>
+                <th className="px-4 py-3 text-slate-400 text-sm font-medium text-center">관리</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map(player => (
+                <tr key={player.id} className="border-b border-slate-700/50 hover:bg-slate-700/30 transition-colors">
+                  <td className="px-4 py-3">
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${categoryColor(player.category)}`}>
+                      {player.category || '-'}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-white font-medium">{player.name}</td>
+                  <td className="px-4 py-3 text-slate-300 text-sm">{player.address || '-'}</td>
+                  <td className="px-4 py-3 text-slate-300 text-sm">
+                    {player.birth_year ? `${player.birth_year}년 (${currentYear - player.birth_year}세)` : '-'}
+                  </td>
+                  <td className="px-4 py-3">
+                    {player.main_position ? (
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${positionColor(player.main_position)}`}>
+                        {player.main_position}
+                      </span>
+                    ) : '-'}
+                  </td>
+                  <td className="px-4 py-3 text-slate-300 text-sm">{player.join_date || '-'}</td>
+                  <td className="px-4 py-3 text-slate-300 text-sm">{player.phone || '-'}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex gap-2 justify-center">
+                      <Link
+                        to={`/players/${player.id}/edit`}
+                        className="bg-slate-700 hover:bg-slate-600 text-white px-3 py-1 rounded-lg text-xs transition-colors"
+                      >
+                        ✏️
+                      </Link>
+                      <button
+                        onClick={() => deletePlayer(player.id)}
+                        className="bg-red-500/10 hover:bg-red-500/20 text-red-400 px-3 py-1 rounded-lg text-xs transition-colors"
+                      >
+                        🗑️
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
     </div>

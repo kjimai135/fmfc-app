@@ -8,15 +8,13 @@ function PlayerForm() {
   const isEdit = Boolean(id)
 
   const [form, setForm] = useState({
+    category: '정회원',
     name: '',
-    nickname: '',
+    address: '',
+    birth_year: '',
+    main_position: '',
+    join_date: '',
     phone: '',
-    email: '',
-    position: '',
-    back_number: '',
-    birth_date: '',
-    role: '일반',
-    status: '활동',
   })
   const [loading, setLoading] = useState(false)
 
@@ -35,15 +33,13 @@ function PlayerForm() {
 
     if (data) {
       setForm({
+        category: data.category || '정회원',
         name: data.name || '',
-        nickname: data.nickname || '',
+        address: data.address || '',
+        birth_year: data.birth_year || '',
+        main_position: data.main_position || '',
+        join_date: data.join_date || '',
         phone: data.phone || '',
-        email: data.email || '',
-        position: data.position || '',
-        back_number: data.back_number || '',
-        birth_date: data.birth_date || '',
-        role: data.role || '일반',
-        status: data.status || '활동',
       })
     }
   }
@@ -64,7 +60,7 @@ function PlayerForm() {
 
     const playerData = {
       ...form,
-      back_number: form.back_number ? Number(form.back_number) : null,
+      birth_year: form.birth_year ? Number(form.birth_year) : null,
     }
 
     let error
@@ -99,6 +95,21 @@ function PlayerForm() {
 
       <form onSubmit={handleSubmit} className="bg-slate-800 rounded-xl p-6 border border-slate-700">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* 카테고리 */}
+          <div>
+            <label className={labelStyle}>카테고리 *</label>
+            <select
+              name="category"
+              value={form.category}
+              onChange={handleChange}
+              className={inputStyle}
+            >
+              <option value="정회원">정회원</option>
+              <option value="예비회원">예비회원</option>
+              <option value="임원">임원</option>
+            </select>
+          </div>
+
           {/* 이름 */}
           <div>
             <label className={labelStyle}>이름 *</label>
@@ -113,25 +124,40 @@ function PlayerForm() {
             />
           </div>
 
-          {/* 별명 */}
-          <div>
-            <label className={labelStyle}>별명</label>
+          {/* 주소 */}
+          <div className="md:col-span-2">
+            <label className={labelStyle}>주소</label>
             <input
               type="text"
-              name="nickname"
-              value={form.nickname}
+              name="address"
+              value={form.address}
               onChange={handleChange}
-              placeholder="별명 (선택사항)"
+              placeholder="서울시 강남구"
               className={inputStyle}
             />
           </div>
 
-          {/* 포지션 */}
+          {/* 나이(생년) */}
           <div>
-            <label className={labelStyle}>포지션</label>
+            <label className={labelStyle}>생년</label>
+            <input
+              type="number"
+              name="birth_year"
+              value={form.birth_year}
+              onChange={handleChange}
+              placeholder="1990"
+              min="1950"
+              max="2010"
+              className={inputStyle}
+            />
+          </div>
+
+          {/* 주포지션 */}
+          <div>
+            <label className={labelStyle}>주포지션</label>
             <select
-              name="position"
-              value={form.position}
+              name="main_position"
+              value={form.main_position}
               onChange={handleChange}
               className={inputStyle}
             >
@@ -143,17 +169,14 @@ function PlayerForm() {
             </select>
           </div>
 
-          {/* 등번호 */}
+          {/* 가입연월 */}
           <div>
-            <label className={labelStyle}>등번호</label>
+            <label className={labelStyle}>가입연월</label>
             <input
-              type="number"
-              name="back_number"
-              value={form.back_number}
+              type="month"
+              name="join_date"
+              value={form.join_date}
               onChange={handleChange}
-              placeholder="7"
-              min="1"
-              max="99"
               className={inputStyle}
             />
           </div>
@@ -169,63 +192,6 @@ function PlayerForm() {
               placeholder="010-1234-5678"
               className={inputStyle}
             />
-          </div>
-
-          {/* 이메일 */}
-          <div>
-            <label className={labelStyle}>이메일</label>
-            <input
-              type="email"
-              name="email"
-              value={form.email}
-              onChange={handleChange}
-              placeholder="email@example.com"
-              className={inputStyle}
-            />
-          </div>
-
-          {/* 생년월일 */}
-          <div>
-            <label className={labelStyle}>생년월일</label>
-            <input
-              type="date"
-              name="birth_date"
-              value={form.birth_date}
-              onChange={handleChange}
-              className={inputStyle}
-            />
-          </div>
-
-          {/* 역할 */}
-          <div>
-            <label className={labelStyle}>역할</label>
-            <select
-              name="role"
-              value={form.role}
-              onChange={handleChange}
-              className={inputStyle}
-            >
-              <option value="일반">일반</option>
-              <option value="회장">회장</option>
-              <option value="부회장">부회장</option>
-              <option value="총무">총무</option>
-              <option value="운영진">운영진</option>
-            </select>
-          </div>
-
-          {/* 상태 */}
-          <div>
-            <label className={labelStyle}>상태</label>
-            <select
-              name="status"
-              value={form.status}
-              onChange={handleChange}
-              className={inputStyle}
-            >
-              <option value="활동">활동</option>
-              <option value="휴식">휴식</option>
-              <option value="탈퇴">탈퇴</option>
-            </select>
           </div>
         </div>
 
