@@ -3,16 +3,18 @@ import { supabase } from '../lib/supabase'
 
 function AttendanceStats() {
   const [stats, setStats] = useState([])
+  const [allAttendance, setAllAttendance] = useState([])
   const [loading, setLoading] = useState(true)
   const [sortBy, setSortBy] = useState('rate')
   const [totalGames, setTotalGames] = useState(0)
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
   const [filterMode, setFilterMode] = useState('all')
+  const [selectedPlayer, setSelectedPlayer] = useState(null)
 
   useEffect(() => {
     fetchStats()
-  }, [])
+  }, [filterMode, startDate, endDate])
 
   async function fetchStats() {
     setLoading(true)
@@ -20,72 +22,61 @@ function AttendanceStats() {
     const { data: attendance } = await supabase
       .from('attendance')
       .select('*')
+      .order('game_date', { ascending: false })
 
     const { data: players } = await supabase
       .from('players')
       .select('*')
 
     if (attendance && players) {
-      calculateStats(attendance, players)
+      setAllAttendance(attendance)
+      let filtered = attendance
+
+      if (filterMode === 'range' && startDate && endDate) {
+        filtered = attendance.filter(a =>
+          a.game_date >= startDate && a.game_date <= endDate
+        )
+      } else if (filterMode === 'month') {
+        const now = new Date()
+        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0]
+        const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0]
+        filtered = attendance.filter(a =>
+          a.game_date >= monthStart && a.game_date <= monthEnd
+        )
+      } else if (filterMode === '3months') {
+        const now = new Date()
+        const threeMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 3, now.getDate()).toISOString().split('T')[0]
+        filtered = attendance.filter(a => a.game_date >= threeMonthsAgo)
+      }
+
+      const gameDates = [...new Set(filtered.map(a => a.game_date))]
+      setTotalGames(gameDates.length)
+
+      const playerStats = players.map(player => {
+        const records = filtered.filter(a => a.player_id === player.id)
+        const attended = records.filter(a => a.status === '출석').length
+        const late = records.filter(a => a.status === '지각').length
+        const earlyLeave = records.filter(a => a.status === '조퇴').length
+        const absent = records.filter(a => a.status === '불참').length
+        const total = records.length
+        const rate = gameDates.length > 0 ? Math.round(((attended + late + earlyLeave) / gameDates.length) * 100) : 0
+
+        return {
+          id: player.id,
+          name: player.name,
+          attended,
+          late,
+          earlyLeave,
+          absent,
+          total,
+          rate,
+        }
+      })
+
+      setStats(playerStats)
     }
     setLoading(false)
   }
-
-  function calculateStats(attendance, players) {
-    let filtered = attendance
-
-    if (filterMode === 'range' && startDate && endDate) {
-      filtered = attendance.filter(a =>
-        a.game_date >= startDate && a.game_date <= endDate
-      )
-    } else if (filterMode === 'month') {
-      const now = new Date()
-      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0]
-      const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0]
-      filtered = attendance.filter(a =>
-        a.game_date >= monthStart && a.game_date <= monthEnd
-      )
-    } else if (filterMode === '3months') {
-      const now = new Date()
-      const threeMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 3, now.getDate()).toISOString().split('T')[0]
-      filtered = attendance.filter(a => a.game_date >= threeMonthsAgo)
-    }
-
-    const gameDates = [...new Set(filtered.map(a => a.game_date))]
-    setTotalGames(gameDates.length)
-
-    const playerStats = players.map(player => {
-      const records = filtered.filter(a => a.player_id === player.id)
-      const attended = records.filter(a => a.status === '출석').length
-      const late = records.filter(a => a.status === '지각').length
-      const earlyLeave = records.filter(a => a.status === '조퇴').length
-      const absent = records.filter(a => a.status === '불참').length
-      const total = records.length
-      const rate = gameDates.length > 0 ? Math.round(((attended + late + earlyLeave) / gameDates.length) * 100) : 0
-
-      return {
-        id: player.id,
-        name: player.name,
-        attended,
-        late,
-        earlyLeave,
-        absent,
-        total,
-        rate,
-      }
-    })
-
-    setStats(playerStats)
-  }
-
-  function handleFilter() {
-    fetchStats().then(() => {})
-  }
-
-  useEffect(() => {
-    if (stats.length === 0) return
-    fetchStats()
-  }, [filterMode, startDate, endDate])
 
   const sorted = [...stats].sort((a, b) => {
     switch(sortBy) {
@@ -111,9 +102,35 @@ function AttendanceStats() {
     return 'bg-red-500'
   }
 
+  const statusIcon = (s) => {
+    switch(s) {
+      case '출석': return '✅'
+      case '불참': return '❌'
+      case '지각': return '⏰'
+      case '조퇴': return '🏃'
+      default: return ''
+    }
+  }
+
+  const statusBgColor = (s) => {
+    switch(s) {
+      case '출석': return 'bg-emerald-500/10 text-emerald-400'
+      case '불참': return 'bg-red-500/10 text-red-400'
+      case '지각': return 'bg-yellow-500/10 text-yellow-400'
+      case '조퇴': return 'bg-orange-500/10 text-orange-400'
+      default: return ''
+    }
+  }
+
   const avgRate = stats.length > 0
     ? Math.round(stats.reduce((sum, s) => sum + s.rate, 0) / stats.length)
     : 0
+
+  const playerRecords = selectedPlayer
+    ? allAttendance
+        .filter(a => a.player_id === selectedPlayer.id)
+        .sort((a, b) => b.game_date.localeCompare(a.game_date))
+    : []
 
   return (
     <div>
@@ -190,6 +207,77 @@ function AttendanceStats() {
         </div>
       </div>
 
+      {/* 개인 상세 기록 모달 */}
+      {selectedPlayer && (
+        <div className="bg-slate-800 rounded-xl p-6 border border-emerald-500/50 mb-6">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-bold text-white">
+              👤 {selectedPlayer.name} 출석 기록
+            </h2>
+            <button
+              onClick={() => setSelectedPlayer(null)}
+              className="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg text-sm"
+            >
+              ✕ 닫기
+            </button>
+          </div>
+
+          {/* 개인 요약 */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+            <div className="bg-emerald-500/10 rounded-lg p-3 text-center">
+              <p className="text-lg font-bold text-emerald-400">{selectedPlayer.attended}</p>
+              <p className="text-slate-400 text-xs">✅ 출석</p>
+            </div>
+            <div className="bg-yellow-500/10 rounded-lg p-3 text-center">
+              <p className="text-lg font-bold text-yellow-400">{selectedPlayer.late}</p>
+              <p className="text-slate-400 text-xs">⏰ 지각</p>
+            </div>
+            <div className="bg-orange-500/10 rounded-lg p-3 text-center">
+              <p className="text-lg font-bold text-orange-400">{selectedPlayer.earlyLeave}</p>
+              <p className="text-slate-400 text-xs">🏃 조퇴</p>
+            </div>
+            <div className="bg-red-500/10 rounded-lg p-3 text-center">
+              <p className="text-lg font-bold text-red-400">{selectedPlayer.absent}</p>
+              <p className="text-slate-400 text-xs">❌ 불참</p>
+            </div>
+          </div>
+
+          {/* 날짜별 기록 */}
+          <div className="max-h-60 overflow-y-auto">
+            <table className="w-full text-left">
+              <thead>
+                <tr className="border-b border-slate-700">
+                  <th className="px-4 py-2 text-slate-400 text-sm">날짜</th>
+                  <th className="px-4 py-2 text-slate-400 text-sm">팀</th>
+                  <th className="px-4 py-2 text-slate-400 text-sm">상태</th>
+                  <th className="px-4 py-2 text-slate-400 text-sm">시간</th>
+                </tr>
+              </thead>
+              <tbody>
+                {playerRecords.map(record => (
+                  <tr key={record.id} className="border-b border-slate-700/50 hover:bg-slate-700/30">
+                    <td className="px-4 py-2 text-white text-sm">{record.game_date}</td>
+                    <td className="px-4 py-2 text-slate-300 text-sm">{record.team}</td>
+                    <td className="px-4 py-2">
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusBgColor(record.status)}`}>
+                        {statusIcon(record.status)} {record.status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2 text-slate-400 text-sm">
+                      {new Date(record.checked_at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {playerRecords.length === 0 && (
+            <p className="text-center text-slate-400 py-4">출석 기록이 없습니다</p>
+          )}
+        </div>
+      )}
+
       {/* 정렬 옵션 */}
       <div className="flex gap-2 mb-4">
         <span className="text-slate-400 text-sm py-2">정렬:</span>
@@ -234,9 +322,13 @@ function AttendanceStats() {
             </thead>
             <tbody>
               {sorted.map((player, idx) => (
-                <tr key={player.id} className="border-b border-slate-700/50 hover:bg-slate-700/30">
+                <tr
+                  key={player.id}
+                  className="border-b border-slate-700/50 hover:bg-slate-700/30 cursor-pointer"
+                  onClick={() => setSelectedPlayer(player)}
+                >
                   <td className="px-4 py-3 text-slate-500 text-sm">{idx + 1}</td>
-                  <td className="px-4 py-3 text-white font-medium">{player.name}</td>
+                  <td className="px-4 py-3 text-emerald-400 font-medium underline">{player.name}</td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-3">
                       <div className="flex-1 bg-slate-700 rounded-full h-2 max-w-[120px]">
