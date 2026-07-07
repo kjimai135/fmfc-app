@@ -12,6 +12,7 @@ function AttendanceStats() {
   const [filterMode, setFilterMode] = useState('all')
   const [popupPlayer, setPopupPlayer] = useState(null)
   const [popupPosition, setPopupPosition] = useState({ top: 0, left: 0 })
+  const [searchName, setSearchName] = useState('')
   const popupRef = useRef(null)
 
   useEffect(() => {
@@ -100,7 +101,8 @@ function AttendanceStats() {
     setPopupPlayer(popupPlayer?.id === player.id ? null : player)
   }
 
-  const sorted = [...stats].sort((a, b) => {
+  const filtered = stats.filter(p => p.name?.includes(searchName))
+  const sorted = [...filtered].sort((a, b) => {
     switch(sortBy) {
       case 'rate': return b.rate - a.rate
       case 'name': return a.name.localeCompare(b.name)
@@ -227,6 +229,17 @@ function AttendanceStats() {
           </p>
           <p className="text-slate-400 text-sm">80% 이상</p>
         </div>
+      </div>
+
+      {/* 검색 */}
+      <div className="mb-4">
+        <input
+          type="text"
+          placeholder="🔍 선수 이름 검색..."
+          value={searchName}
+          onChange={(e) => setSearchName(e.target.value)}
+          className="w-full sm:w-64 bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+        />
       </div>
 
       {/* 정렬 옵션 */}
