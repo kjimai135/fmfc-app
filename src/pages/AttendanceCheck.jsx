@@ -1,10 +1,9 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 
-const TEAMS = ['호진팀', '민석팀', '용규팀']
-
 function AttendanceCheck() {
   const [players, setPlayers] = useState([])
+  const [teams, setTeams] = useState([])
   const [todayAttendance, setTodayAttendance] = useState([])
   const [selectedPlayer, setSelectedPlayer] = useState('')
   const [selectedTeam, setSelectedTeam] = useState('')
@@ -16,6 +15,7 @@ function AttendanceCheck() {
 
   useEffect(() => {
     fetchPlayers()
+    fetchTeams()
     fetchTodayAttendance()
   }, [])
 
@@ -25,6 +25,14 @@ function AttendanceCheck() {
       .select('*')
       .order('name')
     setPlayers(data || [])
+  }
+
+  async function fetchTeams() {
+    const { data } = await supabase
+      .from('teams')
+      .select('*')
+      .order('display_order')
+    setTeams(data || [])
   }
 
   async function fetchTodayAttendance() {
@@ -95,22 +103,17 @@ function AttendanceCheck() {
     }
   }
 
-  const teamColor = (team) => {
-    switch(team) {
-      case '호진팀': return 'bg-blue-500/20 text-blue-400 border-blue-500/30'
-      case '민석팀': return 'bg-green-500/20 text-green-400 border-green-500/30'
-      case '용규팀': return 'bg-red-500/20 text-red-400 border-red-500/30'
-      default: return 'bg-slate-500/20 text-slate-400'
-    }
+  const teamColors = ['bg-blue-500/20 text-blue-400 border-blue-500/30', 'bg-green-500/20 text-green-400 border-green-500/30', 'bg-red-500/20 text-red-400 border-red-500/30', 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30', 'bg-purple-500/20 text-purple-400 border-purple-500/30', 'bg-orange-500/20 text-orange-400 border-orange-500/30']
+  const teamEmojis = ['🔵', '🟢', '🔴', '🟡', '🟣', '🟠']
+
+  const getTeamColor = (teamName) => {
+    const idx = teams.findIndex(t => t.name === teamName)
+    return teamColors[idx] || 'bg-slate-500/20 text-slate-400'
   }
 
-  const teamEmoji = (team) => {
-    switch(team) {
-      case '호진팀': return '🔵'
-      case '민석팀': return '🟢'
-      case '용규팀': return '🔴'
-      default: return '⚪'
-    }
+  const getTeamEmoji = (teamName) => {
+    const idx = teams.findIndex(t => t.name === teamName)
+    return teamEmojis[idx] || '⚪'
   }
 
   const checkedPlayerIds = todayAttendance.map(a => a.player_id)
@@ -169,8 +172,8 @@ function AttendanceCheck() {
               className="w-full bg-slate-700 border border-slate-600 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-emerald-500"
             >
               <option value="">팀 선택</option>
-              {TEAMS.map(team => (
-                <option key={team} value={team}>{team}</option>
+              {teams.map(team => (
+                <option key={team.id} value={team.name}>{team.name}</option>
               ))}
             </select>
           </div>
@@ -215,14 +218,14 @@ function AttendanceCheck() {
           <p className="mt-2">위에서 출석 체크를 시작하세요!</p>
         </div>
       ) : (
-        TEAMS.map(team => {
-          const teamAttendance = todayAttendance.filter(a => a.team === team)
+        teams.map(team => {
+          const teamAttendance = todayAttendance.filter(a => a.team === team.name)
           if (teamAttendance.length === 0) return null
 
           return (
-            <div key={team} className={`mb-6 rounded-xl border ${teamColor(team)} overflow-hidden`}>
-              <div className={`px-4 py-3 font-bold text-lg`}>
-                {teamEmoji(team)} {team} ({teamAttendance.length}명)
+            <div key={team.id} className={`mb-6 rounded-xl border ${getTeamColor(team.name)} overflow-hidden`}>
+              <div className="px-4 py-3 font-bold text-lg">
+                {getTeamEmoji(team.name)} {team.name} ({teamAttendance.length}명)
               </div>
               <div className="bg-slate-800">
                 <table className="w-full text-left">

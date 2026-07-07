@@ -4,6 +4,7 @@ import PlayerForm from './pages/PlayerForm'
 import AttendanceCheck from './pages/AttendanceCheck'
 import AttendanceHistory from './pages/AttendanceHistory'
 import AttendanceStats from './pages/AttendanceStats'
+import TeamSettings from './pages/TeamSettings'
 import './App.css'
 
 function App() {
@@ -16,7 +17,7 @@ function App() {
             <Link to="/" className="text-2xl font-bold text-emerald-400">
               ⚽ FM FC
             </Link>
-            <div className="flex gap-4">
+            <div className="flex gap-4 flex-wrap">
               <Link to="/" className="text-slate-300 hover:text-white px-3 py-2 rounded-lg hover:bg-slate-700">
                 👤 선수
               </Link>
@@ -28,6 +29,9 @@ function App() {
               </Link>
               <Link to="/attendance/stats" className="text-slate-300 hover:text-white px-3 py-2 rounded-lg hover:bg-slate-700">
                 📊 통계
+              </Link>
+              <Link to="/settings/teams" className="text-slate-300 hover:text-white px-3 py-2 rounded-lg hover:bg-slate-700">
+                ⚙️ 팀설정
               </Link>
             </div>
           </div>
@@ -42,6 +46,7 @@ function App() {
             <Route path="/attendance" element={<AttendanceCheck />} />
             <Route path="/attendance/history" element={<AttendanceHistory />} />
             <Route path="/attendance/stats" element={<AttendanceStats />} />
+            <Route path="/settings/teams" element={<TeamSettings />} />
           </Routes>
         </main>
       </div>
