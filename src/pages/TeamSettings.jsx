@@ -90,7 +90,7 @@ function TeamSettings() {
     }
   }
 
-  const teamEmojis = ['🔵', '🟢', '🔴', '🟡', '🟣', '🟠']
+  const teamEmojis = ['⚪', '⚫', '🟡', '🔵', '🟣', '🟠']
 
   return (
     <div className="max-w-2xl mx-auto">
