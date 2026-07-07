@@ -1,6 +1,7 @@
 import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom'
 import PlayerList from './pages/PlayerList'
 import PlayerForm from './pages/PlayerForm'
+import AttendanceCheck from './pages/AttendanceCheck'
 import './App.css'
 
 function App() {
@@ -17,6 +18,9 @@ function App() {
               <Link to="/" className="text-slate-300 hover:text-white px-3 py-2 rounded-lg hover:bg-slate-700">
                 👤 선수 관리
               </Link>
+              <Link to="/attendance" className="text-slate-300 hover:text-white px-3 py-2 rounded-lg hover:bg-slate-700">
+                ✅ 출석 체크
+              </Link>
             </div>
           </div>
         </nav>
@@ -27,6 +31,7 @@ function App() {
             <Route path="/" element={<PlayerList />} />
             <Route path="/players/new" element={<PlayerForm />} />
             <Route path="/players/:id/edit" element={<PlayerForm />} />
+            <Route path="/attendance" element={<AttendanceCheck />} />
           </Routes>
         </main>
       </div>
