@@ -6,6 +6,9 @@ function AttendanceStats() {
   const [loading, setLoading] = useState(true)
   const [sortBy, setSortBy] = useState('rate')
   const [totalGames, setTotalGames] = useState(0)
+  const [startDate, setStartDate] = useState('')
+  const [endDate, setEndDate] = useState('')
+  const [filterMode, setFilterMode] = useState('all')
 
   useEffect(() => {
     fetchStats()
@@ -23,34 +26,66 @@ function AttendanceStats() {
       .select('*')
 
     if (attendance && players) {
-      const gameDates = [...new Set(attendance.map(a => a.game_date))]
-      setTotalGames(gameDates.length)
-
-      const playerStats = players.map(player => {
-        const records = attendance.filter(a => a.player_id === player.id)
-        const attended = records.filter(a => a.status === '출석').length
-        const late = records.filter(a => a.status === '지각').length
-        const earlyLeave = records.filter(a => a.status === '조퇴').length
-        const absent = records.filter(a => a.status === '불참').length
-        const total = records.length
-        const rate = total > 0 ? Math.round(((attended + late + earlyLeave) / gameDates.length) * 100) : 0
-
-        return {
-          id: player.id,
-          name: player.name,
-          attended,
-          late,
-          earlyLeave,
-          absent,
-          total,
-          rate,
-        }
-      })
-
-      setStats(playerStats)
+      calculateStats(attendance, players)
     }
     setLoading(false)
   }
+
+  function calculateStats(attendance, players) {
+    let filtered = attendance
+
+    if (filterMode === 'range' && startDate && endDate) {
+      filtered = attendance.filter(a =>
+        a.game_date >= startDate && a.game_date <= endDate
+      )
+    } else if (filterMode === 'month') {
+      const now = new Date()
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0]
+      const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0]
+      filtered = attendance.filter(a =>
+        a.game_date >= monthStart && a.game_date <= monthEnd
+      )
+    } else if (filterMode === '3months') {
+      const now = new Date()
+      const threeMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 3, now.getDate()).toISOString().split('T')[0]
+      filtered = attendance.filter(a => a.game_date >= threeMonthsAgo)
+    }
+
+    const gameDates = [...new Set(filtered.map(a => a.game_date))]
+    setTotalGames(gameDates.length)
+
+    const playerStats = players.map(player => {
+      const records = filtered.filter(a => a.player_id === player.id)
+      const attended = records.filter(a => a.status === '출석').length
+      const late = records.filter(a => a.status === '지각').length
+      const earlyLeave = records.filter(a => a.status === '조퇴').length
+      const absent = records.filter(a => a.status === '불참').length
+      const total = records.length
+      const rate = gameDates.length > 0 ? Math.round(((attended + late + earlyLeave) / gameDates.length) * 100) : 0
+
+      return {
+        id: player.id,
+        name: player.name,
+        attended,
+        late,
+        earlyLeave,
+        absent,
+        total,
+        rate,
+      }
+    })
+
+    setStats(playerStats)
+  }
+
+  function handleFilter() {
+    fetchStats().then(() => {})
+  }
+
+  useEffect(() => {
+    if (stats.length === 0) return
+    fetchStats()
+  }, [filterMode, startDate, endDate])
 
   const sorted = [...stats].sort((a, b) => {
     switch(sortBy) {
@@ -84,6 +119,54 @@ function AttendanceStats() {
     <div>
       <h1 className="text-3xl font-bold text-white mb-2">📊 출석률 통계</h1>
       <p className="text-slate-400 mb-6">총 {totalGames}회 경기 기준</p>
+
+      {/* 기간 필터 */}
+      <div className="bg-slate-800 rounded-xl p-4 border border-slate-700 mb-6">
+        <div className="flex flex-wrap gap-2 mb-4">
+          {[
+            { key: 'all', label: '전체' },
+            { key: 'month', label: '이번 달' },
+            { key: '3months', label: '최근 3개월 (시즌)' },
+            { key: 'range', label: '기간 지정' },
+          ].map(option => (
+            <button
+              key={option.key}
+              onClick={() => setFilterMode(option.key)}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                filterMode === option.key
+                  ? 'bg-emerald-500 text-white'
+                  : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+              }`}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+
+        {filterMode === 'range' && (
+          <div className="flex flex-col sm:flex-row gap-4 items-end">
+            <div>
+              <label className="block text-slate-300 text-sm mb-1">시작일</label>
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="bg-slate-700 border border-slate-600 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-emerald-500"
+              />
+            </div>
+            <div className="text-slate-400 py-2">~</div>
+            <div>
+              <label className="block text-slate-300 text-sm mb-1">종료일</label>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="bg-slate-700 border border-slate-600 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-emerald-500"
+              />
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* 요약 카드 */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
