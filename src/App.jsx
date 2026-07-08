@@ -5,6 +5,9 @@ import AttendanceCheck from './pages/AttendanceCheck'
 import AttendanceHistory from './pages/AttendanceHistory'
 import AttendanceStats from './pages/AttendanceStats'
 import TeamSettings from './pages/TeamSettings'
+import PollList from './pages/PollList'
+import PollCreate from './pages/PollCreate'
+import PollVote from './pages/PollVote'
 import './App.css'
 
 function App() {
@@ -30,6 +33,9 @@ function App() {
               <Link to="/attendance/stats" className="text-slate-300 hover:text-white px-3 py-2 rounded-lg hover:bg-slate-700">
                 📊 통계
               </Link>
+              <Link to="/polls" className="text-slate-300 hover:text-white px-3 py-2 rounded-lg hover:bg-slate-700">
+                🗳️ 투표
+              </Link>
               <Link to="/settings/teams" className="text-slate-300 hover:text-white px-3 py-2 rounded-lg hover:bg-slate-700">
                 ⚙️ 팀설정
               </Link>
@@ -47,6 +53,9 @@ function App() {
             <Route path="/attendance/history" element={<AttendanceHistory />} />
             <Route path="/attendance/stats" element={<AttendanceStats />} />
             <Route path="/settings/teams" element={<TeamSettings />} />
+            <Route path="/polls" element={<PollList />} />
+            <Route path="/polls/new" element={<PollCreate />} />
+            <Route path="/polls/:id" element={<PollVote />} />
           </Routes>
         </main>
       </div>
