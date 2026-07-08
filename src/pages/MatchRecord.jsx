@@ -86,13 +86,14 @@ function MatchRecord() {
     setLoading(true)
     const t = teams.map(t => t.name)
 
+    // 1등: 2,3,5,6쿼터 / 2등: 1,2,4,5쿼터 / 3등: 1,3,4,6쿼터
     const dayMatches = [
-      { match_number: 1, half: '전반', team_a: t[0], team_b: t[1] },
-      { match_number: 2, half: '전반', team_a: t[1], team_b: t[2] },
-      { match_number: 3, half: '전반', team_a: t[2], team_b: t[0] },
-      { match_number: 4, half: '후반', team_a: t[0], team_b: t[1] },
-      { match_number: 5, half: '후반', team_a: t[1], team_b: t[2] },
-      { match_number: 6, half: '후반', team_a: t[2], team_b: t[0] },
+      { match_number: 1, half: '전반', team_a: t[1], team_b: t[2] },
+      { match_number: 2, half: '전반', team_a: t[0], team_b: t[1] },
+      { match_number: 3, half: '전반', team_a: t[0], team_b: t[2] },
+      { match_number: 4, half: '후반', team_a: t[1], team_b: t[2] },
+      { match_number: 5, half: '후반', team_a: t[0], team_b: t[1] },
+      { match_number: 6, half: '후반', team_a: t[0], team_b: t[2] },
     ]
 
     for (const m of dayMatches) {
@@ -114,6 +115,14 @@ function MatchRecord() {
     await supabase
       .from('matches')
       .update({ [field]: score })
+      .eq('id', matchId)
+    fetchMatches(selectedDate)
+  }
+
+  async function updateTeamName(matchId, field, value) {
+    await supabase
+      .from('matches')
+      .update({ [field]: value })
       .eq('id', matchId)
     fetchMatches(selectedDate)
   }
@@ -153,37 +162,72 @@ function MatchRecord() {
     return teamEmojis[idx] || '⚽'
   }
 
-  // 합산 결과 계산
-  function getMatchupResult() {
+  // 대진 쌍 찾기 (같은 두 팀끼리 전반+후반)
+  function getMatchupResults() {
     if (matches.length < 6) return []
 
-    const matchups = [
-      { teamA: matches[0].team_a, teamB: matches[0].team_b, first: matches[0], second: matches[3] },
-      { teamA: matches[1].team_a, teamB: matches[1].team_b, first: matches[1], second: matches[4] },
-      { teamA: matches[2].team_a, teamB: matches[2].team_b, first: matches[2], second: matches[5] },
-    ]
+    const pairs = []
+    const used = new Set()
 
-    return matchups.map(m => {
-      const totalA = m.first.score_a + m.second.score_a
-      const totalB = m.first.score_b + m.second.score_b
-      let result = '무'
-      if (totalA > totalB) result = m.teamA
-      if (totalB > totalA) result = m.teamB
+    for (let i = 0; i < matches.length; i++) {
+      if (used.has(i)) continue
+      for (let j = i + 1; j < matches.length; j++) {
+        if (used.has(j)) continue
+        const a = matches[i]
+        const b = matches[j]
 
-      return {
-        teamA: m.teamA,
-        teamB: m.teamB,
-        firstHalf: `${m.first.score_a} : ${m.first.score_b}`,
-        secondHalf: `${m.second.score_a} : ${m.second.score_b}`,
-        total: `${totalA} : ${totalB}`,
-        totalA,
-        totalB,
-        result,
+        const sameMatchup =
+          (a.team_a === b.team_a && a.team_b === b.team_b) ||
+          (a.team_a === b.team_b && a.team_b === b.team_a)
+
+        if (sameMatchup && a.half !== b.half) {
+          const first = a.half === '전반' ? a : b
+          const second = a.half === '전반' ? b : a
+
+          let totalA, totalB
+          if (first.team_a === second.team_a) {
+            totalA = first.score_a + second.score_a
+            totalB = first.score_b + second.score_b
+          } else {
+            totalA = first.score_a + second.score_b
+            totalB = first.score_b + second.score_a
+          }
+
+          let result = '무'
+          if (totalA > totalB) result = first.team_a
+          if (totalB > totalA) result = first.team_b
+
+          pairs.push({
+            teamA: first.team_a,
+            teamB: first.team_b,
+            firstHalf: `${first.score_a} : ${first.score_b}`,
+            secondHalf: first.team_a === second.team_a
+              ? `${second.score_a} : ${second.score_b}`
+              : `${second.score_b} : ${second.score_a}`,
+            total: `${totalA} : ${totalB}`,
+            totalA,
+            totalB,
+            result,
+          })
+
+          used.add(i)
+          used.add(j)
+          break
+        }
       }
-    })
+    }
+
+    return pairs
   }
 
-  const matchupResults = getMatchupResult()
+  const matchupResults = getMatchupResults()
+
+  // 전체 팀 이름 목록 (현재 팀 + 경기에 등장하는 팀)
+  const allTeamNames = [...new Set([
+    ...teams.map(t => t.name),
+    ...matches.map(m => m.team_a),
+    ...matches.map(m => m.team_b),
+  ])]
 
   return (
     <div className="max-w-4xl mx-auto">
@@ -234,11 +278,13 @@ function MatchRecord() {
       {showCreate && (
         <div className="bg-slate-800 rounded-xl p-6 border border-slate-700 mb-6">
           <h2 className="text-lg font-bold text-white mb-3">📅 {selectedDate} 경기 생성</h2>
-          <p className="text-slate-400 text-sm mb-4">6경기 (전반 3경기 + 후반 3경기)가 자동 생성됩니다.</p>
+          <p className="text-slate-400 text-sm mb-2">6경기 (전반 3경기 + 후반 3경기)가 자동 생성됩니다.</p>
+          <p className="text-slate-500 text-xs mb-4">생성 후 팀명을 수동으로 변경할 수 있어요.</p>
 
           <div className="bg-slate-700/50 rounded-lg p-3 mb-4 text-sm text-slate-300">
-            <p>전반: {teams[0]?.name} vs {teams[1]?.name} / {teams[1]?.name} vs {teams[2]?.name} / {teams[2]?.name} vs {teams[0]?.name}</p>
-            <p>후반: 동일 대진 반복</p>
+            <p>1등({teams[0]?.name}): 2,3,5,6쿼터</p>
+            <p>2등({teams[1]?.name}): 1,2,4,5쿼터</p>
+            <p>3등({teams[2]?.name}): 1,3,4,6쿼터</p>
           </div>
 
           <div className="flex gap-4">
@@ -281,10 +327,18 @@ function MatchRecord() {
                     <span className="text-slate-400 text-sm">{match.half} {match.match_number}경기</span>
                   </div>
 
-                  {/* 스코어 */}
-                  <div className="flex items-center justify-center gap-4 mb-4">
+                  {/* 팀 이름 수정 + 스코어 */}
+                  <div className="flex items-center justify-center gap-3 mb-4">
                     <div className="text-center flex-1">
-                      <p className="text-white font-bold">{getTeamEmoji(match.team_a)} {match.team_a}</p>
+                      <select
+                        value={match.team_a}
+                        onChange={(e) => updateTeamName(match.id, 'team_a', e.target.value)}
+                        className="bg-slate-700 border border-slate-600 rounded-lg px-2 py-1 text-white text-sm font-bold focus:outline-none focus:border-emerald-500 text-center"
+                      >
+                        {allTeamNames.map(name => (
+                          <option key={name} value={name}>{name}</option>
+                        ))}
+                      </select>
                     </div>
                     <input
                       type="number"
@@ -302,7 +356,15 @@ function MatchRecord() {
                       className="w-16 bg-slate-700 border border-slate-600 rounded-lg px-2 py-2 text-white text-center text-xl font-bold focus:outline-none focus:border-emerald-500"
                     />
                     <div className="text-center flex-1">
-                      <p className="text-white font-bold">{getTeamEmoji(match.team_b)} {match.team_b}</p>
+                      <select
+                        value={match.team_b}
+                        onChange={(e) => updateTeamName(match.id, 'team_b', e.target.value)}
+                        className="bg-slate-700 border border-slate-600 rounded-lg px-2 py-1 text-white text-sm font-bold focus:outline-none focus:border-emerald-500 text-center"
+                      >
+                        {allTeamNames.map(name => (
+                          <option key={name} value={name}>{name}</option>
+                        ))}
+                      </select>
                     </div>
                   </div>
 
@@ -326,9 +388,9 @@ function MatchRecord() {
                         }}
                         className="w-full bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white text-xs mt-1 focus:outline-none focus:border-emerald-500"
                       >
-                        <option value="">+ 골 추가</option>
-                        {players.filter(p => p.current_team === match.team_a).map(p => (
-                          <option key={p.id} value={p.id}>{p.name}</option>
+                        <option value="">+ 골 추가 (전체 선수)</option>
+                        {players.map(p => (
+                          <option key={p.id} value={p.id}>{p.name} {p.current_team ? `(${p.current_team})` : ''}</option>
                         ))}
                       </select>
                     </div>
@@ -350,9 +412,9 @@ function MatchRecord() {
                         }}
                         className="w-full bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white text-xs mt-1 focus:outline-none focus:border-emerald-500"
                       >
-                        <option value="">+ 골 추가</option>
-                        {players.filter(p => p.current_team === match.team_b).map(p => (
-                          <option key={p.id} value={p.id}>{p.name}</option>
+                        <option value="">+ 골 추가 (전체 선수)</option>
+                        {players.map(p => (
+                          <option key={p.id} value={p.id}>{p.name} {p.current_team ? `(${p.current_team})` : ''}</option>
                         ))}
                       </select>
                     </div>
