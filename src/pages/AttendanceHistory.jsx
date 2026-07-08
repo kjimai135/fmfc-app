@@ -1,16 +1,20 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 
-const TEAMS = ['호진팀', '민석팀', '용규팀']
-
 function AttendanceHistory() {
   const [attendance, setAttendance] = useState([])
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0])
+  const [players, setPlayers] = useState([])
+  const [teams, setTeams] = useState([])
+  const [selectedDate, setSelectedDate] = useState(
+    new Date(new Date().getTime() + 9 * 60 * 60 * 1000).toISOString().split('T')[0]
+  )
   const [availableDates, setAvailableDates] = useState([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     fetchAvailableDates()
+    fetchTeams()
+    fetchPlayers()
   }, [])
 
   useEffect(() => {
@@ -18,6 +22,21 @@ function AttendanceHistory() {
       fetchAttendance(selectedDate)
     }
   }, [selectedDate])
+
+  async function fetchTeams() {
+    const { data } = await supabase
+      .from('teams')
+      .select('*')
+      .order('display_order')
+    setTeams(data || [])
+  }
+
+  async function fetchPlayers() {
+    const { data } = await supabase
+      .from('players')
+      .select('*')
+    setPlayers(data || [])
+  }
 
   async function fetchAvailableDates() {
     const { data } = await supabase
@@ -46,6 +65,18 @@ function AttendanceHistory() {
     setLoading(false)
   }
 
+  // 선수의 최신 팀 정보 가져오기
+  function getPlayerTeam(playerId) {
+    const player = players.find(p => p.id === playerId)
+    return player?.current_team || '미배정'
+  }
+
+  // 출석 데이터에 최신 팀 정보 반영
+  const attendanceWithTeam = attendance.map(a => ({
+    ...a,
+    team: getPlayerTeam(a.player_id),
+  }))
+
   const statusIcon = (s) => {
     switch(s) {
       case '출석': return '✅'
@@ -56,25 +87,23 @@ function AttendanceHistory() {
     }
   }
 
-  const teamColor = (team) => {
-    switch(team) {
-      case '호진팀': return 'bg-blue-500/20 text-blue-400 border-blue-500/30'
-      case '민석팀': return 'bg-green-500/20 text-green-400 border-green-500/30'
-      case '용규팀': return 'bg-red-500/20 text-red-400 border-red-500/30'
-      default: return 'bg-slate-500/20 text-slate-400'
-    }
+  const teamColors = ['bg-white/10 text-white border-white/30', 'bg-slate-500/20 text-slate-300 border-slate-500/30', 'bg-yellow-300/20 text-yellow-300 border-yellow-300/30', 'bg-blue-500/20 text-blue-400 border-blue-500/30', 'bg-purple-500/20 text-purple-400 border-purple-500/30']
+  const teamEmojis = ['⚪', '⚫', '🟡', '🔵', '🟣']
+
+  const getTeamColor = (teamName) => {
+    const idx = teams.findIndex(t => t.name === teamName)
+    return teamColors[idx] || 'bg-slate-500/20 text-slate-400 border-slate-500/30'
   }
 
-  const teamEmoji = (team) => {
-    switch(team) {
-      case '호진팀': return '🔵'
-      case '민석팀': return '🟢'
-      case '용규팀': return '🔴'
-      default: return '⚪'
-    }
+  const getTeamEmoji = (teamName) => {
+    const idx = teams.findIndex(t => t.name === teamName)
+    return teamEmojis[idx] || '⚪'
   }
 
   const statusCount = (s) => attendance.filter(a => a.status === s).length
+
+  const teamNames = teams.map(t => t.name)
+  const hasUnassigned = attendanceWithTeam.some(a => !a.team || a.team === '미배정' || !teamNames.includes(a.team))
 
   return (
     <div>
@@ -120,10 +149,6 @@ function AttendanceHistory() {
             <p className="text-2xl font-bold text-emerald-400">{statusCount('출석')}</p>
             <p className="text-slate-400 text-sm">✅ 출석</p>
           </div>
-          <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 text-center">
-            <p className="text-2xl font-bold text-red-400">{statusCount('불참')}</p>
-            <p className="text-slate-400 text-sm">❌ 불참</p>
-          </div>
           <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-4 text-center">
             <p className="text-2xl font-bold text-yellow-400">{statusCount('지각')}</p>
             <p className="text-slate-400 text-sm">⏰ 지각</p>
@@ -131,6 +156,10 @@ function AttendanceHistory() {
           <div className="bg-orange-500/10 border border-orange-500/30 rounded-xl p-4 text-center">
             <p className="text-2xl font-bold text-orange-400">{statusCount('조퇴')}</p>
             <p className="text-slate-400 text-sm">🏃 조퇴</p>
+          </div>
+          <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 text-center">
+            <p className="text-2xl font-bold text-red-400">{statusCount('불참')}</p>
+            <p className="text-slate-400 text-sm">❌ 불참</p>
           </div>
         </div>
       )}
@@ -146,42 +175,83 @@ function AttendanceHistory() {
           <p className="text-xl">해당 날짜의 출석 기록이 없습니다</p>
         </div>
       ) : (
-        TEAMS.map(team => {
-          const teamAttendance = attendance.filter(a => a.team === team)
-          if (teamAttendance.length === 0) return null
+        <>
+          {/* 등록된 팀별 */}
+          {teams.map(team => {
+            const teamAttendance = attendanceWithTeam.filter(a => a.team === team.name)
+            if (teamAttendance.length === 0) return null
 
-          return (
-            <div key={team} className={`mb-6 rounded-xl border ${teamColor(team)} overflow-hidden`}>
-              <div className="px-4 py-3 font-bold text-lg">
-                {teamEmoji(team)} {team} ({teamAttendance.length}명)
-              </div>
-              <div className="bg-slate-800">
-                <table className="w-full text-left">
-                  <thead>
-                    <tr className="border-b border-slate-700">
-                      <th className="px-4 py-2 text-slate-400 text-sm w-16">순서</th>
-                      <th className="px-4 py-2 text-slate-400 text-sm">이름</th>
-                      <th className="px-4 py-2 text-slate-400 text-sm">상태</th>
-                      <th className="px-4 py-2 text-slate-400 text-sm">체크 시간</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {teamAttendance.map((record, idx) => (
-                      <tr key={record.id} className="border-b border-slate-700/50 hover:bg-slate-700/30">
-                        <td className="px-4 py-2 text-emerald-400 font-bold">{idx + 1}</td>
-                        <td className="px-4 py-2 text-white font-medium">{record.player_name}</td>
-                        <td className="px-4 py-2">{statusIcon(record.status)} {record.status}</td>
-                        <td className="px-4 py-2 text-slate-400 text-sm">
-                          {new Date(record.checked_at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}
-                        </td>
+            return (
+              <div key={team.id} className={`mb-6 rounded-xl border ${getTeamColor(team.name)} overflow-hidden`}>
+                <div className="px-4 py-3 font-bold text-lg">
+                  {getTeamEmoji(team.name)} {team.name} ({teamAttendance.length}명)
+                </div>
+                <div className="bg-slate-800">
+                  <table className="w-full text-left">
+                    <thead>
+                      <tr className="border-b border-slate-700">
+                        <th className="px-4 py-2 text-slate-400 text-sm w-16">순서</th>
+                        <th className="px-4 py-2 text-slate-400 text-sm">이름</th>
+                        <th className="px-4 py-2 text-slate-400 text-sm">상태</th>
+                        <th className="px-4 py-2 text-slate-400 text-sm">시간</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {teamAttendance.map((record, idx) => (
+                        <tr key={record.id} className="border-b border-slate-700/50 hover:bg-slate-700/30">
+                          <td className="px-4 py-2 text-emerald-400 font-bold">{idx + 1}</td>
+                          <td className="px-4 py-2 text-white font-medium">{record.player_name}</td>
+                          <td className="px-4 py-2">{statusIcon(record.status)} {record.status}</td>
+                          <td className="px-4 py-2 text-slate-400 text-sm">
+                            {new Date(record.checked_at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
-            </div>
-          )
-        })
+            )
+          })}
+
+          {/* 미배정 */}
+          {hasUnassigned && (() => {
+            const unassigned = attendanceWithTeam.filter(a => !a.team || a.team === '미배정' || !teamNames.includes(a.team))
+            if (unassigned.length === 0) return null
+
+            return (
+              <div className="mb-6 rounded-xl border bg-slate-500/20 text-slate-400 border-slate-500/30 overflow-hidden">
+                <div className="px-4 py-3 font-bold text-lg">
+                  ⚪ 미배정 ({unassigned.length}명)
+                </div>
+                <div className="bg-slate-800">
+                  <table className="w-full text-left">
+                    <thead>
+                      <tr className="border-b border-slate-700">
+                        <th className="px-4 py-2 text-slate-400 text-sm w-16">순서</th>
+                        <th className="px-4 py-2 text-slate-400 text-sm">이름</th>
+                        <th className="px-4 py-2 text-slate-400 text-sm">상태</th>
+                        <th className="px-4 py-2 text-slate-400 text-sm">시간</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {unassigned.map((record, idx) => (
+                        <tr key={record.id} className="border-b border-slate-700/50 hover:bg-slate-700/30">
+                          <td className="px-4 py-2 text-emerald-400 font-bold">{idx + 1}</td>
+                          <td className="px-4 py-2 text-white font-medium">{record.player_name}</td>
+                          <td className="px-4 py-2">{statusIcon(record.status)} {record.status}</td>
+                          <td className="px-4 py-2 text-slate-400 text-sm">
+                            {new Date(record.checked_at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )
+          })()}
+        </>
       )}
     </div>
   )
