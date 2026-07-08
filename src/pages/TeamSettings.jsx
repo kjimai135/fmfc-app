@@ -3,14 +3,17 @@ import { supabase } from '../lib/supabase'
 
 function TeamSettings() {
   const [teams, setTeams] = useState([])
+  const [players, setPlayers] = useState([])
   const [season, setSeason] = useState('')
   const [newTeamName, setNewTeamName] = useState('')
   const [loading, setLoading] = useState(true)
   const [editingId, setEditingId] = useState(null)
   const [editingName, setEditingName] = useState('')
+  const [searchPlayer, setSearchPlayer] = useState('')
 
   useEffect(() => {
     fetchTeams()
+    fetchPlayers()
   }, [])
 
   async function fetchTeams() {
@@ -25,6 +28,14 @@ function TeamSettings() {
       setSeason(data[0].season || '')
     }
     setLoading(false)
+  }
+
+  async function fetchPlayers() {
+    const { data } = await supabase
+      .from('players')
+      .select('*')
+      .order('name')
+    setPlayers(data || [])
   }
 
   async function addTeam() {
@@ -90,10 +101,22 @@ function TeamSettings() {
     }
   }
 
+  async function assignTeam(playerId, teamName) {
+    await supabase
+      .from('players')
+      .update({ current_team: teamName })
+      .eq('id', playerId)
+    fetchPlayers()
+  }
+
   const teamEmojis = ['⚪', '⚫', '🟡', '🔵', '🟣', '🟠']
 
+  const filteredPlayers = players.filter(p =>
+    p.name?.includes(searchPlayer)
+  )
+
   return (
-    <div className="max-w-2xl mx-auto">
+    <div className="max-w-4xl mx-auto">
       <h1 className="text-3xl font-bold text-white mb-6">⚙️ 팀 설정</h1>
 
       {/* 시즌 설정 */}
@@ -152,7 +175,12 @@ function TeamSettings() {
                   </div>
                 ) : (
                   <>
-                    <span className="flex-1 text-white font-medium">{team.name}</span>
+                    <span className="flex-1 text-white font-medium">
+                      {team.name}
+                      <span className="text-slate-400 text-sm ml-2">
+                        ({players.filter(p => p.current_team === team.name).length}명)
+                      </span>
+                    </span>
                     <button
                       onClick={() => { setEditingId(team.id); setEditingName(team.name) }}
                       className="bg-slate-600 hover:bg-slate-500 text-white px-3 py-1 rounded-lg text-sm"
@@ -190,10 +218,63 @@ function TeamSettings() {
         </div>
       </div>
 
+      {/* 선수별 팀 배정 */}
+      <div className="bg-slate-800 rounded-xl p-6 border border-slate-700 mb-6">
+        <h2 className="text-lg font-bold text-white mb-4">👤 선수별 팀 배정</h2>
+        <p className="text-slate-400 text-sm mb-4">시즌이 바뀌면 여기서 선수들의 팀을 변경하세요!</p>
+
+        {/* 검색 */}
+        <input
+          type="text"
+          placeholder="🔍 선수 이름 검색..."
+          value={searchPlayer}
+          onChange={(e) => setSearchPlayer(e.target.value)}
+          className="w-full sm:w-64 bg-slate-700 border border-slate-600 rounded-xl px-4 py-3 text-white placeholder-slate-400 focus:outline-none focus:border-emerald-500 mb-4"
+        />
+
+        <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-x-auto">
+          <table className="w-full text-left">
+            <thead>
+              <tr className="border-b border-slate-700">
+                <th className="px-4 py-3 text-slate-400 text-sm">이름</th>
+                <th className="px-4 py-3 text-slate-400 text-sm">현재 팀</th>
+                <th className="px-4 py-3 text-slate-400 text-sm">팀 변경</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredPlayers.map(player => (
+                <tr key={player.id} className="border-b border-slate-700/50 hover:bg-slate-700/30">
+                  <td className="px-4 py-3 text-white font-medium">{player.name}</td>
+                  <td className="px-4 py-3">
+                    {player.current_team ? (
+                      <span className="text-emerald-400 text-sm">{player.current_team}</span>
+                    ) : (
+                      <span className="text-slate-500 text-sm">미배정</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3">
+                    <select
+                      value={player.current_team || ''}
+                      onChange={(e) => assignTeam(player.id, e.target.value)}
+                      className="bg-slate-700 border border-slate-600 rounded-lg px-3 py-1 text-white text-sm focus:outline-none focus:border-emerald-500"
+                    >
+                      <option value="">팀 선택</option>
+                      {teams.map(team => (
+                        <option key={team.id} value={team.name}>{team.name}</option>
+                      ))}
+                    </select>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       {/* 안내 */}
       <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
         <p className="text-slate-400 text-sm">
-          💡 <strong className="text-slate-300">시즌이 바뀌면?</strong> 팀 이름만 수정하면 됩니다! 이전 시즌 출석 기록은 그대로 보존됩니다.
+          💡 <strong className="text-slate-300">시즌이 바뀌면?</strong> 팀 이름을 수정하고, 선수별 팀 배정을 변경하면 됩니다! 이전 시즌 기록은 그대로 보존됩니다.
         </p>
       </div>
     </div>
