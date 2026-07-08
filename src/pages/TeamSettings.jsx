@@ -9,7 +9,6 @@ function TeamSettings() {
   const [loading, setLoading] = useState(true)
   const [editingId, setEditingId] = useState(null)
   const [editingName, setEditingName] = useState('')
-  const [searchPlayer, setSearchPlayer] = useState('')
 
   useEffect(() => {
     fetchTeams()
@@ -104,19 +103,40 @@ function TeamSettings() {
   async function assignTeam(playerId, teamName) {
     await supabase
       .from('players')
-      .update({ current_team: teamName })
+      .update({ current_team: teamName || null })
       .eq('id', playerId)
     fetchPlayers()
   }
 
   const teamEmojis = ['⚪', '⚫', '🟡', '🔵', '🟣', '🟠']
 
-  const filteredPlayers = players.filter(p =>
-    p.name?.includes(searchPlayer)
-  )
+  const teamColors = [
+    'border-white/30',
+    'border-slate-500/30',
+    'border-yellow-300/30',
+    'border-blue-500/30',
+    'border-purple-500/30',
+    'border-orange-500/30',
+  ]
+
+  const teamBgColors = [
+    'bg-white/5',
+    'bg-slate-500/10',
+    'bg-yellow-300/10',
+    'bg-blue-500/10',
+    'bg-purple-500/10',
+    'bg-orange-500/10',
+  ]
+
+  const getTeamEmoji = (idx) => teamEmojis[idx] || '⚪'
+  const getTeamBorder = (idx) => teamColors[idx] || 'border-slate-500/30'
+  const getTeamBg = (idx) => teamBgColors[idx] || 'bg-slate-500/10'
+
+  const teamNames = teams.map(t => t.name)
+  const unassignedPlayers = players.filter(p => !p.current_team || !teamNames.includes(p.current_team))
 
   return (
-    <div className="max-w-4xl mx-auto">
+    <div className="max-w-6xl mx-auto">
       <h1 className="text-3xl font-bold text-white mb-6">⚙️ 팀 설정</h1>
 
       {/* 시즌 설정 */}
@@ -149,7 +169,7 @@ function TeamSettings() {
           <div className="space-y-3">
             {teams.map((team, idx) => (
               <div key={team.id} className="flex items-center gap-3 bg-slate-700/50 rounded-xl px-4 py-3">
-                <span className="text-xl">{teamEmojis[idx] || '⚪'}</span>
+                <span className="text-xl">{getTeamEmoji(idx)}</span>
 
                 {editingId === team.id ? (
                   <div className="flex-1 flex gap-2">
@@ -218,56 +238,77 @@ function TeamSettings() {
         </div>
       </div>
 
-      {/* 선수별 팀 배정 */}
-      <div className="bg-slate-800 rounded-xl p-6 border border-slate-700 mb-6">
+      {/* 선수별 팀 배정 - 박스 형태 */}
+      <div className="mb-6">
         <h2 className="text-lg font-bold text-white mb-4">👤 선수별 팀 배정</h2>
-        <p className="text-slate-400 text-sm mb-4">시즌이 바뀌면 여기서 선수들의 팀을 변경하세요!</p>
+        <p className="text-slate-400 text-sm mb-4">시즌이 바뀌면 여기서 선수들의 팀을 변경하세요! 드롭다운으로 팀을 변경할 수 있어요.</p>
 
-        {/* 검색 */}
-        <input
-          type="text"
-          placeholder="🔍 선수 이름 검색..."
-          value={searchPlayer}
-          onChange={(e) => setSearchPlayer(e.target.value)}
-          className="w-full sm:w-64 bg-slate-700 border border-slate-600 rounded-xl px-4 py-3 text-white placeholder-slate-400 focus:outline-none focus:border-emerald-500 mb-4"
-        />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* 팀별 박스 */}
+          {teams.map((team, idx) => {
+            const teamPlayers = players.filter(p => p.current_team === team.name)
 
-        <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-x-auto">
-          <table className="w-full text-left">
-            <thead>
-              <tr className="border-b border-slate-700">
-                <th className="px-4 py-3 text-slate-400 text-sm">이름</th>
-                <th className="px-4 py-3 text-slate-400 text-sm">현재 팀</th>
-                <th className="px-4 py-3 text-slate-400 text-sm">팀 변경</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredPlayers.map(player => (
-                <tr key={player.id} className="border-b border-slate-700/50 hover:bg-slate-700/30">
-                  <td className="px-4 py-3 text-white font-medium">{player.name}</td>
-                  <td className="px-4 py-3">
-                    {player.current_team ? (
-                      <span className="text-emerald-400 text-sm">{player.current_team}</span>
-                    ) : (
-                      <span className="text-slate-500 text-sm">미배정</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
-                    <select
-                      value={player.current_team || ''}
-                      onChange={(e) => assignTeam(player.id, e.target.value)}
-                      className="bg-slate-700 border border-slate-600 rounded-lg px-3 py-1 text-white text-sm focus:outline-none focus:border-emerald-500"
-                    >
-                      <option value="">팀 선택</option>
-                      {teams.map(team => (
-                        <option key={team.id} value={team.name}>{team.name}</option>
+            return (
+              <div key={team.id} className={`rounded-xl border ${getTeamBorder(idx)} ${getTeamBg(idx)} overflow-hidden`}>
+                <div className="px-4 py-3 font-bold text-white text-lg border-b border-slate-700/50">
+                  {getTeamEmoji(idx)} {team.name} ({teamPlayers.length}명)
+                </div>
+                <div className="p-3">
+                  {teamPlayers.length === 0 ? (
+                    <p className="text-slate-500 text-sm px-2 py-2">배정된 선수 없음</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {teamPlayers.map(player => (
+                        <div key={player.id} className="flex items-center justify-between bg-slate-800/50 rounded-lg px-3 py-2">
+                          <span className="text-white text-sm font-medium">{player.name}</span>
+                          <select
+                            value={player.current_team || ''}
+                            onChange={(e) => assignTeam(player.id, e.target.value)}
+                            className="bg-slate-700 border border-slate-600 rounded-lg px-2 py-1 text-white text-xs focus:outline-none focus:border-emerald-500"
+                          >
+                            <option value="">미배정</option>
+                            {teams.map(t => (
+                              <option key={t.id} value={t.name}>{t.name}</option>
+                            ))}
+                          </select>
+                        </div>
                       ))}
-                    </select>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+
+          {/* 미배정 박스 */}
+          <div className="rounded-xl border border-slate-500/30 bg-slate-500/10 overflow-hidden">
+            <div className="px-4 py-3 font-bold text-slate-400 text-lg border-b border-slate-700/50">
+              ⚪ 미배정 ({unassignedPlayers.length}명)
+            </div>
+            <div className="p-3">
+              {unassignedPlayers.length === 0 ? (
+                <p className="text-slate-500 text-sm px-2 py-2">모든 선수가 배정되었습니다! 🎉</p>
+              ) : (
+                <div className="space-y-2">
+                  {unassignedPlayers.map(player => (
+                    <div key={player.id} className="flex items-center justify-between bg-slate-800/50 rounded-lg px-3 py-2">
+                      <span className="text-white text-sm font-medium">{player.name}</span>
+                      <select
+                        value={player.current_team || ''}
+                        onChange={(e) => assignTeam(player.id, e.target.value)}
+                        className="bg-slate-700 border border-slate-600 rounded-lg px-2 py-1 text-white text-xs focus:outline-none focus:border-emerald-500"
+                      >
+                        <option value="">미배정</option>
+                        {teams.map(t => (
+                          <option key={t.id} value={t.name}>{t.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       </div>
 
