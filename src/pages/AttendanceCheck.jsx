@@ -80,9 +80,10 @@ function AttendanceCheck() {
 
   return (
     <div className="max-w-lg mx-auto">
-      <h1 className="text-3xl font-bold text-white mb-2 text-center">✅ 출석 체크</h1>
-      <p className="text-slate-400 mb-2 text-center">📅 {today}</p>
-      <p className="text-emerald-400 mb-8 text-center text-lg font-medium">현재 {todayCount}명 출석</p>
+      {/* 제목 + 날짜 */}
+      <h1 className="text-3xl font-bold text-white mb-8 text-center">
+        ✅ 출석 체크 <span className="text-slate-400 text-xl font-normal ml-2">{today}</span>
+      </h1>
 
       {/* 성공 메시지 */}
       {message && (
@@ -92,56 +93,55 @@ function AttendanceCheck() {
       )}
 
       {/* 이름 검색 */}
-      <div className="bg-slate-800 rounded-xl p-6 border border-slate-700 mb-6">
-        <label className="block text-slate-300 text-sm font-medium mb-3 text-center">이름을 검색하세요</label>
-        <input
-          type="text"
-          placeholder="🔍 이름 입력..."
-          value={search}
-          onChange={(e) => {
-            setSearch(e.target.value)
-            setSelectedPlayer(null)
-          }}
-          className="w-full bg-slate-700 border border-slate-600 rounded-xl px-4 py-4 text-white text-lg placeholder-slate-400 focus:outline-none focus:border-emerald-500 text-center"
-        />
+      <p className="text-slate-400 text-sm mb-3 text-center">이름을 검색하세요</p>
 
-        {search && (
-          <div className="bg-slate-700 rounded-xl border border-slate-600 mt-3 max-h-48 overflow-y-auto">
-            {filteredPlayers.length === 0 ? (
-              <p className="px-4 py-3 text-slate-400 text-center text-sm">검색 결과 없음</p>
-            ) : (
-              filteredPlayers.map(player => (
-                <button
-                  key={player.id}
-                  onClick={() => {
-                    setSelectedPlayer(player)
-                    setSearch(player.name)
-                  }}
-                  className={`w-full text-left px-4 py-3 hover:bg-slate-600 transition-colors border-b border-slate-600/50 ${
-                    selectedPlayer?.id === player.id ? 'bg-emerald-500/20 text-emerald-400' : 'text-white'
-                  }`}
-                >
-                  <span className="font-medium">{player.name}</span>
-                  {player.current_team && (
-                    <span className="text-slate-400 text-sm ml-2">({player.current_team})</span>
-                  )}
-                </button>
-              ))
-            )}
-          </div>
-        )}
-      </div>
+      <input
+        type="text"
+        placeholder="🔍 이름 입력..."
+        value={search}
+        onChange={(e) => {
+          setSearch(e.target.value)
+          setSelectedPlayer(null)
+        }}
+        className="w-full bg-slate-700 border border-slate-600 rounded-xl px-5 py-5 text-white text-xl placeholder-slate-400 focus:outline-none focus:border-emerald-500 text-center"
+      />
+
+      {search && (
+        <div className="bg-slate-700 rounded-xl border border-slate-600 mt-3 max-h-48 overflow-y-auto">
+          {filteredPlayers.length === 0 ? (
+            <p className="px-4 py-3 text-slate-400 text-center text-sm">검색 결과 없음</p>
+          ) : (
+            filteredPlayers.map(player => (
+              <button
+                key={player.id}
+                onClick={() => {
+                  setSelectedPlayer(player)
+                  setSearch(player.name)
+                }}
+                className={`w-full text-left px-4 py-3 hover:bg-slate-600 transition-colors border-b border-slate-600/50 ${
+                  selectedPlayer?.id === player.id ? 'bg-emerald-500/20 text-emerald-400' : 'text-white'
+                }`}
+              >
+                <span className="font-medium">{player.name}</span>
+                {player.current_team && (
+                  <span className="text-slate-400 text-sm ml-2">({player.current_team})</span>
+                )}
+              </button>
+            ))
+          )}
+        </div>
+      )}
 
       {/* 선택된 선수 정보 */}
       {selectedPlayer && (
-        <div className="text-center mb-6">
+        <div className="text-center mt-4">
           <p className="text-white text-xl font-bold">{selectedPlayer.name}</p>
           <p className="text-slate-400">{selectedPlayer.current_team || '팀 미배정'}</p>
         </div>
       )}
 
       {/* 출석/지각/조퇴 버튼 */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-3 gap-4" style={{marginTop: '20px'}}>
         <button
           onClick={() => handleCheckIn('출석')}
           disabled={loading || !selectedPlayer}
