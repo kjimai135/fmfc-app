@@ -9,14 +9,20 @@ import SeasonRosters from './pages/SeasonRosters'
 import PollList from './pages/PollList'
 import PollCreate from './pages/PollCreate'
 import PollVote from './pages/PollVote'
+import logoImg from './assets/logo.png'
 import './App.css'
 
 function App() {
   return (
     <Router>
-      <div className="min-h-screen bg-slate-900">
+      <div className="min-h-screen bg-slate-900 relative">
+        {/* 배경 로고 */}
+        <div className="fixed inset-0 flex items-center justify-center pointer-events-none z-0">
+          <img src={logoImg} alt="" className="w-96 h-96 object-contain opacity-[0.07]" />
+        </div>
+
         {/* 상단 네비게이션 */}
-        <nav className="bg-slate-800 border-b border-slate-700 px-6 py-4">
+        <nav className="bg-slate-800 border-b border-slate-700 px-6 py-4 relative z-10">
           <div className="max-w-6xl mx-auto flex items-center justify-between">
             <Link to="/" className="text-2xl font-bold text-emerald-400">
               ⚽ FM FC
@@ -48,7 +54,7 @@ function App() {
         </nav>
 
         {/* 페이지 내용 */}
-        <main className="max-w-6xl mx-auto p-6">
+        <main className="max-w-6xl mx-auto p-6 relative z-10">
           <Routes>
             <Route path="/" element={<PlayerList />} />
             <Route path="/players/new" element={<PlayerForm />} />
