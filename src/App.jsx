@@ -9,6 +9,9 @@ import SeasonRosters from './pages/SeasonRosters'
 import PollList from './pages/PollList'
 import PollCreate from './pages/PollCreate'
 import PollVote from './pages/PollVote'
+import MatchRecord from './pages/MatchRecord'
+import TeamStandings from './pages/TeamStandings'
+import TopScorers from './pages/TopScorers'
 import logoImg from './assets/logo.png'
 import './App.css'
 
@@ -43,6 +46,15 @@ function App() {
               <Link to="/polls" className="text-slate-300 hover:text-white px-3 py-2 rounded-lg hover:bg-slate-700">
                 🗳️ 투표
               </Link>
+              <Link to="/matches" className="text-slate-300 hover:text-white px-3 py-2 rounded-lg hover:bg-slate-700">
+                ⚽ 경기
+              </Link>
+              <Link to="/standings" className="text-slate-300 hover:text-white px-3 py-2 rounded-lg hover:bg-slate-700">
+                🏆 전적
+              </Link>
+              <Link to="/scorers" className="text-slate-300 hover:text-white px-3 py-2 rounded-lg hover:bg-slate-700">
+                👑 득점왕
+              </Link>
               <Link to="/roster" className="text-slate-300 hover:text-white px-3 py-2 rounded-lg hover:bg-slate-700">
                 📋 팀명단
               </Link>
@@ -67,6 +79,9 @@ function App() {
             <Route path="/polls" element={<PollList />} />
             <Route path="/polls/new" element={<PollCreate />} />
             <Route path="/polls/:id" element={<PollVote />} />
+            <Route path="/matches" element={<MatchRecord />} />
+            <Route path="/standings" element={<TeamStandings />} />
+            <Route path="/scorers" element={<TopScorers />} />
           </Routes>
         </main>
       </div>
