@@ -14,7 +14,7 @@ function TeamSettings() {
   const [newTeamNames, setNewTeamNames] = useState([])
   const [resetTeams, setResetTeams] = useState(true)
   const [confirmText, setConfirmText] = useState('')
-  const [lastBackup, setLastBackup] = useState(null)
+  const [lastBackupSeason, setLastBackupSeason] = useState(null)
 
   useEffect(() => {
     fetchTeams()
@@ -47,12 +47,12 @@ function TeamSettings() {
   async function fetchLastBackup() {
     const { data } = await supabase
       .from('season_backups')
-      .select('*')
+      .select('season_name')
       .order('backup_date', { ascending: false })
       .limit(1)
 
     if (data && data.length > 0) {
-      setLastBackup(data[0])
+      setLastBackupSeason(data[0].season_name)
     }
   }
 
@@ -95,15 +95,15 @@ function TeamSettings() {
   async function updateSeason() {
     if (!season.trim()) return
 
-    const { error } = await supabase
-      .from('teams')
-      .update({ season: season.trim() })
-      .neq('id', '')
-
-    if (!error) {
-      alert('시즌이 변경되었습니다!')
-      fetchTeams()
+    for (const team of teams) {
+      await supabase
+        .from('teams')
+        .update({ season: season.trim() })
+        .eq('id', team.id)
     }
+
+    alert('시즌이 변경되었습니다!')
+    fetchTeams()
   }
 
   async function deleteTeam(id) {
@@ -146,27 +146,36 @@ function TeamSettings() {
       return
     }
 
-    // 1. 이전 시즌 백업 저장
-    const backupData = players
-      .filter(p => p.current_team)
-      .map(p => ({
+    // 1. 이전 시즌 선수 배정 백업
+    const playersWithTeam = players.filter(p => p.current_team)
+    for (const p of playersWithTeam) {
+      await supabase.from('season_backups').insert({
         season_name: season,
         player_id: p.id,
         player_name: p.name,
         team_name: p.current_team,
-      }))
-
-    if (backupData.length > 0) {
-      await supabase.from('season_backups').insert(backupData)
+      })
     }
 
-    // 2. 시즌 이름 변경
-    await supabase
-      .from('teams')
-      .update({ season: newSeason.trim() })
-      .neq('id', '')
+    // 2. 이전 시즌 팀 이름 백업
+    for (const team of teams) {
+      await supabase.from('team_backups').insert({
+        season_name: season,
+        team_id: team.id,
+        team_name: team.name,
+        display_order: team.display_order,
+      })
+    }
 
-    // 3. 팀 이름 변경 (입력한 경우만)
+    // 3. 시즌 이름 변경
+    for (const team of teams) {
+      await supabase
+        .from('teams')
+        .update({ season: newSeason.trim() })
+        .eq('id', team.id)
+    }
+
+    // 4. 팀 이름 변경 (입력한 경우만)
     for (const team of newTeamNames) {
       if (team.newName.trim() && team.newName.trim() !== team.oldName) {
         await supabase
@@ -176,12 +185,14 @@ function TeamSettings() {
       }
     }
 
-    // 4. 전체 선수 팀 배정 초기화
+    // 5. 전체 선수 팀 배정 초기화
     if (resetTeams) {
-      await supabase
-        .from('players')
-        .update({ current_team: null })
-        .neq('id', '')
+      for (const p of players) {
+        await supabase
+          .from('players')
+          .update({ current_team: null })
+          .eq('id', p.id)
+      }
     }
 
     setShowNewSeason(false)
@@ -193,47 +204,60 @@ function TeamSettings() {
   }
 
   async function restoreBackup() {
-    if (!lastBackup) return
+    if (!lastBackupSeason) return
 
-    const seasonName = lastBackup.season_name
-
-    if (!window.confirm(`이전 시즌 "${seasonName}" 팀 배정을 복원하시겠습니까?\n\n현재 팀 배정이 이전 시즌으로 되돌아갑니다.`)) {
+    if (!window.confirm(`이전 시즌 "${lastBackupSeason}" 을(를) 복원하시겠습니까?\n\n팀 이름과 선수 배정이 모두 이전 시즌으로 되돌아갑니다.`)) {
       return
     }
 
-    // 백업 데이터 가져오기
-    const { data: backups } = await supabase
-      .from('season_backups')
+    // 1. 팀 이름 복원
+    const { data: teamBackups } = await supabase
+      .from('team_backups')
       .select('*')
-      .eq('season_name', seasonName)
+      .eq('season_name', lastBackupSeason)
 
-    if (backups && backups.length > 0) {
-      // 전체 초기화
+    if (teamBackups && teamBackups.length > 0) {
+      for (const tb of teamBackups) {
+        if (tb.team_id) {
+          await supabase
+            .from('teams')
+            .update({ name: tb.team_name, season: lastBackupSeason })
+            .eq('id', tb.team_id)
+        }
+      }
+    }
+
+    // 2. 선수 배정 초기화
+    for (const p of players) {
       await supabase
         .from('players')
         .update({ current_team: null })
-        .neq('id', '')
+        .eq('id', p.id)
+    }
 
-      // 백업 데이터로 복원
-      for (const backup of backups) {
+    // 3. 선수 배정 복원
+    const { data: playerBackups } = await supabase
+      .from('season_backups')
+      .select('*')
+      .eq('season_name', lastBackupSeason)
+
+    let restored = 0
+    if (playerBackups && playerBackups.length > 0) {
+      for (const backup of playerBackups) {
         if (backup.player_id) {
-          await supabase
+          const { error } = await supabase
             .from('players')
             .update({ current_team: backup.team_name })
             .eq('id', backup.player_id)
+
+          if (!error) restored++
         }
       }
-
-      // 시즌 이름 복원
-      await supabase
-        .from('teams')
-        .update({ season: seasonName })
-        .neq('id', '')
-
-      fetchTeams()
-      fetchPlayers()
-      alert(`✅ "${seasonName}" 시즌이 복원되었습니다!`)
     }
+
+    fetchTeams()
+    fetchPlayers()
+    alert(`✅ "${lastBackupSeason}" 시즌이 복원되었습니다!\n\n팀 이름 + 선수 ${restored}명 배정 복원 완료!`)
   }
 
   const teamEmojis = ['⚪', '⚫', '🟡', '🔵', '🟣', '🟠']
@@ -272,7 +296,7 @@ function TeamSettings() {
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
           <h2 className="text-lg font-bold text-white">📅 현재 시즌</h2>
           <div className="flex gap-2">
-            {lastBackup && (
+            {lastBackupSeason && (
               <button
                 onClick={restoreBackup}
                 className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-xl font-semibold transition-colors text-sm"
@@ -303,9 +327,9 @@ function TeamSettings() {
             저장
           </button>
         </div>
-        {lastBackup && (
+        {lastBackupSeason && (
           <p className="text-slate-500 text-xs mt-3">
-            💾 마지막 백업: "{lastBackup.season_name}" ({new Date(lastBackup.backup_date).toLocaleDateString('ko-KR')})
+            💾 마지막 백업: "{lastBackupSeason}"
           </p>
         )}
       </div>
@@ -315,13 +339,11 @@ function TeamSettings() {
         <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-6 mb-6">
           <h2 className="text-xl font-bold text-white mb-4">🔄 새 시즌 시작</h2>
 
-          {/* 현재 시즌 정보 */}
           <div className="bg-slate-800/50 rounded-lg p-3 mb-4">
             <p className="text-slate-400 text-sm">현재 시즌: <span className="text-white font-medium">{season}</span></p>
             <p className="text-slate-400 text-sm">배정된 선수: <span className="text-white font-medium">{players.filter(p => p.current_team).length}명</span></p>
           </div>
 
-          {/* 새 시즌 이름 */}
           <div className="mb-6">
             <label className="block text-slate-300 text-sm font-medium mb-2">새 시즌 이름 *</label>
             <input
@@ -333,7 +355,6 @@ function TeamSettings() {
             />
           </div>
 
-          {/* 팀 이름 변경 */}
           <div className="mb-6">
             <label className="block text-slate-300 text-sm font-medium mb-3">팀 이름 변경 (변경할 팀만 입력)</label>
             <div className="space-y-3">
@@ -358,7 +379,6 @@ function TeamSettings() {
             </div>
           </div>
 
-          {/* 팀 배정 초기화 */}
           <div className="mb-6">
             <label className="flex items-center gap-3 cursor-pointer">
               <input
@@ -369,10 +389,9 @@ function TeamSettings() {
               />
               <span className="text-white text-sm">전체 선수 팀 배정 초기화 (미배정으로)</span>
             </label>
-            <p className="text-slate-500 text-xs mt-1 ml-8">체크하면 모든 선수가 미배정 상태가 되어 새로 팀 배정을 해야 합니다</p>
+            <p className="text-slate-500 text-xs mt-1 ml-8">체크하면 모든 선수가 미배정 상태가 됩니다</p>
           </div>
 
-          {/* 확인 입력 */}
           <div className="mb-6 bg-red-500/10 border border-red-500/30 rounded-xl p-4">
             <p className="text-red-400 text-sm font-medium mb-2">⚠️ 확인을 위해 아래에 "새 시즌 시작" 을 입력해주세요</p>
             <input
@@ -384,12 +403,10 @@ function TeamSettings() {
             />
           </div>
 
-          {/* 안내 */}
           <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-lg p-3 mb-6">
-            <p className="text-emerald-400 text-sm">💾 이전 시즌 팀 배정이 자동으로 백업됩니다. 잘못 눌렀을 경우 "이전 시즌 복원" 버튼으로 되돌릴 수 있어요!</p>
+            <p className="text-emerald-400 text-sm">💾 이전 시즌 팀 이름과 선수 배정이 자동으로 백업됩니다. 잘못 눌렀을 경우 "이전 시즌 복원"으로 되돌릴 수 있어요!</p>
           </div>
 
-          {/* 버튼 */}
           <div className="flex gap-4">
             <button
               onClick={startNewSeason}
@@ -469,7 +486,6 @@ function TeamSettings() {
           </div>
         )}
 
-        {/* 새 팀 추가 */}
         <div className="flex gap-3 mt-4">
           <input
             type="text"
@@ -487,13 +503,12 @@ function TeamSettings() {
         </div>
       </div>
 
-      {/* 선수별 팀 배정 - 박스 형태 */}
+      {/* 선수별 팀 배정 */}
       <div className="mb-6">
         <h2 className="text-lg font-bold text-white mb-4">👤 선수별 팀 배정</h2>
         <p className="text-slate-400 text-sm mb-4">시즌이 바뀌면 여기서 선수들의 팀을 변경하세요!</p>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* 팀별 박스 */}
           {teams.map((team, idx) => {
             const teamPlayers = players.filter(p => p.current_team === team.name)
 
@@ -529,7 +544,6 @@ function TeamSettings() {
             )
           })}
 
-          {/* 미배정 박스 */}
           <div className="rounded-xl border border-slate-500/30 bg-slate-500/10 overflow-hidden">
             <div className="px-4 py-3 font-bold text-slate-400 text-lg border-b border-slate-700/50">
               ⚪ 미배정 ({unassignedPlayers.length}명)
@@ -561,10 +575,9 @@ function TeamSettings() {
         </div>
       </div>
 
-      {/* 안내 */}
       <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
         <p className="text-slate-400 text-sm">
-          💡 <strong className="text-slate-300">시즌이 바뀌면?</strong> "🔄 새 시즌 시작" 버튼을 눌러주세요. 이전 시즌이 자동 백업되고, 잘못 눌렀을 경우 "⏪ 이전 시즌 복원"으로 되돌릴 수 있어요!
+          💡 <strong className="text-slate-300">시즌이 바뀌면?</strong> "🔄 새 시즌 시작" 버튼을 눌러주세요. 이전 시즌 팀 이름과 선수 배정이 자동 백업되고, "⏪ 이전 시즌 복원"으로 되돌릴 수 있어요!
         </p>
       </div>
     </div>

@@ -4,7 +4,8 @@ import PlayerForm from './pages/PlayerForm'
 import AttendanceCheck from './pages/AttendanceCheck'
 import AttendanceHistory from './pages/AttendanceHistory'
 import AttendanceStats from './pages/AttendanceStats'
-import TeamSettings from './pages/TeamSettings'
+import TeamRoster from './pages/TeamRoster'
+import SeasonRosters from './pages/SeasonRosters'
 import PollList from './pages/PollList'
 import PollCreate from './pages/PollCreate'
 import PollVote from './pages/PollVote'
@@ -36,8 +37,11 @@ function App() {
               <Link to="/polls" className="text-slate-300 hover:text-white px-3 py-2 rounded-lg hover:bg-slate-700">
                 🗳️ 투표
               </Link>
-              <Link to="/settings/teams" className="text-slate-300 hover:text-white px-3 py-2 rounded-lg hover:bg-slate-700">
-                ⚙️ 팀설정
+              <Link to="/roster" className="text-slate-300 hover:text-white px-3 py-2 rounded-lg hover:bg-slate-700">
+                📋 팀명단
+              </Link>
+              <Link to="/seasons" className="text-slate-300 hover:text-white px-3 py-2 rounded-lg hover:bg-slate-700">
+                📚 시즌명단
               </Link>
             </div>
           </div>
@@ -52,7 +56,8 @@ function App() {
             <Route path="/attendance" element={<AttendanceCheck />} />
             <Route path="/attendance/history" element={<AttendanceHistory />} />
             <Route path="/attendance/stats" element={<AttendanceStats />} />
-            <Route path="/settings/teams" element={<TeamSettings />} />
+            <Route path="/roster" element={<TeamRoster />} />
+            <Route path="/seasons" element={<SeasonRosters />} />
             <Route path="/polls" element={<PollList />} />
             <Route path="/polls/new" element={<PollCreate />} />
             <Route path="/polls/:id" element={<PollVote />} />
