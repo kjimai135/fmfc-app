@@ -11,7 +11,6 @@ function SeasonRosters() {
   const [showSave, setShowSave] = useState(false)
   const [newSeasonName, setNewSeasonName] = useState('')
   const [confirmText, setConfirmText] = useState('')
-  const [latestSeason, setLatestSeason] = useState(null)
 
   useEffect(() => {
     fetchSeasons()
@@ -36,9 +35,6 @@ function SeasonRosters() {
         }
       }
       setSeasons(unique)
-      if (unique.length > 0) {
-        setLatestSeason(unique[0].season_name)
-      }
     }
     setLoading(false)
   }
@@ -70,32 +66,29 @@ function SeasonRosters() {
     setSelectedSeason(seasonName)
   }
 
-  async function saveNewSeason() {
+  async function saveCurrentSeason() {
     if (!newSeasonName.trim()) {
-      alert('현 시즌 이름을 입력해주세요! (예: 2027-03)')
+      alert('시즌 이름을 입력해주세요! (예: 2027-01)')
       return
     }
 
-    if (confirmText !== '시즌 저장') {
-      alert('"현 시즌 저장" 을 정확히 입력해주세요!')
+    if (confirmText !== '저장') {
+      alert('"저장" 을 정확히 입력해주세요!')
       return
     }
 
-    // 같은 시즌명 중복 체크
     const exists = seasons.find(s => s.season_name === newSeasonName.trim())
     if (exists) {
       alert('이미 존재하는 시즌 이름입니다!')
       return
     }
 
-    // 팀 배정된 선수만 저장
     const playersWithTeam = players.filter(p => p.current_team)
     if (playersWithTeam.length === 0) {
       alert('팀에 배정된 선수가 없습니다!')
       return
     }
 
-    // 시즌 명단 저장
     for (const p of playersWithTeam) {
       await supabase.from('season_rosters').insert({
         season_name: newSeasonName.trim(),
@@ -105,7 +98,6 @@ function SeasonRosters() {
       })
     }
 
-    // 전체 선수 미배정 초기화
     for (const p of players) {
       await supabase
         .from('players')
@@ -118,7 +110,7 @@ function SeasonRosters() {
     setConfirmText('')
     fetchSeasons()
     fetchPlayers()
-    alert(`🎉 시즌 "${newSeasonName}" 명단이 저장되었습니다!\n\n전체 선수가 미배정으로 초기화되었습니다.`)
+    alert(`🎉 "${newSeasonName}" 시즌 명단이 저장되었습니다!\n\n전체 선수가 미배정으로 초기화되었습니다.\n팀 명단에서 새 시즌 배정을 해주세요.`)
   }
 
   async function deleteSeason(seasonName) {
@@ -150,7 +142,6 @@ function SeasonRosters() {
     return teamEmojis[idx] || '⚽'
   }
 
-  // 시즌 명단을 팀별로 그룹화
   const groupByTeam = (roster) => {
     const groups = {}
     for (const r of roster) {
@@ -163,46 +154,44 @@ function SeasonRosters() {
   }
 
   const rosterGroups = groupByTeam(seasonRoster)
+  const assignedCount = players.filter(p => p.current_team).length
 
   return (
     <div className="max-w-6xl mx-auto">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
         <h1 className="text-3xl font-bold text-white">📚 시즌별 명단</h1>
         <button
-          onClick={() => { setShowSave(true); setNewSeasonName(''); setConfirmText('') }}
+          onClick={() => { setShowSave(!showSave); setNewSeasonName(''); setConfirmText('') }}
           className="bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-3 rounded-xl font-semibold transition-colors"
         >
           💾 현 시즌 저장
         </button>
       </div>
 
-      {/* 현 시즌 저장 모달 */}
       {showSave && (
-        <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-6 mb-6">
-          <h2 className="text-xl font-bold text-white mb-4">💾 현 시즌 저장</h2>
+        <div className="bg-slate-800 rounded-xl p-6 border border-slate-700 mb-6">
+          <h2 className="text-lg font-bold text-white mb-3">💾 현 시즌 저장</h2>
 
-          <div className="bg-slate-800/50 rounded-lg p-3 mb-4">
-            <p className="text-slate-400 text-sm">현재 배정된 선수: <span className="text-white font-medium">{players.filter(p => p.current_team).length}명</span></p>
-            <p className="text-slate-400 text-sm">총 선수: <span className="text-white font-medium">{players.length}명</span></p>
-          </div>
+          <p className="text-slate-400 text-sm">현재 배정된 선수: <span className="text-white font-medium">{assignedCount}명</span></p>
+          <p className="text-slate-400 text-sm mb-4">총 선수: <span className="text-white font-medium">{players.length}명</span></p>
 
-          <div className="mb-6">
+          <div className="mb-4">
             <label className="block text-slate-300 text-sm font-medium mb-2">현 시즌 이름 * (예: 2027-01)</label>
             <input
               type="text"
               value={newSeasonName}
               onChange={(e) => setNewSeasonName(e.target.value)}
-              placeholder="2025-03"
+              placeholder="2027-01"
               className="w-full bg-slate-700 border border-slate-600 rounded-xl px-4 py-3 text-white placeholder-slate-400 focus:outline-none focus:border-emerald-500"
             />
           </div>
 
-          <div className="mb-6 bg-orange-500/10 border border-orange-500/30 rounded-xl p-4">
-            <p className="text-orange-400 text-sm mb-1">⚠️ 저장 후 전체 선수가 미배정으로 초기화됩니다!</p>
-            <p className="text-slate-500 text-xs">다음 드래프트 후 팀 명단에서 새로 배정하세요.</p>
+          <div className="bg-orange-500/10 border border-orange-500/30 rounded-xl p-3 mb-4">
+            <p className="text-orange-400 text-sm">⚠️ 저장 후 전체 선수가 미배정으로 초기화됩니다!</p>
+            <p className="text-slate-500 text-xs mt-1">다음 드래프트 후 팀 명단에서 새로 배정하세요.</p>
           </div>
 
-          <div className="mb-6 bg-red-500/10 border border-red-500/30 rounded-xl p-4">
+          <div className="mb-4">
             <p className="text-red-400 text-sm font-medium mb-2">확인을 위해 "저장" 을 입력해주세요</p>
             <input
               type="text"
@@ -215,7 +204,7 @@ function SeasonRosters() {
 
           <div className="flex gap-4">
             <button
-              onClick={saveNewSeason}
+              onClick={saveCurrentSeason}
               disabled={confirmText !== '저장'}
               className="flex-1 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-30 text-white py-3 rounded-xl font-semibold transition-colors"
             >
@@ -231,7 +220,6 @@ function SeasonRosters() {
         </div>
       )}
 
-      {/* 시즌 목록 */}
       <div className="bg-slate-800 rounded-xl border border-slate-700 mb-6">
         <div className="px-4 py-3 border-b border-slate-700">
           <h2 className="text-lg font-bold text-white">📅 시즌 목록</h2>
@@ -247,7 +235,7 @@ function SeasonRosters() {
           </div>
         ) : (
           <div className="divide-y divide-slate-700/50">
-            {seasons.map((s, idx) => (
+            {seasons.map((s) => (
               <div
                 key={s.season_name}
                 className={`px-4 py-3 flex justify-between items-center cursor-pointer hover:bg-slate-700/30 transition-colors ${
@@ -257,9 +245,6 @@ function SeasonRosters() {
               >
                 <div>
                   <span className="text-white font-medium">{s.season_name}</span>
-                  {idx === 0 && (
-                    <span className="ml-2 bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-full text-xs">최근</span>
-                  )}
                   <p className="text-slate-500 text-xs mt-0.5">
                     {new Date(s.saved_at).toLocaleDateString('ko-KR')} 저장
                   </p>
@@ -281,14 +266,10 @@ function SeasonRosters() {
         )}
       </div>
 
-      {/* 선택한 시즌 명단 */}
       {selectedSeason && (
         <div>
           <h2 className="text-xl font-bold text-white mb-4">
-            📋 {selectedSeason} 현 시즌 명단
-            {selectedSeason === latestSeason && (
-              <span className="ml-2 text-emerald-400 text-sm font-normal">(팀 명단과 싱크 중)</span>
-            )}
+            📋 {selectedSeason} 시즌 명단
           </h2>
 
           {Object.keys(rosterGroups).length === 0 ? (
