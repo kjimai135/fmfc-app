@@ -41,7 +41,7 @@ function App() {
                 📋 팀명단
               </Link>
               <Link to="/seasons" className="text-slate-300 hover:text-white px-3 py-2 rounded-lg hover:bg-slate-700">
-                📚 시즌명단
+                📚 시즌별명단
               </Link>
             </div>
           </div>

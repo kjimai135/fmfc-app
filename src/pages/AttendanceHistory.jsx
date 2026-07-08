@@ -3,7 +3,6 @@ import { supabase } from '../lib/supabase'
 
 function AttendanceHistory() {
   const [attendance, setAttendance] = useState([])
-  const [players, setPlayers] = useState([])
   const [teams, setTeams] = useState([])
   const [selectedDate, setSelectedDate] = useState(
     new Date(new Date().getTime() + 9 * 60 * 60 * 1000).toISOString().split('T')[0]
@@ -14,7 +13,6 @@ function AttendanceHistory() {
   useEffect(() => {
     fetchAvailableDates()
     fetchTeams()
-    fetchPlayers()
   }, [])
 
   useEffect(() => {
@@ -29,13 +27,6 @@ function AttendanceHistory() {
       .select('*')
       .order('display_order')
     setTeams(data || [])
-  }
-
-  async function fetchPlayers() {
-    const { data } = await supabase
-      .from('players')
-      .select('*')
-    setPlayers(data || [])
   }
 
   async function fetchAvailableDates() {
@@ -65,18 +56,6 @@ function AttendanceHistory() {
     setLoading(false)
   }
 
-  // 선수의 최신 팀 정보 가져오기
-  function getPlayerTeam(playerId) {
-    const player = players.find(p => p.id === playerId)
-    return player?.current_team || '미배정'
-  }
-
-  // 출석 데이터에 최신 팀 정보 반영
-  const attendanceWithTeam = attendance.map(a => ({
-    ...a,
-    team: getPlayerTeam(a.player_id),
-  }))
-
   const statusIcon = (s) => {
     switch(s) {
       case '출석': return '✅'
@@ -87,12 +66,18 @@ function AttendanceHistory() {
     }
   }
 
-  const teamColors = ['bg-white/10 text-white border-white/30', 'bg-slate-500/20 text-slate-300 border-slate-500/30', 'bg-yellow-300/20 text-yellow-300 border-yellow-300/30', 'bg-blue-500/20 text-blue-400 border-blue-500/30', 'bg-purple-500/20 text-purple-400 border-purple-500/30']
-  const teamEmojis = ['⚪', '⚫', '🟡', '🔵', '🟣']
+  const teamColors = ['border-white/30', 'border-slate-500/30', 'border-yellow-300/30', 'border-blue-500/30', 'border-purple-500/30', 'border-orange-500/30']
+  const teamBgColors = ['bg-white/10 text-white', 'bg-slate-500/20 text-slate-300', 'bg-yellow-300/20 text-yellow-300', 'bg-blue-500/20 text-blue-400', 'bg-purple-500/20 text-purple-400', 'bg-orange-500/20 text-orange-400']
+  const teamEmojis = ['⚪', '⚫', '🟡', '🔵', '🟣', '🟠']
 
   const getTeamColor = (teamName) => {
     const idx = teams.findIndex(t => t.name === teamName)
-    return teamColors[idx] || 'bg-slate-500/20 text-slate-400 border-slate-500/30'
+    return teamColors[idx] || 'border-slate-500/30'
+  }
+
+  const getTeamBgColor = (teamName) => {
+    const idx = teams.findIndex(t => t.name === teamName)
+    return teamBgColors[idx] || 'bg-slate-500/20 text-slate-400'
   }
 
   const getTeamEmoji = (teamName) => {
@@ -102,8 +87,8 @@ function AttendanceHistory() {
 
   const statusCount = (s) => attendance.filter(a => a.status === s).length
 
-  const teamNames = teams.map(t => t.name)
-  const hasUnassigned = attendanceWithTeam.some(a => !a.team || a.team === '미배정' || !teamNames.includes(a.team))
+  // 출석 기록에 저장된 팀 이름들 (중복 제거, 순서 유지)
+  const recordedTeams = [...new Set(attendance.map(a => a.team))]
 
   return (
     <div>
@@ -121,7 +106,6 @@ function AttendanceHistory() {
           />
         </div>
 
-        {/* 최근 경기 날짜 빠른 선택 */}
         <div>
           <label className="block text-slate-300 text-sm font-medium mb-2">최근 경기</label>
           <div className="flex flex-wrap gap-2">
@@ -175,83 +159,42 @@ function AttendanceHistory() {
           <p className="text-xl">해당 날짜의 출석 기록이 없습니다</p>
         </div>
       ) : (
-        <>
-          {/* 등록된 팀별 */}
-          {teams.map(team => {
-            const teamAttendance = attendanceWithTeam.filter(a => a.team === team.name)
-            if (teamAttendance.length === 0) return null
+        recordedTeams.map(teamName => {
+          const teamAttendance = attendance.filter(a => a.team === teamName)
+          if (teamAttendance.length === 0) return null
 
-            return (
-              <div key={team.id} className={`mb-6 rounded-xl border ${getTeamColor(team.name)} overflow-hidden`}>
-                <div className="px-4 py-3 font-bold text-lg">
-                  {getTeamEmoji(team.name)} {team.name} ({teamAttendance.length}명)
-                </div>
-                <div className="bg-slate-800">
-                  <table className="w-full text-left">
-                    <thead>
-                      <tr className="border-b border-slate-700">
-                        <th className="px-4 py-2 text-slate-400 text-sm w-16">순서</th>
-                        <th className="px-4 py-2 text-slate-400 text-sm">이름</th>
-                        <th className="px-4 py-2 text-slate-400 text-sm">상태</th>
-                        <th className="px-4 py-2 text-slate-400 text-sm">시간</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {teamAttendance.map((record, idx) => (
-                        <tr key={record.id} className="border-b border-slate-700/50 hover:bg-slate-700/30">
-                          <td className="px-4 py-2 text-emerald-400 font-bold">{idx + 1}</td>
-                          <td className="px-4 py-2 text-white font-medium">{record.player_name}</td>
-                          <td className="px-4 py-2">{statusIcon(record.status)} {record.status}</td>
-                          <td className="px-4 py-2 text-slate-400 text-sm">
-                            {new Date(record.checked_at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+          return (
+            <div key={teamName} className={`mb-6 rounded-xl border ${getTeamColor(teamName)} overflow-hidden`}>
+              <div className={`px-4 py-3 font-bold text-lg ${getTeamBgColor(teamName)}`}>
+                {getTeamEmoji(teamName)} {teamName} ({teamAttendance.length}명)
               </div>
-            )
-          })}
-
-          {/* 미배정 */}
-          {hasUnassigned && (() => {
-            const unassigned = attendanceWithTeam.filter(a => !a.team || a.team === '미배정' || !teamNames.includes(a.team))
-            if (unassigned.length === 0) return null
-
-            return (
-              <div className="mb-6 rounded-xl border bg-slate-500/20 text-slate-400 border-slate-500/30 overflow-hidden">
-                <div className="px-4 py-3 font-bold text-lg">
-                  ⚪ 미배정 ({unassigned.length}명)
-                </div>
-                <div className="bg-slate-800">
-                  <table className="w-full text-left">
-                    <thead>
-                      <tr className="border-b border-slate-700">
-                        <th className="px-4 py-2 text-slate-400 text-sm w-16">순서</th>
-                        <th className="px-4 py-2 text-slate-400 text-sm">이름</th>
-                        <th className="px-4 py-2 text-slate-400 text-sm">상태</th>
-                        <th className="px-4 py-2 text-slate-400 text-sm">시간</th>
+              <div className="bg-slate-800">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="border-b border-slate-700">
+                      <th className="px-4 py-2 text-slate-400 text-sm w-16">순서</th>
+                      <th className="px-4 py-2 text-slate-400 text-sm">이름</th>
+                      <th className="px-4 py-2 text-slate-400 text-sm">상태</th>
+                      <th className="px-4 py-2 text-slate-400 text-sm">시간</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {teamAttendance.map((record, idx) => (
+                      <tr key={record.id} className="border-b border-slate-700/50 hover:bg-slate-700/30">
+                        <td className="px-4 py-2 text-emerald-400 font-bold">{idx + 1}</td>
+                        <td className="px-4 py-2 text-white font-medium">{record.player_name}</td>
+                        <td className="px-4 py-2">{statusIcon(record.status)} {record.status}</td>
+                        <td className="px-4 py-2 text-slate-400 text-sm">
+                          {new Date(record.checked_at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}
+                        </td>
                       </tr>
-                    </thead>
-                    <tbody>
-                      {unassigned.map((record, idx) => (
-                        <tr key={record.id} className="border-b border-slate-700/50 hover:bg-slate-700/30">
-                          <td className="px-4 py-2 text-emerald-400 font-bold">{idx + 1}</td>
-                          <td className="px-4 py-2 text-white font-medium">{record.player_name}</td>
-                          <td className="px-4 py-2">{statusIcon(record.status)} {record.status}</td>
-                          <td className="px-4 py-2 text-slate-400 text-sm">
-                            {new Date(record.checked_at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-            )
-          })()}
-        </>
+            </div>
+          )
+        })
       )}
     </div>
   )
