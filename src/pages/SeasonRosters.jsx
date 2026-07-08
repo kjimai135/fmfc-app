@@ -72,12 +72,12 @@ function SeasonRosters() {
 
   async function saveNewSeason() {
     if (!newSeasonName.trim()) {
-      alert('시즌 이름을 입력해주세요! (예: 2025-03)')
+      alert('현 시즌 이름을 입력해주세요! (예: 2027-03)')
       return
     }
 
     if (confirmText !== '시즌 저장') {
-      alert('"시즌 저장" 을 정확히 입력해주세요!')
+      alert('"현 시즌 저장" 을 정확히 입력해주세요!')
       return
     }
 
@@ -172,14 +172,14 @@ function SeasonRosters() {
           onClick={() => { setShowSave(true); setNewSeasonName(''); setConfirmText('') }}
           className="bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-3 rounded-xl font-semibold transition-colors"
         >
-          💾 새 시즌 저장
+          💾 현 시즌 저장
         </button>
       </div>
 
-      {/* 새 시즌 저장 모달 */}
+      {/* 현 시즌 저장 모달 */}
       {showSave && (
         <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-6 mb-6">
-          <h2 className="text-xl font-bold text-white mb-4">💾 새 시즌 저장</h2>
+          <h2 className="text-xl font-bold text-white mb-4">💾 현 시즌 저장</h2>
 
           <div className="bg-slate-800/50 rounded-lg p-3 mb-4">
             <p className="text-slate-400 text-sm">현재 배정된 선수: <span className="text-white font-medium">{players.filter(p => p.current_team).length}명</span></p>
@@ -187,7 +187,7 @@ function SeasonRosters() {
           </div>
 
           <div className="mb-6">
-            <label className="block text-slate-300 text-sm font-medium mb-2">시즌 이름 * (예: 2025-03)</label>
+            <label className="block text-slate-300 text-sm font-medium mb-2">현 시즌 이름 * (예: 2027-01)</label>
             <input
               type="text"
               value={newSeasonName}
@@ -203,12 +203,12 @@ function SeasonRosters() {
           </div>
 
           <div className="mb-6 bg-red-500/10 border border-red-500/30 rounded-xl p-4">
-            <p className="text-red-400 text-sm font-medium mb-2">확인을 위해 "시즌 저장" 을 입력해주세요</p>
+            <p className="text-red-400 text-sm font-medium mb-2">확인을 위해 "저장" 을 입력해주세요</p>
             <input
               type="text"
               value={confirmText}
               onChange={(e) => setConfirmText(e.target.value)}
-              placeholder='시즌 저장'
+              placeholder='저장'
               className="w-full bg-slate-700 border border-red-500/30 rounded-lg px-4 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-red-500"
             />
           </div>
@@ -216,10 +216,10 @@ function SeasonRosters() {
           <div className="flex gap-4">
             <button
               onClick={saveNewSeason}
-              disabled={confirmText !== '시즌 저장'}
+              disabled={confirmText !== '저장'}
               className="flex-1 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-30 text-white py-3 rounded-xl font-semibold transition-colors"
             >
-              💾 시즌 저장!
+              💾 저장
             </button>
             <button
               onClick={() => setShowSave(false)}
@@ -243,7 +243,7 @@ function SeasonRosters() {
           <div className="p-8 text-center text-slate-400">
             <p className="text-4xl mb-4">📚</p>
             <p>저장된 시즌이 없습니다</p>
-            <p className="text-sm mt-1">팀 명단에서 배정 후 "새 시즌 저장"을 눌러주세요</p>
+            <p className="text-sm mt-1">팀 명단에서 배정 후 "현 시즌 저장"을 눌러주세요</p>
           </div>
         ) : (
           <div className="divide-y divide-slate-700/50">
@@ -285,7 +285,7 @@ function SeasonRosters() {
       {selectedSeason && (
         <div>
           <h2 className="text-xl font-bold text-white mb-4">
-            📋 {selectedSeason} 시즌 명단
+            📋 {selectedSeason} 현 시즌 명단
             {selectedSeason === latestSeason && (
               <span className="ml-2 text-emerald-400 text-sm font-normal">(팀 명단과 싱크 중)</span>
             )}
