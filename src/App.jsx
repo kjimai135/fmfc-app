@@ -12,6 +12,7 @@ import PollVote from './pages/PollVote'
 import MatchRecord from './pages/MatchRecord'
 import TeamStandings from './pages/TeamStandings'
 import TopScorers from './pages/TopScorers'
+import SeasonRanking from './pages/SeasonRanking'
 import logoImg from './assets/logo.png'
 import './App.css'
 
@@ -52,6 +53,9 @@ function App() {
               <Link to="/standings" className="text-slate-300 hover:text-white px-3 py-2 rounded-lg hover:bg-slate-700">
                 🏆 전적
               </Link>
+              <Link to="/season-ranking" className="text-slate-300 hover:text-white px-3 py-2 rounded-lg hover:bg-slate-700">
+                📸 순위표
+              </Link>
               <Link to="/scorers" className="text-slate-300 hover:text-white px-3 py-2 rounded-lg hover:bg-slate-700">
                 👑 득점왕
               </Link>
@@ -81,6 +85,7 @@ function App() {
             <Route path="/polls/:id" element={<PollVote />} />
             <Route path="/matches" element={<MatchRecord />} />
             <Route path="/standings" element={<TeamStandings />} />
+            <Route path="/season-ranking" element={<SeasonRanking />} />
             <Route path="/scorers" element={<TopScorers />} />
           </Routes>
         </main>
