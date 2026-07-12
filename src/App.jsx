@@ -13,6 +13,7 @@ import MatchRecord from './pages/MatchRecord'
 import TeamStandings from './pages/TeamStandings'
 import TopScorers from './pages/TopScorers'
 import SeasonRanking from './pages/SeasonRanking'
+import ScorerRanking from './pages/ScorerRanking'
 import logoImg from './assets/logo.png'
 import './App.css'
 
@@ -56,6 +57,9 @@ function App() {
               <Link to="/season-ranking" className="text-slate-300 hover:text-white px-3 py-2 rounded-lg hover:bg-slate-700">
                 📸 순위표
               </Link>
+              <Link to="/scorer-ranking" className="text-slate-300 hover:text-white px-3 py-2 rounded-lg hover:bg-slate-700">
+                📸 득점순위표
+              </Link>
               <Link to="/scorers" className="text-slate-300 hover:text-white px-3 py-2 rounded-lg hover:bg-slate-700">
                 👑 득점왕
               </Link>
@@ -86,6 +90,7 @@ function App() {
             <Route path="/matches" element={<MatchRecord />} />
             <Route path="/standings" element={<TeamStandings />} />
             <Route path="/season-ranking" element={<SeasonRanking />} />
+            <Route path="/scorer-ranking" element={<ScorerRanking />} />
             <Route path="/scorers" element={<TopScorers />} />
           </Routes>
         </main>

@@ -52,10 +52,15 @@ function TeamStandings() {
     setLoading(false)
   }
 
-  const teamEmojis = ['⚪', '⚫', '🟡', '🔵', '🟣', '🟠']
-  const getTeamEmoji = (teamName) => {
-    const idx = teams.findIndex(t => t.name === teamName)
-    return teamEmojis[idx] || '⚽'
+  // 🎨 팀 색상 가져오기 (파랑은 밝은 파랑으로 변환)
+  function getTeamColor(teamName) {
+    const team = teams.find(t => t.name === teamName)
+    const color = team?.color || '#ffffff'
+    const c = color.toLowerCase()
+    if (c === '#1d4ed8' || c === '#2563eb' || c === '#1e40af' || c === '#1e3a8a') {
+      return '#60a5fa' // 밝은 파랑
+    }
+    return color
   }
 
   // 날짜별로 그룹화
@@ -64,7 +69,7 @@ function TeamStandings() {
     return dates
   }
 
-  // 대진별 합산 (전반+후반)
+  // 대진별 합산 (전반+후반) - 팀 이름 기준으로 정확히 합산!
   function getMatchups() {
     const dates = getGameDates()
     const allMatchups = []
@@ -80,13 +85,24 @@ function TeamStandings() {
         ]
 
         for (const pair of pairs) {
-          const totalA = pair.first.score_a + pair.second.score_a
-          const totalB = pair.first.score_b + pair.second.score_b
+          const teamA = pair.first.team_a
+          const teamB = pair.first.team_b
+
+          let totalA = pair.first.score_a
+          let totalB = pair.first.score_b
+
+          if (pair.second.team_a === teamA) {
+            totalA += pair.second.score_a
+            totalB += pair.second.score_b
+          } else {
+            totalA += pair.second.score_b
+            totalB += pair.second.score_a
+          }
 
           allMatchups.push({
             date,
-            teamA: pair.first.team_a,
-            teamB: pair.first.team_b,
+            teamA,
+            teamB,
             totalA,
             totalB,
           })
@@ -150,40 +166,7 @@ function TeamStandings() {
     })
   }
 
-  // 상대 전적
-  function getHeadToHead() {
-    const matchups = getMatchups()
-    const h2h = {}
-
-    for (const m of matchups) {
-      const key = [m.teamA, m.teamB].sort().join(' vs ')
-      if (!h2h[key]) {
-        h2h[key] = { teamA: m.teamA, teamB: m.teamB, winsA: 0, winsB: 0, draws: 0, goalsA: 0, goalsB: 0 }
-      }
-
-      const record = h2h[key]
-      const isAFirst = record.teamA === m.teamA
-
-      if (isAFirst) {
-        record.goalsA += m.totalA
-        record.goalsB += m.totalB
-        if (m.totalA > m.totalB) record.winsA++
-        else if (m.totalB > m.totalA) record.winsB++
-        else record.draws++
-      } else {
-        record.goalsA += m.totalB
-        record.goalsB += m.totalA
-        if (m.totalB > m.totalA) record.winsA++
-        else if (m.totalA > m.totalB) record.winsB++
-        else record.draws++
-      }
-    }
-
-    return Object.values(h2h)
-  }
-
   const standings = getStandings()
-  const headToHead = getHeadToHead()
   const totalGames = getGameDates().length
 
   return (
@@ -272,52 +255,33 @@ function TeamStandings() {
                 </tr>
               </thead>
               <tbody>
-                {standings.map((team, idx) => (
-                  <tr key={team.name} className={`border-b border-slate-700/50 hover:bg-slate-700/30 ${idx === 0 ? 'bg-emerald-500/5' : ''}`}>
-                    <td className="px-4 py-3 text-slate-500">{idx + 1}</td>
-                    <td className="px-4 py-3 text-white font-bold">
-                      {getTeamEmoji(team.name)} {team.name}
-                      {idx === 0 && <span className="ml-2 text-emerald-400 text-xs">👑</span>}
-                    </td>
-                    <td className="px-4 py-3 text-center text-slate-300">{team.played}</td>
-                    <td className="px-4 py-3 text-center text-emerald-400 font-bold">{team.wins}</td>
-                    <td className="px-4 py-3 text-center text-yellow-400">{team.draws}</td>
-                    <td className="px-4 py-3 text-center text-red-400">{team.losses}</td>
-                    <td className="px-4 py-3 text-center text-slate-300">{team.goalsFor}</td>
-                    <td className="px-4 py-3 text-center text-slate-300">{team.goalsAgainst}</td>
-                    <td className="px-4 py-3 text-center text-slate-300">
-                      {team.goalsFor - team.goalsAgainst > 0 ? '+' : ''}{team.goalsFor - team.goalsAgainst}
-                    </td>
-                    <td className="px-4 py-3 text-center text-white font-bold text-lg">{team.points}</td>
-                  </tr>
-                ))}
+                {standings.map((team, idx) => {
+                  const teamColor = getTeamColor(team.name)
+                  return (
+                    <tr key={team.name} className={`border-b border-slate-700/50 hover:bg-slate-700/30 ${idx === 0 ? 'bg-emerald-500/5' : ''}`}>
+                      <td className="px-4 py-3 text-slate-500">{idx + 1}</td>
+                      <td className="px-4 py-3 font-bold" style={{ color: teamColor }}>
+                        <span className="inline-flex items-center gap-2">
+                          <span className="inline-block w-3 h-3 rounded-full flex-shrink-0" style={{ background: teamColor, border: '1px solid rgba(255,255,255,0.3)' }}></span>
+                          {team.name}
+                          {idx === 0 && <span className="ml-1 text-xs">👑</span>}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-center text-slate-300">{team.played}</td>
+                      <td className="px-4 py-3 text-center text-emerald-400 font-bold">{team.wins}</td>
+                      <td className="px-4 py-3 text-center text-yellow-400">{team.draws}</td>
+                      <td className="px-4 py-3 text-center text-red-400">{team.losses}</td>
+                      <td className="px-4 py-3 text-center text-slate-300">{team.goalsFor}</td>
+                      <td className="px-4 py-3 text-center text-slate-300">{team.goalsAgainst}</td>
+                      <td className="px-4 py-3 text-center text-slate-300">
+                        {team.goalsFor - team.goalsAgainst > 0 ? '+' : ''}{team.goalsFor - team.goalsAgainst}
+                      </td>
+                      <td className="px-4 py-3 text-center text-white font-bold text-lg">{team.points}</td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
-          </div>
-
-          {/* 상대 전적 */}
-          <div className="bg-slate-800 rounded-xl border border-slate-700 p-6">
-            <h2 className="text-lg font-bold text-white mb-4">⚔️ 상대 전적</h2>
-            <div className="space-y-4">
-              {headToHead.map((h, idx) => (
-                <div key={idx} className="bg-slate-700/30 rounded-xl p-4">
-                  <div className="flex items-center justify-center gap-6">
-                    <div className="text-center flex-1">
-                      <p className="text-white font-bold">{getTeamEmoji(h.teamA)} {h.teamA}</p>
-                      <p className="text-emerald-400 text-sm font-bold">{h.winsA}승</p>
-                    </div>
-                    <div className="text-center">
-                      <p className="text-yellow-400 text-sm">{h.draws}무</p>
-                      <p className="text-slate-400 text-xs mt-1">총 득점 {h.goalsA} : {h.goalsB}</p>
-                    </div>
-                    <div className="text-center flex-1">
-                      <p className="text-white font-bold">{getTeamEmoji(h.teamB)} {h.teamB}</p>
-                      <p className="text-emerald-400 text-sm font-bold">{h.winsB}승</p>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
           </div>
         </>
       )}

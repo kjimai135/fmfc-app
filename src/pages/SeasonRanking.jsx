@@ -11,7 +11,6 @@ function SeasonRanking() {
   const headerBoxRef = useRef(null)
   const [imgHeight, setImgHeight] = useState(0)
 
-  // 화면 너비에 맞춰 이미지 컨테이너 높이 계산 (891:640 비율만큼만 잔디 보이게)
   useEffect(() => {
     function updateHeight() {
       if (headerBoxRef.current) {
@@ -27,7 +26,27 @@ function SeasonRanking() {
   useEffect(() => {
     fetchTeams()
     fetchMatches()
+    fetchSeasonLabel()
   }, [])
+
+  // ✅ Supabase에서 시즌 번호 불러오기
+  async function fetchSeasonLabel() {
+    const { data } = await supabase
+      .from('app_settings')
+      .select('value')
+      .eq('key', 'season_label')
+      .single()
+    if (data?.value) setSeasonLabel(data.value)
+  }
+
+  // ✅ 시즌 번호를 Supabase에 저장하기
+  async function saveSeasonLabel(newLabel) {
+    setSeasonLabel(newLabel)
+    await supabase
+      .from('app_settings')
+      .update({ value: newLabel })
+      .eq('key', 'season_label')
+  }
 
   async function fetchTeams() {
     const { data } = await supabase.from('teams').select('*').order('display_order')
@@ -45,6 +64,7 @@ function SeasonRanking() {
     return [...new Set(matches.map(m => m.game_date))]
   }
 
+  // 대진별 합산 - 팀 이름 기준으로 정확히 합산!
   function getMatchups() {
     const dates = getGameDates()
     const allMatchups = []
@@ -57,13 +77,21 @@ function SeasonRanking() {
           { first: dayMatches[2], second: dayMatches[5] },
         ]
         for (const pair of pairs) {
-          allMatchups.push({
-            date,
-            teamA: pair.first.team_a,
-            teamB: pair.first.team_b,
-            totalA: pair.first.score_a + pair.second.score_a,
-            totalB: pair.first.score_b + pair.second.score_b,
-          })
+          const teamA = pair.first.team_a
+          const teamB = pair.first.team_b
+
+          let totalA = pair.first.score_a
+          let totalB = pair.first.score_b
+
+          if (pair.second.team_a === teamA) {
+            totalA += pair.second.score_a
+            totalB += pair.second.score_b
+          } else {
+            totalA += pair.second.score_b
+            totalB += pair.second.score_a
+          }
+
+          allMatchups.push({ date, teamA, teamB, totalA, totalB })
         }
       }
     }
@@ -114,7 +142,7 @@ function SeasonRanking() {
         <input
           type="text"
           value={seasonLabel}
-          onChange={(e) => setSeasonLabel(e.target.value)}
+          onChange={(e) => saveSeasonLabel(e.target.value)}
           className="bg-slate-700 border border-slate-600 rounded-lg px-3 py-1 text-white w-24 text-center focus:outline-none focus:border-emerald-500"
         />
       </div>
@@ -128,7 +156,7 @@ function SeasonRanking() {
           background: '#000',
         }}
       >
-        {/* 배경 이미지 컨테이너 (잔디까지만 보이게 잘라냄) + SEASON 겹치기 */}
+        {/* 배경 이미지 컨테이너 + SEASON 겹치기 */}
         <div
           ref={headerBoxRef}
           style={{
@@ -141,17 +169,9 @@ function SeasonRanking() {
           <img
             src={rankingBg}
             alt="header"
-            style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              width: '100%',
-              display: 'block',
-            }}
+            style={{ position: 'absolute', top: 0, left: 0, width: '100%', display: 'block' }}
             crossOrigin="anonymous"
           />
-
-          {/* SEASON 라벨 - 잔디 위 왼쪽 아래에 겹침 */}
           <div style={{
             position: 'absolute',
             bottom: '12px',
@@ -196,7 +216,7 @@ function SeasonRanking() {
         ) : (
           standings.map((team, idx) => {
             const gd = team.goalsFor - team.goalsAgainst
-            const teamColor = team.color || '#ffffff' // 🎨 팀 유니폼 색상
+            const teamColor = team.color || '#ffffff'
             return (
               <div
                 key={team.name}
@@ -211,13 +231,9 @@ function SeasonRanking() {
                   background: idx % 2 === 0 ? '#666666' : '#000000',
                 }}
               >
-                {/* 순위 - 팀 색상 */}
                 <span style={{ fontWeight: '900', color: teamColor }}>{idx + 1}</span>
-                {/* 팀명 - 팀 색상 */}
                 <span style={{ fontWeight: '900', color: teamColor }}>{team.name}</span>
-                {/* 승점 - 팀 색상 */}
                 <span style={{ textAlign: 'center', fontWeight: '900', color: teamColor }}>{team.points}</span>
-                {/* 나머지 스탯 - 팀 색상 */}
                 <span style={{ textAlign: 'center', color: teamColor }}>{team.wins}</span>
                 <span style={{ textAlign: 'center', color: teamColor }}>{team.draws}</span>
                 <span style={{ textAlign: 'center', color: teamColor }}>{team.losses}</span>
