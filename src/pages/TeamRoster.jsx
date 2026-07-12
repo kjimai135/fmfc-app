@@ -37,13 +37,32 @@ function TeamRoster() {
     fetchPlayers()
   }
 
-  const teamEmojis = ['⚪', '⚫', '🟡', '🔵', '🟣', '🟠']
-  const teamColors = ['border-white/30', 'border-slate-500/30', 'border-yellow-300/30', 'border-blue-500/30', 'border-purple-500/30', 'border-orange-500/30']
-  const teamBgColors = ['bg-white/5', 'bg-slate-500/10', 'bg-yellow-300/10', 'bg-blue-500/10', 'bg-purple-500/10', 'bg-orange-500/10']
+  // 🎨 팀 색상 저장
+  async function updateTeamColor(teamId, color) {
+    await supabase
+      .from('teams')
+      .update({ color })
+      .eq('id', teamId)
+    fetchTeams()
+  }
 
-  const getTeamEmoji = (idx) => teamEmojis[idx] || '⚪'
-  const getTeamBorder = (idx) => teamColors[idx] || 'border-slate-500/30'
-  const getTeamBg = (idx) => teamBgColors[idx] || 'bg-slate-500/10'
+  // 🎨 선택 가능한 색상 팔레트 (흰색 / 남색 파랑 / 노랑 형광)
+  const colorPalette = [
+    { name: '하양', value: '#ffffff' },
+    { name: '파랑(남색)', value: '#1d4ed8' },
+    { name: '노랑(형광)', value: '#eeff00' },
+  ]
+
+  // 🎨 선수 이름용 색상 (파란색은 밝은 파랑으로 변환해서 가독성 확보)
+  function getPlayerNameColor(teamColor) {
+    if (!teamColor) return '#ffffff'
+    const c = teamColor.toLowerCase()
+    // 남색 계열이면 밝은 파랑으로
+    if (c === '#1d4ed8' || c === '#2563eb' || c === '#1e40af' || c === '#1e3a8a') {
+      return '#60a5fa' // 밝은 파랑
+    }
+    return teamColor
+  }
 
   const teamNamesList = teams.map(t => t.name)
   const unassignedPlayers = players.filter(p => !p.current_team || !teamNamesList.includes(p.current_team))
@@ -58,14 +77,54 @@ function TeamRoster() {
         </div>
       ) : (
         <div className="grid grid-cols-4 gap-4">
-          {teams.map((team, idx) => {
+          {teams.map((team) => {
             const teamPlayers = players.filter(p => p.current_team === team.name)
+            const teamColor = team.color || '#1d4ed8'
+            const playerNameColor = getPlayerNameColor(teamColor)
 
             return (
-              <div key={team.id} className={`rounded-xl border ${getTeamBorder(idx)} ${getTeamBg(idx)} overflow-hidden`}>
-                <div className="px-4 py-3 font-bold text-white text-lg border-b border-slate-700/50">
-                  {getTeamEmoji(idx)} {team.name} ({teamPlayers.length}명)
+              <div
+                key={team.id}
+                className="rounded-xl border overflow-hidden"
+                style={{
+                  borderColor: `${teamColor}66`,
+                  background: `${teamColor}14`,
+                }}
+              >
+                {/* 팀 헤더 - 팀명에 색상 적용 */}
+                <div className="px-4 py-3 font-bold text-lg border-b border-slate-700/50">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="inline-block w-4 h-4 rounded-full flex-shrink-0"
+                      style={{ background: teamColor, border: '1px solid rgba(255,255,255,0.3)' }}
+                    ></span>
+                    <span style={{ color: teamColor }}>
+                      {team.name} ({teamPlayers.length}명)
+                    </span>
+                  </div>
                 </div>
+
+                {/* 🎨 색상 선택 */}
+                <div className="px-3 pt-3 pb-2 border-b border-slate-700/30">
+                  <p className="text-slate-400 text-xs mb-2">🎨 유니폼 색상</p>
+                  <div className="flex flex-wrap gap-2">
+                    {colorPalette.map(c => (
+                      <button
+                        key={c.value}
+                        onClick={() => updateTeamColor(team.id, c.value)}
+                        title={c.name}
+                        className="w-7 h-7 rounded-full border-2 transition-transform hover:scale-110"
+                        style={{
+                          background: c.value,
+                          borderColor: teamColor === c.value ? '#10b981' : 'rgba(255,255,255,0.3)',
+                          boxShadow: teamColor === c.value ? '0 0 0 2px #10b981' : 'none',
+                        }}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                {/* 선수 목록 */}
                 <div className="p-3">
                   {teamPlayers.length === 0 ? (
                     <p className="text-slate-500 text-sm px-2 py-2">배정된 선수 없음</p>
@@ -73,7 +132,10 @@ function TeamRoster() {
                     <div className="space-y-2">
                       {teamPlayers.map(player => (
                         <div key={player.id} className="flex items-center justify-between bg-slate-800/50 rounded-lg px-3 py-2">
-                          <span className="text-white text-sm font-medium">{player.name}</span>
+                          {/* 선수 이름 - 팀 색상 적용 */}
+                          <span className="text-sm font-medium" style={{ color: playerNameColor }}>
+                            {player.name}
+                          </span>
                           <select
                             value={player.current_team || ''}
                             onChange={(e) => assignTeam(player.id, e.target.value)}
@@ -93,6 +155,7 @@ function TeamRoster() {
             )
           })}
 
+          {/* 미배정 */}
           <div className="rounded-xl border border-slate-500/30 bg-slate-500/10 overflow-hidden">
             <div className="px-4 py-3 font-bold text-slate-400 text-lg border-b border-slate-700/50">
               ⚪ 미배정 ({unassignedPlayers.length}명)
@@ -104,7 +167,7 @@ function TeamRoster() {
                 <div className="space-y-2">
                   {unassignedPlayers.map(player => (
                     <div key={player.id} className="flex items-center justify-between bg-slate-800/50 rounded-lg px-3 py-2">
-                      <span className="text-white text-sm font-medium">{player.name}</span>
+                      <span className="text-slate-500 text-sm font-medium">{player.name}</span>
                       <select
                         value={player.current_team || ''}
                         onChange={(e) => assignTeam(player.id, e.target.value)}

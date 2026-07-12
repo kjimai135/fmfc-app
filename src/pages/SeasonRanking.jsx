@@ -8,6 +8,21 @@ function SeasonRanking() {
   const [loading, setLoading] = useState(true)
   const [seasonLabel, setSeasonLabel] = useState('26-1')
   const captureRef = useRef(null)
+  const headerBoxRef = useRef(null)
+  const [imgHeight, setImgHeight] = useState(0)
+
+  // 화면 너비에 맞춰 이미지 컨테이너 높이 계산 (891:640 비율만큼만 잔디 보이게)
+  useEffect(() => {
+    function updateHeight() {
+      if (headerBoxRef.current) {
+        const width = headerBoxRef.current.offsetWidth
+        setImgHeight((width * 640) / 891)
+      }
+    }
+    updateHeight()
+    window.addEventListener('resize', updateHeight)
+    return () => window.removeEventListener('resize', updateHeight)
+  }, [])
 
   useEffect(() => {
     fetchTeams()
@@ -59,7 +74,7 @@ function SeasonRanking() {
     const matchups = getMatchups()
     const standings = {}
     for (const team of teams) {
-      standings[team.name] = { name: team.name, played: 0, wins: 0, draws: 0, losses: 0, goalsFor: 0, goalsAgainst: 0, points: 0 }
+      standings[team.name] = { name: team.name, color: team.color || '#ffffff', played: 0, wins: 0, draws: 0, losses: 0, goalsFor: 0, goalsAgainst: 0, points: 0 }
     }
     for (const m of matchups) {
       if (!standings[m.teamA] || !standings[m.teamB]) continue
@@ -88,7 +103,6 @@ function SeasonRanking() {
   }
 
   const standings = getStandings()
-  const rankColors = ['#38bdf8', '#a3e635', '#ffffff'] // 1등 파랑, 2등 연두, 3등 흰색
 
   const columns = '0.5fr 2fr 0.9fr 0.7fr 0.7fr 0.7fr 0.9fr 0.9fr 0.9fr'
 
@@ -114,19 +128,25 @@ function SeasonRanking() {
           background: '#000',
         }}
       >
-        {/* 배경 이미지 (잔디까지) + SEASON 겹치기 */}
-        <div style={{ position: 'relative', width: '100%', lineHeight: 0 }}>
+        {/* 배경 이미지 컨테이너 (잔디까지만 보이게 잘라냄) + SEASON 겹치기 */}
+        <div
+          ref={headerBoxRef}
+          style={{
+            position: 'relative',
+            width: '100%',
+            height: `${imgHeight}px`,
+            overflow: 'hidden',
+          }}
+        >
           <img
             src={rankingBg}
             alt="header"
             style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
               width: '100%',
               display: 'block',
-              objectFit: 'cover',
-              objectPosition: 'top',
-              height: 'auto',
-              /* 잔디 부분까지 보이게 위쪽 부분만 사용 */
-              aspectRatio: '891 / 640',
             }}
             crossOrigin="anonymous"
           />
@@ -134,7 +154,7 @@ function SeasonRanking() {
           {/* SEASON 라벨 - 잔디 위 왼쪽 아래에 겹침 */}
           <div style={{
             position: 'absolute',
-            bottom: '10px',
+            bottom: '12px',
             left: '4%',
             color: 'white',
             fontSize: 'clamp(18px, 5vw, 30px)',
@@ -176,6 +196,7 @@ function SeasonRanking() {
         ) : (
           standings.map((team, idx) => {
             const gd = team.goalsFor - team.goalsAgainst
+            const teamColor = team.color || '#ffffff' // 🎨 팀 유니폼 색상
             return (
               <div
                 key={team.name}
@@ -184,21 +205,25 @@ function SeasonRanking() {
                   gridTemplateColumns: columns,
                   alignItems: 'center',
                   padding: '22px 4%',
-                  color: rankColors[idx] || 'white',
+                  color: teamColor,
                   fontSize: 'clamp(14px, 3.6vw, 22px)',
                   fontWeight: 'bold',
                   background: idx % 2 === 0 ? '#666666' : '#000000',
                 }}
               >
-                <span style={{ fontWeight: '900' }}>{idx + 1}</span>
-                <span style={{ fontWeight: '900' }}>{team.name}</span>
-                <span style={{ textAlign: 'center', fontWeight: '900' }}>{team.points}</span>
-                <span style={{ textAlign: 'center' }}>{team.wins}</span>
-                <span style={{ textAlign: 'center' }}>{team.draws}</span>
-                <span style={{ textAlign: 'center' }}>{team.losses}</span>
-                <span style={{ textAlign: 'center' }}>{team.goalsFor}</span>
-                <span style={{ textAlign: 'center' }}>{team.goalsAgainst}</span>
-                <span style={{ textAlign: 'center' }}>{gd > 0 ? '+ ' : gd < 0 ? '- ' : ''}{Math.abs(gd)}</span>
+                {/* 순위 - 팀 색상 */}
+                <span style={{ fontWeight: '900', color: teamColor }}>{idx + 1}</span>
+                {/* 팀명 - 팀 색상 */}
+                <span style={{ fontWeight: '900', color: teamColor }}>{team.name}</span>
+                {/* 승점 - 팀 색상 */}
+                <span style={{ textAlign: 'center', fontWeight: '900', color: teamColor }}>{team.points}</span>
+                {/* 나머지 스탯 - 팀 색상 */}
+                <span style={{ textAlign: 'center', color: teamColor }}>{team.wins}</span>
+                <span style={{ textAlign: 'center', color: teamColor }}>{team.draws}</span>
+                <span style={{ textAlign: 'center', color: teamColor }}>{team.losses}</span>
+                <span style={{ textAlign: 'center', color: teamColor }}>{team.goalsFor}</span>
+                <span style={{ textAlign: 'center', color: teamColor }}>{team.goalsAgainst}</span>
+                <span style={{ textAlign: 'center', color: teamColor }}>{gd > 0 ? '+ ' : gd < 0 ? '- ' : ''}{Math.abs(gd)}</span>
               </div>
             )
           })
