@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 function TopScorers() {
   const [goals, setGoals] = useState([])
   const [teams, setTeams] = useState([])
+  const [players, setPlayers] = useState([])
   const [loading, setLoading] = useState(true)
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
@@ -11,6 +12,7 @@ function TopScorers() {
 
   useEffect(() => {
     fetchTeams()
+    fetchPlayers()
     fetchGoals()
   }, [])
 
@@ -24,6 +26,13 @@ function TopScorers() {
       .select('*')
       .order('display_order')
     setTeams(data || [])
+  }
+
+  async function fetchPlayers() {
+    const { data } = await supabase
+      .from('players')
+      .select('*')
+    setPlayers(data || [])
   }
 
   async function fetchGoals() {
@@ -52,13 +61,24 @@ function TopScorers() {
     setLoading(false)
   }
 
-  const teamEmojis = ['⚪', '⚫', '🟡', '🔵', '🟣', '🟠']
-  const getTeamEmoji = (teamName) => {
-    const idx = teams.findIndex(t => t.name === teamName)
-    return teamEmojis[idx] || '⚽'
+  // 선수의 실제 소속팀 찾기 (players 테이블의 current_team 기준)
+  function getPlayerTeam(playerId, fallbackTeam) {
+    const player = players.find(p => p.id === playerId)
+    return player?.current_team || fallbackTeam || '미배정'
   }
 
-  // 득점 순위 계산
+  // 🎨 팀 색상 가져오기 (팀명단과 동일, 파랑은 밝은 파랑으로 변환)
+  function getTeamColor(teamName) {
+    const team = teams.find(t => t.name === teamName)
+    const color = team?.color || '#ffffff'
+    const c = color.toLowerCase()
+    if (c === '#1d4ed8' || c === '#2563eb' || c === '#1e40af' || c === '#1e3a8a') {
+      return '#60a5fa' // 밝은 파랑
+    }
+    return color
+  }
+
+  // 득점 순위 계산 (실제 소속팀 + 공동 순위)
   function getScorers() {
     const scorers = {}
 
@@ -67,7 +87,7 @@ function TopScorers() {
         scorers[g.player_id] = {
           player_id: g.player_id,
           player_name: g.player_name,
-          team: g.team,
+          team: getPlayerTeam(g.player_id, g.team), // ✅ 실제 소속팀
           goals: 0,
           dates: new Set(),
         }
@@ -76,24 +96,27 @@ function TopScorers() {
       scorers[g.player_id].dates.add(g.game_date)
     }
 
-    return Object.values(scorers)
+    const sorted = Object.values(scorers)
       .map(s => ({ ...s, games: s.dates.size }))
       .sort((a, b) => b.goals - a.goals)
+
+    // 공동 순위 부여 (같은 골 수 = 같은 순위)
+    let lastGoals = null
+    let lastRank = 0
+    sorted.forEach((s, idx) => {
+      if (s.goals !== lastGoals) {
+        lastRank = idx + 1
+        lastGoals = s.goals
+      }
+      s.rank = lastRank
+    })
+
+    return sorted
   }
 
   const scorers = getScorers()
   const totalGoals = goals.length
   const gameDates = [...new Set(goals.map(g => g.game_date))].length
-
-  // 순위 메달
-  const getMedal = (idx) => {
-    switch(idx) {
-      case 0: return '🥇'
-      case 1: return '🥈'
-      case 2: return '🥉'
-      default: return `${idx + 1}`
-    }
-  }
 
   return (
     <div className="max-w-4xl mx-auto">
@@ -148,25 +171,6 @@ function TopScorers() {
         )}
       </div>
 
-      {/* TOP 3 카드 */}
-      {scorers.length >= 3 && (
-        <div className="grid grid-cols-3 gap-4 mb-6">
-          {scorers.slice(0, 3).map((scorer, idx) => (
-            <div key={scorer.player_id} className={`rounded-xl p-4 text-center border ${
-              idx === 0 ? 'bg-yellow-500/10 border-yellow-500/30' :
-              idx === 1 ? 'bg-slate-400/10 border-slate-400/30' :
-              'bg-orange-700/10 border-orange-700/30'
-            }`}>
-              <p className="text-3xl mb-2">{getMedal(idx)}</p>
-              <p className="text-white font-bold text-lg">{scorer.player_name}</p>
-              <p className="text-slate-400 text-sm">{getTeamEmoji(scorer.team)} {scorer.team}</p>
-              <p className="text-3xl font-bold text-white mt-2">{scorer.goals}<span className="text-slate-400 text-sm ml-1">골</span></p>
-              <p className="text-slate-500 text-xs mt-1">{scorer.games}경기 출전</p>
-            </div>
-          ))}
-        </div>
-      )}
-
       {/* 전체 순위 테이블 */}
       {loading ? (
         <div className="text-center py-20 text-slate-400">
@@ -192,22 +196,32 @@ function TopScorers() {
               </tr>
             </thead>
             <tbody>
-              {scorers.map((scorer, idx) => (
-                <tr key={scorer.player_id} className={`border-b border-slate-700/50 hover:bg-slate-700/30 ${idx < 3 ? 'bg-emerald-500/5' : ''}`}>
-                  <td className="px-4 py-3 text-center">
-                    <span className={`font-bold ${idx < 3 ? 'text-lg' : 'text-slate-500 text-sm'}`}>
-                      {getMedal(idx)}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-white font-medium">{scorer.player_name}</td>
-                  <td className="px-4 py-3 text-slate-300 text-sm">{getTeamEmoji(scorer.team)} {scorer.team}</td>
-                  <td className="px-4 py-3 text-center text-emerald-400 font-bold text-lg">{scorer.goals}</td>
-                  <td className="px-4 py-3 text-center text-slate-300">{scorer.games}</td>
-                  <td className="px-4 py-3 text-center text-slate-300">
-                    {(scorer.goals / scorer.games).toFixed(1)}
-                  </td>
-                </tr>
-              ))}
+              {scorers.map((scorer) => {
+                const teamColor = getTeamColor(scorer.team)
+                return (
+                  <tr key={scorer.player_id} className={`border-b border-slate-700/50 hover:bg-slate-700/30 ${scorer.rank === 1 ? 'bg-emerald-500/5' : ''}`}>
+                    <td className="px-4 py-3 text-center">
+                      {scorer.rank === 1 ? (
+                        <span className="font-bold text-lg">🥇</span>
+                      ) : (
+                        <span className="font-bold text-slate-500 text-sm">{scorer.rank}</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-white font-medium">{scorer.player_name}</td>
+                    <td className="px-4 py-3 text-sm font-semibold" style={{ color: teamColor }}>
+                      <span className="inline-flex items-center gap-2">
+                        <span className="inline-block w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: teamColor, border: '1px solid rgba(255,255,255,0.3)' }}></span>
+                        {scorer.team}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-center text-emerald-400 font-bold text-lg">{scorer.goals}</td>
+                    <td className="px-4 py-3 text-center text-slate-300">{scorer.games}</td>
+                    <td className="px-4 py-3 text-center text-slate-300">
+                      {(scorer.goals / scorer.games).toFixed(1)}
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>
