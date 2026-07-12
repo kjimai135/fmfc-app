@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom'
 import PlayerList from './pages/PlayerList'
 import PlayerForm from './pages/PlayerForm'
@@ -18,6 +19,28 @@ import logoImg from './assets/logo.png'
 import './App.css'
 
 function App() {
+  const [menuOpen, setMenuOpen] = useState(false)
+
+  // ⭐ 항상 보이는 메뉴 (자주 쓰는 것)
+  const mainMenu = [
+    { to: '/roster', label: '📋 팀명단' },
+    { to: '/attendance', label: '✅ 출석' },
+    { to: '/attendance/history', label: '📋 참석현황' },
+    { to: '/matches', label: '⚽ 경기순서&결과' },
+    { to: '/season-ranking', label: '📸 순위표' },
+    { to: '/scorer-ranking', label: '📸 득점순위표' },
+  ]
+
+  // ☰ 햄버거 안에 들어가는 나머지 메뉴
+  const moreMenu = [
+    { to: '/', label: '👤 선수' },
+    { to: '/attendance/stats', label: '📊 통계' },
+    { to: '/polls', label: '🗳️ 투표' },
+    { to: '/standings', label: '🏆 전적' },
+    { to: '/scorers', label: '👑 득점왕' },
+    { to: '/seasons', label: '📚 시즌별명단' },
+  ]
+
   return (
     <Router>
       <div className="min-h-screen bg-slate-900 relative">
@@ -27,50 +50,63 @@ function App() {
         </div>
 
         {/* 상단 네비게이션 */}
-        <nav className="bg-slate-800 border-b border-slate-700 px-6 py-4 relative z-10">
-          <div className="max-w-6xl mx-auto flex items-center justify-between">
-            <Link to="/" className="text-2xl font-bold text-emerald-400">
+        <nav className="bg-slate-800 border-b border-slate-700 px-6 py-4 relative z-20">
+          <div className="max-w-6xl mx-auto flex items-center justify-between gap-3">
+            {/* 로고 */}
+            <Link to="/" className="text-2xl font-bold text-emerald-400 flex-shrink-0" onClick={() => setMenuOpen(false)}>
               ⚽ FM FC
             </Link>
-            <div className="flex gap-4 flex-wrap">
-              <Link to="/" className="text-slate-300 hover:text-white px-3 py-2 rounded-lg hover:bg-slate-700">
-                👤 선수
-              </Link>
-              <Link to="/attendance" className="text-slate-300 hover:text-white px-3 py-2 rounded-lg hover:bg-slate-700">
-                ✅ 출석
-              </Link>
-              <Link to="/attendance/history" className="text-slate-300 hover:text-white px-3 py-2 rounded-lg hover:bg-slate-700">
-                📋 현황
-              </Link>
-              <Link to="/attendance/stats" className="text-slate-300 hover:text-white px-3 py-2 rounded-lg hover:bg-slate-700">
-                📊 통계
-              </Link>
-              <Link to="/polls" className="text-slate-300 hover:text-white px-3 py-2 rounded-lg hover:bg-slate-700">
-                🗳️ 투표
-              </Link>
-              <Link to="/matches" className="text-slate-300 hover:text-white px-3 py-2 rounded-lg hover:bg-slate-700">
-                ⚽ 경기
-              </Link>
-              <Link to="/standings" className="text-slate-300 hover:text-white px-3 py-2 rounded-lg hover:bg-slate-700">
-                🏆 전적
-              </Link>
-              <Link to="/season-ranking" className="text-slate-300 hover:text-white px-3 py-2 rounded-lg hover:bg-slate-700">
-                📸 순위표
-              </Link>
-              <Link to="/scorer-ranking" className="text-slate-300 hover:text-white px-3 py-2 rounded-lg hover:bg-slate-700">
-                📸 득점순위표
-              </Link>
-              <Link to="/scorers" className="text-slate-300 hover:text-white px-3 py-2 rounded-lg hover:bg-slate-700">
-                👑 득점왕
-              </Link>
-              <Link to="/roster" className="text-slate-300 hover:text-white px-3 py-2 rounded-lg hover:bg-slate-700">
-                📋 팀명단
-              </Link>
-              <Link to="/seasons" className="text-slate-300 hover:text-white px-3 py-2 rounded-lg hover:bg-slate-700">
-                📚 시즌별명단
-              </Link>
+
+            {/* 자주 쓰는 메뉴 (항상 보임) */}
+            <div className="flex gap-2 flex-wrap items-center justify-end flex-1">
+              {mainMenu.map((item) => (
+                <Link
+                  key={item.to}
+                  to={item.to}
+                  onClick={() => setMenuOpen(false)}
+                  className="text-slate-300 hover:text-white px-3 py-2 rounded-lg hover:bg-slate-700 text-sm sm:text-base whitespace-nowrap transition-colors"
+                >
+                  {item.label}
+                </Link>
+              ))}
+
+              {/* 🍔 더보기(햄버거) 버튼 */}
+              <button
+                onClick={() => setMenuOpen(!menuOpen)}
+                className="text-white p-2 rounded-lg hover:bg-slate-700 transition-colors flex-shrink-0"
+                aria-label="더보기 메뉴"
+              >
+                {menuOpen ? (
+                  <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                  </svg>
+                ) : (
+                  <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="3" y1="12" x2="21" y2="12"></line>
+                    <line x1="3" y1="6" x2="21" y2="6"></line>
+                    <line x1="3" y1="18" x2="21" y2="18"></line>
+                  </svg>
+                )}
+              </button>
             </div>
           </div>
+
+          {/* 펼쳐지는 더보기 메뉴 */}
+          {menuOpen && (
+            <div className="max-w-6xl mx-auto mt-4 pt-4 border-t border-slate-700 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+              {moreMenu.map((item) => (
+                <Link
+                  key={item.to}
+                  to={item.to}
+                  onClick={() => setMenuOpen(false)}
+                  className="text-slate-300 hover:text-white px-4 py-3 rounded-lg hover:bg-slate-700 bg-slate-700/40 text-center font-medium transition-colors"
+                >
+                  {item.label}
+                </Link>
+              ))}
+            </div>
+          )}
         </nav>
 
         {/* 페이지 내용 */}
