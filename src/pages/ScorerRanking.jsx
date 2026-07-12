@@ -9,9 +9,13 @@ function ScorerRanking() {
   const [loading, setLoading] = useState(true)
   const [seasonLabel, setSeasonLabel] = useState('26-1')
   const captureRef = useRef(null)
-  const bgBoxRef = useRef(null)
-  const [bgHeight, setBgHeight] = useState(0)
-  const [minCaptureHeight, setMinCaptureHeight] = useState(0)
+  const wrapperRef = useRef(null)
+  const [scale, setScale] = useState(1)
+
+  // 캡처 영역 고정 크기
+  const CAPTURE_WIDTH = 500
+  const BG_TOP_HEIGHT = (CAPTURE_WIDTH * 200) / 685   // 상단 로고+타이틀 자리
+  const MIN_HEIGHT = (CAPTURE_WIDTH * 960) / 685        // 배경 전체 최소 높이
 
   useEffect(() => {
     fetchTeams()
@@ -20,17 +24,17 @@ function ScorerRanking() {
     fetchSeasonLabel()
   }, [])
 
+  // 화면 너비에 맞춰 캡처 영역을 축소해서 "보여주기"만 함 (실제 크기는 고정)
   useEffect(() => {
-    function updateHeight() {
-      if (bgBoxRef.current) {
-        const width = bgBoxRef.current.offsetWidth
-        setBgHeight((width * 200) / 685)
-        setMinCaptureHeight((width * 960) / 685)
+    function updateScale() {
+      if (wrapperRef.current) {
+        const availWidth = wrapperRef.current.offsetWidth
+        setScale(Math.min(1, availWidth / CAPTURE_WIDTH))
       }
     }
-    updateHeight()
-    window.addEventListener('resize', updateHeight)
-    return () => window.removeEventListener('resize', updateHeight)
+    updateScale()
+    window.addEventListener('resize', updateScale)
+    return () => window.removeEventListener('resize', updateScale)
   }, [])
 
   async function fetchSeasonLabel() {
@@ -131,126 +135,134 @@ function ScorerRanking() {
 
   return (
     <div className="max-w-md mx-auto p-4">
-      {/* ================= 📸 캡처 영역 ================= */}
-      <div
-        ref={captureRef}
-        style={{
-          position: 'relative',
-          width: '100%',
-          minHeight: `${minCaptureHeight}px`,
-          fontFamily: 'pretendard, sans-serif',
-          overflow: 'hidden',
-          background: '#0a1929',
-        }}
-      >
-        {/* 배경 이미지 */}
-        <img
-          src={scorerBg}
-          alt="background"
-          crossOrigin="anonymous"
-          style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            width: '100%',
-            height: '100%',
-            objectFit: 'cover',
-            objectPosition: 'top center',
-            zIndex: 0,
-          }}
-        />
-
-        {/* 컨텐츠 (배경 위) */}
-        <div style={{ position: 'relative', zIndex: 1 }}>
-          {/* 상단 로고 + 타이틀 자리 */}
+      {/* 화면 표시용 래퍼 (축소해서 보여주기) */}
+      <div ref={wrapperRef} style={{ width: '100%' }}>
+        <div style={{
+          width: `${CAPTURE_WIDTH}px`,
+          height: `${MIN_HEIGHT}px`,
+          transform: `scale(${scale})`,
+          transformOrigin: 'top left',
+          marginBottom: `${MIN_HEIGHT * (scale - 1)}px`, // 축소된 만큼 아래 공간 보정
+        }}>
+          {/* ================= 📸 캡처 영역 (항상 500px 고정) ================= */}
           <div
-            ref={bgBoxRef}
+            ref={captureRef}
             style={{
-              width: '100%',
-              height: `${bgHeight}px`,
               position: 'relative',
+              width: `${CAPTURE_WIDTH}px`,
+              minHeight: `${MIN_HEIGHT}px`,
+              fontFamily: 'pretendard, sans-serif',
+              overflow: 'hidden',
+              background: '#0a1929',
             }}
           >
-            {/* SEASON 타이틀 (로고 아래) */}
-            <div style={{
-              position: 'absolute',
-              top: '56%',
-              left: 0,
-              right: 0,
-              textAlign: 'center',
-            }}>
-              <span style={{
-                color: '#1e3a8a',
-                fontSize: 'clamp(16px, 4.6vw, 32px)',
-                fontWeight: '900',
-                fontStyle: 'normal',
-                letterSpacing: '-1px',
-                whiteSpace: 'nowrap',
-                WebkitTextStroke: '4px #ffffff',
-                paintOrder: 'stroke fill',
-                textShadow: '0 0 6px rgba(255,255,255,0.5), 2px 2px 5px rgba(0,0,0,0.5)',
+            {/* 배경 이미지 */}
+            <img
+              src={scorerBg}
+              alt="background"
+              crossOrigin="anonymous"
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover',
+                objectPosition: 'top center',
+                zIndex: 0,
+              }}
+            />
+
+            {/* 컨텐츠 (배경 위) */}
+            <div style={{ position: 'relative', zIndex: 1 }}>
+              {/* 상단 로고 + 타이틀 자리 */}
+              <div style={{
+                width: '100%',
+                height: `${BG_TOP_HEIGHT}px`,
+                position: 'relative',
               }}>
-                SEASON {seasonLabel} 득점순위
-              </span>
+                {/* SEASON 타이틀 (고정 크기) */}
+                <div style={{
+                  position: 'absolute',
+                  top: '56%',
+                  left: 0,
+                  right: 0,
+                  textAlign: 'center',
+                }}>
+                  <span style={{
+                    color: '#1e3a8a',
+                    fontSize: '30px',
+                    fontWeight: '900',
+                    fontStyle: 'normal',
+                    letterSpacing: '-1px',
+                    whiteSpace: 'nowrap',
+                    WebkitTextStroke: '4px #ffffff',
+                    paintOrder: 'stroke fill',
+                    textShadow: '0 0 6px rgba(255,255,255,0.5), 2px 2px 5px rgba(0,0,0,0.5)',
+                  }}>
+                    SEASON {seasonLabel} 득점순위
+                  </span>
+                </div>
+              </div>
+
+              {/* 표 헤더 */}
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: columns,
+                alignItems: 'center',
+                padding: '11px 3%',
+                color: '#ffffff',
+                fontWeight: '700',
+                fontSize: '18px',
+                background: 'rgba(0,0,0,0.75)',
+                borderTop: '2px solid rgba(255,255,255,0.6)',
+                borderBottom: '2px solid rgba(255,255,255,0.6)',
+                textShadow: '1px 1px 3px rgba(0,0,0,1)',
+              }}>
+                <span style={{ textAlign: 'center' }}>순위</span>
+                <span style={{ textAlign: 'center' }}>소속팀</span>
+                <span style={{ textAlign: 'center' }}>득점자</span>
+                <span style={{ textAlign: 'center' }}>득점</span>
+              </div>
+
+              {/* 데이터 행 */}
+              {loading ? (
+                <div style={{ color: 'white', textAlign: 'center', padding: '20px', background: 'rgba(0,0,0,0.75)' }}>⏳ 로딩 중...</div>
+              ) : groupedScorers.length === 0 ? (
+                <div style={{ color: 'white', textAlign: 'center', padding: '20px', background: 'rgba(0,0,0,0.75)' }}>골 기록이 없습니다</div>
+              ) : (
+                groupedScorers.map((group, idx) => {
+                  const teamColor = getTeamColor(group.team)
+                  return (
+                    <div
+                      key={`${group.goals}-${group.team}-${idx}`}
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: columns,
+                        alignItems: 'center',
+                        padding: '9px 3%',
+                        fontSize: '18px',
+                        fontWeight: '600',
+                        background: 'rgba(0,0,0,0.75)',
+                        borderBottom: '1px solid rgba(255,255,255,0.25)',
+                      }}
+                    >
+                      <span style={{ textAlign: 'center', color: 'white', fontWeight: '700', textShadow: '1px 1px 3px rgba(0,0,0,1)' }}>{group.rank}</span>
+                      <span style={{ textAlign: 'center', color: teamColor, fontWeight: '700', textShadow: '1px 1px 4px rgba(0,0,0,1)' }}>{group.team}</span>
+                      <span style={{ textAlign: 'center', color: teamColor, fontWeight: '700', textShadow: '1px 1px 4px rgba(0,0,0,1)' }}>{group.names.join(', ')}</span>
+                      <span style={{ textAlign: 'center', color: 'white', fontWeight: '600', textShadow: '1px 1px 3px rgba(0,0,0,1)' }}>{group.goals} 골</span>
+                    </div>
+                  )
+                })
+              )}
+
+              {/* 하단 여백 */}
+              <div style={{ height: '18px' }}></div>
             </div>
           </div>
-
-          {/* 표 헤더 */}
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: columns,
-            alignItems: 'center',
-            padding: '11px 3%',
-            color: '#ffffff',
-            fontWeight: '700',
-            fontSize: 'clamp(12px, 3.1vw, 19px)',
-            background: 'rgba(0,0,0,0.75)',
-            borderTop: '2px solid rgba(255,255,255,0.6)',
-            borderBottom: '2px solid rgba(255,255,255,0.6)',
-            textShadow: '1px 1px 3px rgba(0,0,0,1)',
-          }}>
-            <span style={{ textAlign: 'center' }}>순위</span>
-            <span style={{ textAlign: 'center' }}>소속팀</span>
-            <span style={{ textAlign: 'center' }}>득점자</span>
-            <span style={{ textAlign: 'center' }}>득점</span>
-          </div>
-
-          {/* 데이터 행 */}
-          {loading ? (
-            <div style={{ color: 'white', textAlign: 'center', padding: '20px', background: 'rgba(0,0,0,0.75)' }}>⏳ 로딩 중...</div>
-          ) : groupedScorers.length === 0 ? (
-            <div style={{ color: 'white', textAlign: 'center', padding: '20px', background: 'rgba(0,0,0,0.75)' }}>골 기록이 없습니다</div>
-          ) : (
-            groupedScorers.map((group, idx) => {
-              const teamColor = getTeamColor(group.team)
-              return (
-                <div
-                  key={`${group.goals}-${group.team}-${idx}`}
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: columns,
-                    alignItems: 'center',
-                    padding: '9px 3%',
-                    fontSize: 'clamp(12px, 3vw, 19px)',
-                    fontWeight: '600',
-                    background: 'rgba(0,0,0,0.75)',
-                    borderBottom: '1px solid rgba(255,255,255,0.25)',
-                  }}
-                >
-                  <span style={{ textAlign: 'center', color: 'white', fontWeight: '700', textShadow: '1px 1px 3px rgba(0,0,0,1)' }}>{group.rank}</span>
-                  <span style={{ textAlign: 'center', color: teamColor, fontWeight: '700', textShadow: '1px 1px 4px rgba(0,0,0,1)' }}>{group.team}</span>
-                  <span style={{ textAlign: 'center', color: teamColor, fontWeight: '700', textShadow: '1px 1px 4px rgba(0,0,0,1)' }}>{group.names.join(', ')}</span>
-                  <span style={{ textAlign: 'center', color: 'white', fontWeight: '600', textShadow: '1px 1px 3px rgba(0,0,0,1)' }}>{group.goals} 골</span>
-                </div>
-              )
-            })
-          )}
-
-          {/* 하단 여백 */}
-          <div style={{ height: '18px' }}></div>
+          {/* ================= 캡처 영역 끝 ================= */}
         </div>
       </div>
-      {/* ================= 캡처 영역 끝 ================= */}
 
       {/* 📸 캡처 버튼 */}
       <button
