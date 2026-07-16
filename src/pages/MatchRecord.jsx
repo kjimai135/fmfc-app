@@ -240,7 +240,7 @@ function MatchRecord() {
   return (
     <div className="max-w-4xl mx-auto">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
-        <h1 className="text-3xl font-bold text-white">⚽ 경기 기록</h1>
+        <h1 className="text-3xl font-bold text-white">⚽ 경기순서&결과</h1>
         {matches.length === 0 && (
           <button
             onClick={() => setShowCreate(true)}

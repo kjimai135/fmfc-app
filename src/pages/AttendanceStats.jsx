@@ -108,7 +108,7 @@ function AttendanceStats() {
     return color
   }
 
-  // ✅ 참석률 클릭 시, 클릭한 셀 바로 아래에 팝업 위치 계산
+  // ✅ 참석률 클릭 시, 팝업이 화면 안에만 뜨도록 위치 계산
   function handleRateClick(e, player) {
     if (popupPlayer?.id === player.id) {
       setPopupPlayer(null)
@@ -117,9 +117,26 @@ function AttendanceStats() {
     const container = e.currentTarget.closest('.relative')
     const containerRect = container.getBoundingClientRect()
     const btnRect = e.currentTarget.getBoundingClientRect()
+
+    const popupWidth = 360 // 팝업 너비 (아래 style의 w-[360px]와 동일)
+    const margin = 12 // 화면 가장자리 여백
+
+    // 기본: 클릭한 버튼 왼쪽에 맞춤 (컨테이너 기준 상대 좌표)
+    let left = btnRect.left - containerRect.left
+
+    // 팝업 오른쪽 끝이 화면(뷰포트)을 넘어가면 → 왼쪽으로 밀기
+    const popupRightOnScreen = btnRect.left + popupWidth
+    if (popupRightOnScreen > window.innerWidth - margin) {
+      const overflow = popupRightOnScreen - (window.innerWidth - margin)
+      left = left - overflow
+    }
+
+    // 왼쪽으로 너무 밀려서 컨테이너 밖으로 나가지 않도록 최소값 보정
+    if (left < 0) left = 0
+
     setPopupPosition({
       top: btnRect.bottom - containerRect.top + 8,
-      left: btnRect.left - containerRect.left,
+      left: left,
     })
     setPopupPlayer(player)
   }
@@ -334,7 +351,7 @@ function AttendanceStats() {
             ))}
           </div>
 
-          {/* 팝업 - 클릭한 이름 바로 아래 */}
+          {/* 팝업 - 클릭한 이름 바로 아래 (화면 안에만) */}
           {popupPlayer && (
             <div
               ref={popupRef}

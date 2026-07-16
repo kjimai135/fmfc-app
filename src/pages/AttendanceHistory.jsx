@@ -113,7 +113,7 @@ function AttendanceHistory() {
 
   return (
     <div>
-      <h1 className="text-3xl font-bold text-white mb-6">📋 출석 현황</h1>
+      <h1 className="text-3xl font-bold text-white mb-6">📋 출석현황</h1>
 
       {/* 날짜 선택 */}
       <div className="flex flex-col sm:flex-row gap-4 mb-6">
