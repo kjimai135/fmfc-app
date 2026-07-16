@@ -48,32 +48,32 @@ function App() {
 
         {/* 상단 네비게이션 (sticky) */}
         <nav className="bg-slate-800 border-b border-slate-700 sticky top-0 z-30">
-          <div className="max-w-6xl mx-auto flex items-center justify-between gap-3 px-6 py-4">
-            {/* 로고 */}
-            <Link to="/" className="text-2xl font-bold text-emerald-400 flex-shrink-0" onClick={() => setMenuOpen(false)}>
-              ⚽ FM FC
-            </Link>
-
-            {/* 🍔 메뉴 + 햄버거 버튼 */}
+          <div className="w-full max-w-6xl mx-auto flex items-center justify-between gap-3 px-4 py-4">
+            {/* 🍔 메뉴 + 햄버거 버튼 (왼쪽) */}
             <button
               onClick={() => setMenuOpen(!menuOpen)}
-              className="flex items-center gap-2 text-white px-4 py-2 rounded-lg hover:bg-slate-700 transition-colors"
+              className="flex items-center gap-2 text-white px-3 py-2 rounded-lg hover:bg-slate-700 transition-colors flex-shrink-0"
               aria-label="메뉴"
             >
-              <span className="font-medium text-base">메뉴</span>
               {menuOpen ? (
-                <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <line x1="18" y1="6" x2="6" y2="18"></line>
                   <line x1="6" y1="6" x2="18" y2="18"></line>
                 </svg>
               ) : (
-                <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <line x1="3" y1="12" x2="21" y2="12"></line>
                   <line x1="3" y1="6" x2="21" y2="6"></line>
                   <line x1="3" y1="18" x2="21" y2="18"></line>
                 </svg>
               )}
+              <span className="font-medium text-base">메뉴</span>
             </button>
+
+            {/* 로고 (오른쪽) - 반응형 글자 크기 */}
+            <Link to="/" className="text-lg sm:text-2xl font-bold text-emerald-400 flex-shrink-0 whitespace-nowrap" onClick={() => setMenuOpen(false)}>
+              ⚽ FM FC
+            </Link>
           </div>
 
           {/* ⬇️ 위에서 아래로 펼쳐지는 드롭다운 패널 */}
@@ -82,7 +82,7 @@ function App() {
               menuOpen ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0'
             }`}
           >
-            <div className="max-w-6xl mx-auto px-6 py-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+            <div className="w-full max-w-6xl mx-auto px-4 py-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
               {allMenu.map((item) => (
                 <Link
                   key={item.to}
@@ -106,7 +106,7 @@ function App() {
         )}
 
         {/* 페이지 내용 */}
-        <main className="max-w-6xl mx-auto p-6 relative z-0">
+        <main className="w-full max-w-6xl mx-auto p-4 sm:p-6 relative z-0">
           <Routes>
             <Route path="/" element={<PlayerList />} />
             <Route path="/players/new" element={<PlayerForm />} />
