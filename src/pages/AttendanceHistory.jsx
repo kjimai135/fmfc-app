@@ -56,39 +56,60 @@ function AttendanceHistory() {
     setLoading(false)
   }
 
+  // ✅ 개별 선수 상태 수정
+  async function updateStatus(recordId, newStatus) {
+    await supabase
+      .from('attendance')
+      .update({ status: newStatus })
+      .eq('id', recordId)
+    fetchAttendance(selectedDate)
+  }
+
+  // ✅ 개별 선수 기록 삭제 (= 불참 처리)
+  async function deleteRecord(recordId, playerName) {
+    if (!window.confirm(`${playerName} 선수의 출석 기록을 삭제(불참 처리)할까요?`)) return
+    await supabase
+      .from('attendance')
+      .delete()
+      .eq('id', recordId)
+    fetchAttendance(selectedDate)
+  }
+
+  // ✅ 선택한 날짜 전체 삭제
+  async function deleteAllForDate() {
+    if (!window.confirm(`${selectedDate} 날짜의 출석 기록을 전부 삭제할까요?\n(복구할 수 없습니다!)`)) return
+    await supabase
+      .from('attendance')
+      .delete()
+      .eq('game_date', selectedDate)
+    await fetchAvailableDates()
+    fetchAttendance(selectedDate)
+  }
+
   const statusIcon = (s) => {
     switch(s) {
       case '출석': return '✅'
-      case '불참': return '❌'
-      case '지각': return '⏰'
+      case '늦참': return '🕐'
       case '조퇴': return '🏃'
       default: return ''
     }
   }
 
-  const teamColors = ['border-white/30', 'border-slate-500/30', 'border-yellow-300/30', 'border-blue-500/30', 'border-purple-500/30', 'border-orange-500/30']
-  const teamBgColors = ['bg-white/10 text-white', 'bg-slate-500/20 text-slate-300', 'bg-yellow-300/20 text-yellow-300', 'bg-blue-500/20 text-blue-400', 'bg-purple-500/20 text-purple-400', 'bg-orange-500/20 text-orange-400']
-  const teamEmojis = ['⚪', '⚫', '🟡', '🔵', '🟣', '🟠']
-
-  const getTeamColor = (teamName) => {
-    const idx = teams.findIndex(t => t.name === teamName)
-    return teamColors[idx] || 'border-slate-500/30'
+  // 🎨 팀 색상 가져오기 (팀명단과 동일, 남색은 밝은 파랑으로 변환)
+  function getTeamColor(teamName) {
+    const team = teams.find(t => t.name === teamName)
+    const color = team?.color || '#ffffff'
+    const c = color.toLowerCase()
+    if (c === '#1d4ed8' || c === '#2563eb' || c === '#1e40af' || c === '#1e3a8a') {
+      return '#60a5fa' // 밝은 파랑
+    }
+    return color
   }
-
-  const getTeamBgColor = (teamName) => {
-    const idx = teams.findIndex(t => t.name === teamName)
-    return teamBgColors[idx] || 'bg-slate-500/20 text-slate-400'
-  }
-
-  const getTeamEmoji = (teamName) => {
-    const idx = teams.findIndex(t => t.name === teamName)
-    return teamEmojis[idx] || '⚪'
-  }
-
-  const statusCount = (s) => attendance.filter(a => a.status === s).length
 
   // 출석 기록에 저장된 팀 이름들 (중복 제거, 순서 유지)
   const recordedTeams = [...new Set(attendance.map(a => a.team))]
+
+  const statusOptions = ['출석', '늦참', '조퇴']
 
   return (
     <div>
@@ -126,25 +147,15 @@ function AttendanceHistory() {
         </div>
       </div>
 
-      {/* 요약 통계 */}
+      {/* 🗑️ 날짜 전체 삭제 버튼 */}
       {attendance.length > 0 && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
-          <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-4 text-center">
-            <p className="text-2xl font-bold text-emerald-400">{statusCount('출석')}</p>
-            <p className="text-slate-400 text-sm">✅ 출석</p>
-          </div>
-          <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-4 text-center">
-            <p className="text-2xl font-bold text-yellow-400">{statusCount('지각')}</p>
-            <p className="text-slate-400 text-sm">⏰ 지각</p>
-          </div>
-          <div className="bg-orange-500/10 border border-orange-500/30 rounded-xl p-4 text-center">
-            <p className="text-2xl font-bold text-orange-400">{statusCount('조퇴')}</p>
-            <p className="text-slate-400 text-sm">🏃 조퇴</p>
-          </div>
-          <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 text-center">
-            <p className="text-2xl font-bold text-red-400">{statusCount('불참')}</p>
-            <p className="text-slate-400 text-sm">❌ 불참</p>
-          </div>
+        <div className="flex justify-end mb-6">
+          <button
+            onClick={deleteAllForDate}
+            className="bg-red-600/80 hover:bg-red-600 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+          >
+            🗑️ {selectedDate} 기록 전체 삭제
+          </button>
         </div>
       )}
 
@@ -162,11 +173,14 @@ function AttendanceHistory() {
         recordedTeams.map(teamName => {
           const teamAttendance = attendance.filter(a => a.team === teamName)
           if (teamAttendance.length === 0) return null
+          const teamColor = getTeamColor(teamName)
 
           return (
-            <div key={teamName} className={`mb-6 rounded-xl border ${getTeamColor(teamName)} overflow-hidden`}>
-              <div className={`px-4 py-3 font-bold text-lg ${getTeamBgColor(teamName)}`}>
-                {getTeamEmoji(teamName)} {teamName} ({teamAttendance.length}명)
+            <div key={teamName} className="mb-6 rounded-xl border overflow-hidden" style={{ borderColor: `${teamColor}66` }}>
+              {/* 팀 헤더 - 팀 색상 적용 */}
+              <div className="px-4 py-3 font-bold text-lg flex items-center gap-2" style={{ background: `${teamColor}1a` }}>
+                <span className="inline-block w-4 h-4 rounded-full flex-shrink-0" style={{ background: teamColor, border: '1px solid rgba(255,255,255,0.3)' }}></span>
+                <span style={{ color: teamColor }}>{teamName} ({teamAttendance.length}명)</span>
               </div>
               <div className="bg-slate-800">
                 <table className="w-full text-left">
@@ -176,16 +190,38 @@ function AttendanceHistory() {
                       <th className="px-4 py-2 text-slate-400 text-sm">이름</th>
                       <th className="px-4 py-2 text-slate-400 text-sm">상태</th>
                       <th className="px-4 py-2 text-slate-400 text-sm">시간</th>
+                      <th className="px-4 py-2 text-slate-400 text-sm text-center">관리</th>
                     </tr>
                   </thead>
                   <tbody>
                     {teamAttendance.map((record, idx) => (
                       <tr key={record.id} className="border-b border-slate-700/50 hover:bg-slate-700/30">
                         <td className="px-4 py-2 text-emerald-400 font-bold">{idx + 1}</td>
-                        <td className="px-4 py-2 text-white font-medium">{record.player_name}</td>
-                        <td className="px-4 py-2">{statusIcon(record.status)} {record.status}</td>
+                        <td className="px-4 py-2 font-medium" style={{ color: teamColor }}>{record.player_name}</td>
+                        {/* ✅ 상태 수정 드롭다운 (출석/늦참/조퇴) */}
+                        <td className="px-4 py-2">
+                          <select
+                            value={record.status}
+                            onChange={(e) => updateStatus(record.id, e.target.value)}
+                            className="bg-slate-700 border border-slate-600 rounded-lg px-2 py-1 text-white text-sm focus:outline-none focus:border-emerald-500"
+                          >
+                            {statusOptions.map(s => (
+                              <option key={s} value={s}>{statusIcon(s)} {s}</option>
+                            ))}
+                          </select>
+                        </td>
                         <td className="px-4 py-2 text-slate-400 text-sm">
                           {new Date(record.checked_at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}
+                        </td>
+                        {/* ✅ 삭제(=불참 처리) 버튼 */}
+                        <td className="px-4 py-2 text-center">
+                          <button
+                            onClick={() => deleteRecord(record.id, record.player_name)}
+                            className="text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg px-2 py-1 text-sm transition-colors"
+                            title="삭제 (불참 처리)"
+                          >
+                            🗑️
+                          </button>
                         </td>
                       </tr>
                     ))}

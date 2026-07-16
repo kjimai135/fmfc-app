@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 function AttendanceStats() {
   const [stats, setStats] = useState([])
   const [allAttendance, setAllAttendance] = useState([])
+  const [teams, setTeams] = useState([])
   const [loading, setLoading] = useState(true)
   const [sortBy, setSortBy] = useState('rate')
   const [totalGames, setTotalGames] = useState(0)
@@ -12,7 +13,6 @@ function AttendanceStats() {
   const [filterMode, setFilterMode] = useState('all')
   const [popupPlayer, setPopupPlayer] = useState(null)
   const [popupPosition, setPopupPosition] = useState({ top: 0, left: 0 })
-  const [searchName, setSearchName] = useState('')
   const popupRef = useRef(null)
 
   useEffect(() => {
@@ -41,6 +41,13 @@ function AttendanceStats() {
       .from('players')
       .select('*')
 
+    const { data: teamsData } = await supabase
+      .from('teams')
+      .select('*')
+      .order('display_order')
+
+    setTeams(teamsData || [])
+
     if (attendance && players) {
       setAllAttendance(attendance)
       let filtered = attendance
@@ -68,19 +75,18 @@ function AttendanceStats() {
       const playerStats = players.map(player => {
         const records = filtered.filter(a => a.player_id === player.id)
         const attended = records.filter(a => a.status === '출석').length
-        const late = records.filter(a => a.status === '지각').length
+        const late = records.filter(a => a.status === '늦참').length
         const earlyLeave = records.filter(a => a.status === '조퇴').length
-        const absent = records.filter(a => a.status === '불참').length
         const total = records.length
         const rate = gameDates.length > 0 ? Math.round(((attended + late + earlyLeave) / gameDates.length) * 100) : 0
 
         return {
           id: player.id,
           name: player.name,
+          team: player.current_team,
           attended,
           late,
           earlyLeave,
-          absent,
           total,
           rate,
         }
@@ -91,26 +97,32 @@ function AttendanceStats() {
     setLoading(false)
   }
 
-  function handleNameClick(e, player) {
-    const rect = e.currentTarget.getBoundingClientRect()
-    const scrollTop = window.scrollY
-    setPopupPosition({
-      top: rect.bottom + scrollTop + 8,
-      left: Math.min(rect.left, window.innerWidth - 420),
-    })
-    setPopupPlayer(popupPlayer?.id === player.id ? null : player)
+  // 🎨 팀 색상 가져오기 (남색은 밝은 파랑으로 변환)
+  function getTeamColor(teamName) {
+    const team = teams.find(t => t.name === teamName)
+    const color = team?.color || '#94a3b8'
+    const c = color.toLowerCase()
+    if (c === '#1d4ed8' || c === '#2563eb' || c === '#1e40af' || c === '#1e3a8a') {
+      return '#60a5fa' // 밝은 파랑
+    }
+    return color
   }
 
-  const filtered = stats.filter(p => p.name?.includes(searchName))
-  const sorted = [...filtered].sort((a, b) => {
-    switch(sortBy) {
-      case 'rate': return b.rate - a.rate
-      case 'name': return a.name.localeCompare(b.name)
-      case 'attended': return b.attended - a.attended
-      case 'absent': return b.absent - a.absent
-      default: return 0
+  // ✅ 참석률 클릭 시, 클릭한 셀 바로 아래에 팝업 위치 계산
+  function handleRateClick(e, player) {
+    if (popupPlayer?.id === player.id) {
+      setPopupPlayer(null)
+      return
     }
-  })
+    const container = e.currentTarget.closest('.relative')
+    const containerRect = container.getBoundingClientRect()
+    const btnRect = e.currentTarget.getBoundingClientRect()
+    setPopupPosition({
+      top: btnRect.bottom - containerRect.top + 8,
+      left: btnRect.left - containerRect.left,
+    })
+    setPopupPlayer(player)
+  }
 
   const rateColor = (rate) => {
     if (rate >= 80) return 'text-emerald-400'
@@ -119,18 +131,10 @@ function AttendanceStats() {
     return 'text-red-400'
   }
 
-  const rateBarColor = (rate) => {
-    if (rate >= 80) return 'bg-emerald-500'
-    if (rate >= 60) return 'bg-yellow-500'
-    if (rate >= 40) return 'bg-orange-500'
-    return 'bg-red-500'
-  }
-
   const statusIcon = (s) => {
     switch(s) {
       case '출석': return '✅'
-      case '불참': return '❌'
-      case '지각': return '⏰'
+      case '늦참': return '🕐'
       case '조퇴': return '🏃'
       default: return ''
     }
@@ -139,10 +143,9 @@ function AttendanceStats() {
   const statusBgColor = (s) => {
     switch(s) {
       case '출석': return 'bg-emerald-500/10 text-emerald-400'
-      case '불참': return 'bg-red-500/10 text-red-400'
-      case '지각': return 'bg-yellow-500/10 text-yellow-400'
+      case '늦참': return 'bg-blue-500/10 text-blue-400'
       case '조퇴': return 'bg-orange-500/10 text-orange-400'
-      default: return ''
+      default: return 'bg-slate-500/10 text-slate-400'
     }
   }
 
@@ -152,9 +155,25 @@ function AttendanceStats() {
 
   const popupRecords = popupPlayer
     ? allAttendance
-        .filter(a => a.player_id === popupPlayer.id)
+        .filter(a => a.player_id === popupPlayer.id && ['출석', '늦참', '조퇴'].includes(a.status))
         .sort((a, b) => b.game_date.localeCompare(a.game_date))
     : []
+
+  // ✅ 선택된 정렬 방식으로 선수 정렬
+  function sortPlayers(players) {
+    return [...players].sort((a, b) => {
+      if (sortBy === 'name') return a.name.localeCompare(b.name)
+      return b.rate - a.rate // 참석률순 (기본)
+    })
+  }
+
+  // ✅ 팀 섹션만 (미배정 제거)
+  const sections = teams.map(team => ({
+    key: team.id,
+    name: team.name,
+    color: getTeamColor(team.name),
+    players: sortPlayers(stats.filter(p => p.team === team.name)),
+  }))
 
   return (
     <div>
@@ -221,43 +240,30 @@ function AttendanceStats() {
         </div>
         <div className="bg-slate-800 border border-slate-700 rounded-xl p-4 text-center">
           <p className="text-2xl font-bold text-blue-400">{avgRate}%</p>
-          <p className="text-slate-400 text-sm">평균 출석률</p>
+          <p className="text-slate-400 text-sm">평균 참석률</p>
         </div>
         <div className="bg-slate-800 border border-slate-700 rounded-xl p-4 text-center">
           <p className="text-2xl font-bold text-yellow-400">
-            {stats.filter(s => s.rate >= 80).length}
+            {stats.filter(s => s.rate >= 50).length}
           </p>
-          <p className="text-slate-400 text-sm">80% 이상</p>
+          <p className="text-slate-400 text-sm">50% 이상</p>
         </div>
       </div>
 
-      {/* 검색 */}
-      <div className="mb-4">
-        <input
-          type="text"
-          placeholder="🔍 선수 이름 검색..."
-          value={searchName}
-          onChange={(e) => setSearchName(e.target.value)}
-          className="w-full sm:w-64 bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
-        />
-      </div>
-
-      {/* 정렬 옵션 */}
+      {/* ✅ 정렬 버튼 */}
       <div className="flex gap-2 mb-4">
         <span className="text-slate-400 text-sm py-2">정렬:</span>
         {[
-          { key: 'rate', label: '출석률순' },
-          { key: 'name', label: '이름순' },
-          { key: 'attended', label: '출석횟수순' },
-          { key: 'absent', label: '불참횟수순' },
+          { key: 'rate', label: '📊 참석률순' },
+          { key: 'name', label: '🔤 이름순' },
         ].map(option => (
           <button
             key={option.key}
             onClick={() => setSortBy(option.key)}
-            className={`px-3 py-1 rounded-lg text-sm transition-colors ${
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
               sortBy === option.key
                 ? 'bg-emerald-500 text-white'
-                : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                : 'bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700'
             }`}
           >
             {option.label}
@@ -265,73 +271,86 @@ function AttendanceStats() {
         ))}
       </div>
 
-      {/* 통계 테이블 */}
+      {/* 팀별 섹션 - 가로 3개 (항상 3개 고정) */}
       {loading ? (
         <div className="text-center py-20 text-slate-400">
           <p className="text-xl">⏳ 로딩 중...</p>
         </div>
       ) : (
         <div className="relative">
-          <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-x-auto">
-            <table className="w-full text-left">
-              <thead>
-                <tr className="border-b border-slate-700">
-                  <th className="px-4 py-3 text-slate-400 text-sm w-12">#</th>
-                  <th className="px-4 py-3 text-slate-400 text-sm">이름</th>
-                  <th className="px-4 py-3 text-slate-400 text-sm">출석률</th>
-                  <th className="px-4 py-3 text-slate-400 text-sm text-center">✅ 출석</th>
-                  <th className="px-4 py-3 text-slate-400 text-sm text-center">⏰ 지각</th>
-                  <th className="px-4 py-3 text-slate-400 text-sm text-center">🏃 조퇴</th>
-                  <th className="px-4 py-3 text-slate-400 text-sm text-center">❌ 불참</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sorted.map((player, idx) => (
-                  <tr key={player.id} className="border-b border-slate-700/50 hover:bg-slate-700/30">
-                    <td className="px-4 py-3 text-slate-500 text-sm">{idx + 1}</td>
-                    <td className="px-4 py-3">
-                      <button
-                        onClick={(e) => handleNameClick(e, player)}
-                        className={`font-medium underline cursor-pointer transition-colors ${
-                          popupPlayer?.id === player.id ? 'text-white' : 'text-emerald-400 hover:text-emerald-300'
-                        }`}
-                      >
-                        {player.name}
-                      </button>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-3">
-                        <div className="flex-1 bg-slate-700 rounded-full h-2 max-w-[120px]">
-                          <div
-                            className={`h-2 rounded-full ${rateBarColor(player.rate)}`}
-                            style={{ width: `${player.rate}%` }}
-                          />
-                        </div>
-                        <span className={`font-bold text-sm ${rateColor(player.rate)}`}>
-                          {player.rate}%
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-center text-emerald-400">{player.attended}</td>
-                    <td className="px-4 py-3 text-center text-yellow-400">{player.late}</td>
-                    <td className="px-4 py-3 text-center text-orange-400">{player.earlyLeave}</td>
-                    <td className="px-4 py-3 text-center text-red-400">{player.absent}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="grid grid-cols-3 gap-4">
+            {sections.map(section => (
+              <div
+                key={section.key}
+                className="rounded-xl border overflow-hidden"
+                style={{
+                  borderColor: `${section.color}66`,
+                  background: `${section.color}14`,
+                }}
+              >
+                {/* 섹션 헤더 */}
+                <div className="px-4 py-3 font-bold text-lg border-b border-slate-700/50">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="inline-block w-4 h-4 rounded-full flex-shrink-0"
+                      style={{ background: section.color, border: '1px solid rgba(255,255,255,0.3)' }}
+                    ></span>
+                    <span style={{ color: section.color }}>
+                      {section.name} ({section.players.length}명)
+                    </span>
+                  </div>
+                </div>
+
+                {/* 선수 목록 - 세로 1열 */}
+                <div className="p-2">
+                  {section.players.length === 0 ? (
+                    <p className="text-slate-500 text-sm px-2 py-3 text-center">선수 없음</p>
+                  ) : (
+                    <div className="space-y-1">
+                      {section.players.map(player => (
+                        <button
+                          key={player.id}
+                          onClick={(e) => handleRateClick(e, player)}
+                          className="w-full flex items-center justify-between gap-4 bg-slate-800/50 hover:bg-slate-700/60 rounded-lg px-3 py-2 transition-colors text-left"
+                          title="클릭하면 상세 기록 보기"
+                        >
+                          {/* 이름 - 팀 색상 */}
+                          <span
+                            className="text-sm font-medium truncate"
+                            style={{ color: section.color }}
+                          >
+                            {player.name}
+                          </span>
+                          {/* 참석률 % */}
+                          <span className={`font-bold text-sm flex-shrink-0 ${rateColor(player.rate)}`}>
+                            {player.rate}%
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
           </div>
 
-          {/* 팝업 */}
+          {/* 팝업 - 클릭한 이름 바로 아래 */}
           {popupPlayer && (
             <div
               ref={popupRef}
-              className="absolute z-50 bg-slate-800 border border-emerald-500/50 rounded-xl shadow-2xl shadow-black/50 w-[400px]"
-              style={{ top: popupPosition.top - document.querySelector('.relative').getBoundingClientRect().top - window.scrollY, left: Math.max(0, popupPosition.left - document.querySelector('.relative').getBoundingClientRect().left) }}
+              className="absolute z-50 bg-slate-800 border border-emerald-500/50 rounded-xl shadow-2xl shadow-black/50 w-[360px] max-w-[90vw]"
+              style={{ top: popupPosition.top, left: popupPosition.left }}
             >
               {/* 팝업 헤더 */}
               <div className="flex justify-between items-center px-4 py-3 border-b border-slate-700">
-                <h3 className="font-bold text-white">👤 {popupPlayer.name}</h3>
+                <h3 className="font-bold text-white">
+                  👤 {popupPlayer.name}
+                  {popupPlayer.team && (
+                    <span className="ml-2 text-sm font-normal" style={{ color: getTeamColor(popupPlayer.team) }}>
+                      · {popupPlayer.team}
+                    </span>
+                  )}
+                </h3>
                 <button
                   onClick={() => setPopupPlayer(null)}
                   className="text-slate-400 hover:text-white text-lg"
@@ -340,27 +359,23 @@ function AttendanceStats() {
                 </button>
               </div>
 
-              {/* 개인 요약 */}
-              <div className="grid grid-cols-4 gap-2 px-4 py-3 border-b border-slate-700">
+              {/* 개인 요약 - 출석/늦참/조퇴 */}
+              <div className="grid grid-cols-3 gap-2 px-4 py-3 border-b border-slate-700">
                 <div className="text-center">
-                  <p className="text-sm font-bold text-emerald-400">{popupPlayer.attended}</p>
+                  <p className="text-sm font-bold text-emerald-400">{popupPlayer.attended || 0}</p>
                   <p className="text-xs text-slate-400">출석</p>
                 </div>
                 <div className="text-center">
-                  <p className="text-sm font-bold text-yellow-400">{popupPlayer.late}</p>
-                  <p className="text-xs text-slate-400">지각</p>
+                  <p className="text-sm font-bold text-blue-400">{popupPlayer.late || 0}</p>
+                  <p className="text-xs text-slate-400">늦참</p>
                 </div>
                 <div className="text-center">
-                  <p className="text-sm font-bold text-orange-400">{popupPlayer.earlyLeave}</p>
+                  <p className="text-sm font-bold text-orange-400">{popupPlayer.earlyLeave || 0}</p>
                   <p className="text-xs text-slate-400">조퇴</p>
-                </div>
-                <div className="text-center">
-                  <p className="text-sm font-bold text-red-400">{popupPlayer.absent}</p>
-                  <p className="text-xs text-slate-400">불참</p>
                 </div>
               </div>
 
-              {/* 날짜별 기록 */}
+              {/* 날짜별 기록 - 출석/늦참/조퇴 */}
               <div className="max-h-48 overflow-y-auto">
                 <table className="w-full text-left">
                   <thead>

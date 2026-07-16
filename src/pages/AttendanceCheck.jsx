@@ -140,7 +140,7 @@ function AttendanceCheck() {
         </div>
       )}
 
-      {/* 출석/지각/조퇴 버튼 */}
+      {/* 출석/늦참/조퇴 버튼 */}
       <div className="grid grid-cols-3 gap-4" style={{marginTop: '20px'}}>
         <button
           onClick={() => handleCheckIn('출석')}
@@ -150,11 +150,11 @@ function AttendanceCheck() {
           ✅<br />출석
         </button>
         <button
-          onClick={() => handleCheckIn('지각')}
+          onClick={() => handleCheckIn('늦참')}
           disabled={loading || !selectedPlayer}
-          className="bg-yellow-500 hover:bg-yellow-600 disabled:opacity-30 text-white py-8 rounded-2xl font-bold text-xl transition-colors shadow-lg shadow-yellow-500/20"
+          className="bg-blue-500 hover:bg-blue-600 disabled:opacity-30 text-white py-8 rounded-2xl font-bold text-xl transition-colors shadow-lg shadow-blue-500/20"
         >
-          ⏰<br />지각
+          🕐<br />늦참
         </button>
         <button
           onClick={() => handleCheckIn('조퇴')}
