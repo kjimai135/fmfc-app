@@ -71,6 +71,91 @@ function MatchRecord() {
     setGoals(data || [])
   }
 
+  // 🏆 이전까지의 누적 순위 계산 (오늘 날짜 제외)
+  // SeasonRanking.jsx의 getStandings() 로직과 동일
+  async function getPreviousStandings() {
+    // 오늘(selectedDate)을 제외한 모든 과거 경기 가져오기
+    const { data: allMatches } = await supabase
+      .from('matches')
+      .select('*')
+      .neq('game_date', selectedDate)
+      .order('game_date', { ascending: false })
+
+    const pastMatches = allMatches || []
+
+    // 날짜별로 그룹화
+    const dates = [...new Set(pastMatches.map(m => m.game_date))]
+
+    // 대진별 합산 (전반 + 후반)
+    const allMatchups = []
+    for (const date of dates) {
+      const dayMatches = pastMatches
+        .filter(m => m.game_date === date)
+        .sort((a, b) => a.match_number - b.match_number)
+
+      if (dayMatches.length >= 6) {
+        const pairs = [
+          { first: dayMatches[0], second: dayMatches[3] },
+          { first: dayMatches[1], second: dayMatches[4] },
+          { first: dayMatches[2], second: dayMatches[5] },
+        ]
+        for (const pair of pairs) {
+          const teamA = pair.first.team_a
+          const teamB = pair.first.team_b
+
+          let totalA = pair.first.score_a
+          let totalB = pair.first.score_b
+
+          if (pair.second.team_a === teamA) {
+            totalA += pair.second.score_a
+            totalB += pair.second.score_b
+          } else {
+            totalA += pair.second.score_b
+            totalB += pair.second.score_a
+          }
+
+          allMatchups.push({ teamA, teamB, totalA, totalB })
+        }
+      }
+    }
+
+    // 승점 계산
+    const standings = {}
+    for (const team of teams) {
+      standings[team.name] = {
+        name: team.name,
+        points: 0,
+        goalsFor: 0,
+        goalsAgainst: 0,
+      }
+    }
+
+    for (const m of allMatchups) {
+      if (!standings[m.teamA] || !standings[m.teamB]) continue
+      standings[m.teamA].goalsFor += m.totalA
+      standings[m.teamA].goalsAgainst += m.totalB
+      standings[m.teamB].goalsFor += m.totalB
+      standings[m.teamB].goalsAgainst += m.totalA
+      if (m.totalA > m.totalB) {
+        standings[m.teamA].points += 3
+      } else if (m.totalA < m.totalB) {
+        standings[m.teamB].points += 3
+      } else {
+        standings[m.teamA].points += 1
+        standings[m.teamB].points += 1
+      }
+    }
+
+    // 정렬: 승점 → 골득실 → 다득점
+    return Object.values(standings).sort((a, b) => {
+      if (b.points !== a.points) return b.points - a.points
+      const gdA = a.goalsFor - a.goalsAgainst
+      const gdB = b.goalsFor - b.goalsAgainst
+      if (gdB !== gdA) return gdB - gdA
+      return b.goalsFor - a.goalsFor
+    })
+  }
+
   async function createDayMatches() {
     if (teams.length < 3) {
       alert('팀이 3개 이상 필요합니다!')
@@ -84,20 +169,48 @@ function MatchRecord() {
     }
 
     setLoading(true)
-    const t = teams.map(t => t.name)
 
+    // 🏆 이전 순위 계산
+    const standings = await getPreviousStandings()
+
+    // 순위대로 팀 배정 (1위, 2위, 3위)
+    // 과거 경기가 없으면 teams의 display_order 순서 사용
+    let rankedTeams
+    const hasHistory = standings.some(s => s.points > 0 || s.goalsFor > 0)
+
+    if (hasHistory) {
+      rankedTeams = standings.map(s => s.name).slice(0, 3)
+    } else {
+      rankedTeams = teams.map(t => t.name).slice(0, 3)
+    }
+
+    const [first, second, third] = rankedTeams
+
+    // 🥇 1위 → 2,3,5,6쿼터
+    // 🥈 2위 → 1,2,4,5쿼터
+    // 🥉 3위 → 1,3,4,6쿼터
+    //
+    // 쿼터별 대진:
+    // 1Q: 2위 vs 3위
+    // 2Q: 1위 vs 2위
+    // 3Q: 1위 vs 3위
+    // 4Q: 2위 vs 3위
+    // 5Q: 1위 vs 2위
+    // 6Q: 1위 vs 3위
     const dayMatches = [
-      { match_number: 1, half: '전반', team_a: t[1], team_b: t[2] },
-      { match_number: 2, half: '전반', team_a: t[0], team_b: t[1] },
-      { match_number: 3, half: '전반', team_a: t[0], team_b: t[2] },
-      { match_number: 4, half: '후반', team_a: t[1], team_b: t[2] },
-      { match_number: 5, half: '후반', team_a: t[0], team_b: t[1] },
-      { match_number: 6, half: '후반', team_a: t[0], team_b: t[2] },
+      { match_number: 1, half: '전반', team_a: second, team_b: third },
+      { match_number: 2, half: '전반', team_a: first, team_b: second },
+      { match_number: 3, half: '전반', team_a: first, team_b: third },
+      { match_number: 4, half: '후반', team_a: second, team_b: third },
+      { match_number: 5, half: '후반', team_a: first, team_b: second },
+      { match_number: 6, half: '후반', team_a: first, team_b: third },
     ]
 
     for (const m of dayMatches) {
       await supabase.from('matches').insert({
         game_date: selectedDate,
+        score_a: 0,
+        score_b: 0,
         ...m,
       })
     }
@@ -106,7 +219,11 @@ function MatchRecord() {
     setLoading(false)
     fetchMatches(selectedDate)
     fetchAvailableDates()
-    alert('6경기가 생성되었습니다!')
+    alert(
+      hasHistory
+        ? `순위 기반으로 6경기가 생성되었습니다!\n🥇${first} 🥈${second} 🥉${third}`
+        : '6경기가 생성되었습니다! (과거 기록이 없어 기본 순서로 배정)'
+    )
   }
 
   async function updateScore(matchId, field, value) {
@@ -287,12 +404,14 @@ function MatchRecord() {
         <div className="bg-slate-800 rounded-xl p-6 border border-slate-700 mb-6">
           <h2 className="text-lg font-bold text-white mb-3">📅 {selectedDate} 경기 생성</h2>
           <p className="text-slate-400 text-sm mb-2">6경기 (1Q ~ 6Q)가 자동 생성됩니다.</p>
-          <p className="text-slate-500 text-xs mb-4">생성 후 팀명을 수동으로 변경할 수 있어요.</p>
+          <p className="text-slate-500 text-xs mb-4">
+            📊 이전 순위표를 기반으로 팀이 자동 배정됩니다.
+          </p>
 
           <div className="bg-slate-700/50 rounded-lg p-3 mb-4 text-sm text-slate-300">
-            <p>1등({teams[0]?.name}): 2,3,5,6쿼터</p>
-            <p>2등({teams[1]?.name}): 1,2,4,5쿼터</p>
-            <p>3등({teams[2]?.name}): 1,3,4,6쿼터</p>
+            <p>🥇 1위: 2,3,5,6쿼터</p>
+            <p>🥈 2위: 1,2,4,5쿼터</p>
+            <p>🥉 3위: 1,3,4,6쿼터</p>
           </div>
 
           <div className="flex gap-4">
@@ -380,9 +499,8 @@ function MatchRecord() {
                     </div>
                   </div>
 
-                  {/* 골 기록 - 왼쪽팀 골은 가운데(오른쪽 정렬)로 모이게 */}
+                  {/* 골 기록 */}
                   <div className="grid grid-cols-2 gap-4">
-                    {/* 왼쪽 팀 골 - 오른쪽 정렬 (가운데 쪽으로) */}
                     <div className="flex flex-col items-end">
                       <p className="text-xs mb-2" style={{ color: colorA }}>⚽ {match.team_a} 골</p>
                       {goalsA.map(g => (
@@ -407,7 +525,6 @@ function MatchRecord() {
                         ))}
                       </select>
                     </div>
-                    {/* 오른쪽 팀 골 - 왼쪽 정렬 (가운데 쪽으로) */}
                     <div className="flex flex-col items-start">
                       <p className="text-xs mb-2" style={{ color: colorB }}>⚽ {match.team_b} 골</p>
                       {goalsB.map(g => (

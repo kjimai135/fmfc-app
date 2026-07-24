@@ -44,3 +44,21 @@ html, body {
   overflow-x: hidden;
   max-width: 100vw;
 }
+/* 📅 날짜 입력 - 달력 아이콘 맨 앞 + 하얀색 */
+.date-input-white {
+  position: relative;
+}
+
+/* 달력 아이콘을 하얀색으로 */
+.date-input-white::-webkit-calendar-picker-indicator {
+  filter: invert(1);
+  cursor: pointer;
+  position: absolute;
+  left: 12px;
+  opacity: 1;
+}
+
+/* 아이콘 공간만큼 텍스트를 오른쪽으로 밀기 */
+.date-input-white::-webkit-datetime-edit {
+  padding-left: 44px;
+}
