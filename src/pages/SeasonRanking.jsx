@@ -7,7 +7,6 @@ function SeasonRanking() {
   const [teams, setTeams] = useState([])
   const [loading, setLoading] = useState(true)
   const [seasonLabel, setSeasonLabel] = useState('26-1')
-  const captureRef = useRef(null)
   const headerBoxRef = useRef(null)
   const [imgHeight, setImgHeight] = useState(0)
 
@@ -121,15 +120,6 @@ function SeasonRanking() {
     })
   }
 
-  async function handleCapture() {
-    const { default: html2canvas } = await import('html2canvas')
-    const canvas = await html2canvas(captureRef.current, { useCORS: true, scale: 2, backgroundColor: '#000' })
-    const link = document.createElement('a')
-    link.download = `FM FC 시즌${seasonLabel} 순위표.png`
-    link.href = canvas.toDataURL()
-    link.click()
-  }
-
   const standings = getStandings()
 
   const columns = '0.5fr 2fr 0.9fr 0.7fr 0.7fr 0.7fr 0.9fr 0.9fr 0.9fr'
@@ -147,9 +137,8 @@ function SeasonRanking() {
         />
       </div>
 
-      {/* 📸 캡처 영역 */}
+      {/* 표시 영역 */}
       <div
-        ref={captureRef}
         style={{
           width: '100%',
           fontFamily: 'pretendard, sans-serif',
@@ -245,18 +234,6 @@ function SeasonRanking() {
           })
         )}
       </div>
-
-      {/* 📸 캡처 버튼 */}
-      <button
-        onClick={handleCapture}
-        className="mt-4 w-full bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-3 rounded-xl text-lg transition-colors"
-      >
-        📸 순위표 이미지로 저장
-      </button>
-
-      <p className="text-center text-slate-500 text-sm mt-2">
-        저장된 이미지를 단톡방에 바로 공유하세요! 🚀
-      </p>
     </div>
   )
 }

@@ -8,7 +8,6 @@ function ScorerRanking() {
   const [players, setPlayers] = useState([])
   const [loading, setLoading] = useState(true)
   const [seasonLabel, setSeasonLabel] = useState('26-1')
-  const captureRef = useRef(null)
   const wrapperRef = useRef(null)
   const [scale, setScale] = useState(1)
 
@@ -17,6 +16,14 @@ function ScorerRanking() {
   const BG_TOP_HEIGHT = (CAPTURE_WIDTH * 200) / 685   // 상단 로고+타이틀 자리
   const MIN_HEIGHT = (CAPTURE_WIDTH * 960) / 685        // 배경 전체 최소 높이
 
+  // ✅ 타이틀 자간
+  const TITLE_LETTER_SPACING = '1px'
+
+  // ✅ 행 관련 조절 값 (여기 숫자만 바꾸면 간격/크기 조정됨)
+  const ROW_PADDING = '6px 3%'   // 각 행 위아래 여백 (작을수록 줄 간격 좁아짐)
+  const ROW_FONT_SIZE = '16px'   // 행 글자 크기
+  const HEADER_FONT_SIZE = '16px' // 헤더 글자 크기
+
   useEffect(() => {
     fetchTeams()
     fetchPlayers()
@@ -24,7 +31,7 @@ function ScorerRanking() {
     fetchSeasonLabel()
   }, [])
 
-  // 화면 너비에 맞춰 캡처 영역을 축소해서 "보여주기"만 함 (실제 크기는 고정)
+  // 화면 너비에 맞춰 영역을 축소해서 "보여주기"만 함 (실제 크기는 고정)
   useEffect(() => {
     function updateScale() {
       if (wrapperRef.current) {
@@ -120,18 +127,26 @@ function ScorerRanking() {
     })
   }
 
-  const groupedScorers = getGroupedScorers()
-
-  async function handleCapture() {
-    const { default: html2canvas } = await import('html2canvas')
-    const canvas = await html2canvas(captureRef.current, { useCORS: true, scale: 2, backgroundColor: '#000' })
-    const link = document.createElement('a')
-    link.download = `FM FC 시즌${seasonLabel} 득점순위.png`
-    link.href = canvas.toDataURL()
-    link.click()
+  // 이름 배열을 3명씩 묶기
+  function chunkNames(names, size = 3) {
+    const rows = []
+    for (let i = 0; i < names.length; i += size) {
+      rows.push(names.slice(i, i + size))
+    }
+    return rows
   }
 
+  const groupedScorers = getGroupedScorers()
+
   const columns = '0.7fr 1.7fr 2.6fr 0.9fr'
+
+  // ✅ 각 셀 공통 스타일 (세로/가로 중앙 정렬)
+  const cellStyle = {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    textAlign: 'center',
+  }
 
   return (
     <div className="max-w-md mx-auto p-4">
@@ -144,9 +159,8 @@ function ScorerRanking() {
           transformOrigin: 'top left',
           marginBottom: `${MIN_HEIGHT * (scale - 1)}px`, // 축소된 만큼 아래 공간 보정
         }}>
-          {/* ================= 📸 캡처 영역 (항상 500px 고정) ================= */}
+          {/* ================= 표시 영역 (항상 500px 고정) ================= */}
           <div
-            ref={captureRef}
             style={{
               position: 'relative',
               width: `${CAPTURE_WIDTH}px`,
@@ -194,7 +208,7 @@ function ScorerRanking() {
                     fontSize: '30px',
                     fontWeight: '900',
                     fontStyle: 'normal',
-                    letterSpacing: '-1px',
+                    letterSpacing: TITLE_LETTER_SPACING,
                     whiteSpace: 'nowrap',
                     WebkitTextStroke: '4px #ffffff',
                     paintOrder: 'stroke fill',
@@ -210,19 +224,19 @@ function ScorerRanking() {
                 display: 'grid',
                 gridTemplateColumns: columns,
                 alignItems: 'center',
-                padding: '11px 3%',
+                padding: '9px 3%',
                 color: '#ffffff',
                 fontWeight: '700',
-                fontSize: '18px',
+                fontSize: HEADER_FONT_SIZE,
                 background: 'rgba(0,0,0,0.75)',
                 borderTop: '2px solid rgba(255,255,255,0.6)',
                 borderBottom: '2px solid rgba(255,255,255,0.6)',
                 textShadow: '1px 1px 3px rgba(0,0,0,1)',
               }}>
-                <span style={{ textAlign: 'center' }}>순위</span>
-                <span style={{ textAlign: 'center' }}>소속팀</span>
-                <span style={{ textAlign: 'center' }}>득점자</span>
-                <span style={{ textAlign: 'center' }}>득점</span>
+                <span style={cellStyle}>순위</span>
+                <span style={cellStyle}>소속팀</span>
+                <span style={cellStyle}>득점자</span>
+                <span style={cellStyle}>득점</span>
               </div>
 
               {/* 데이터 행 */}
@@ -233,6 +247,7 @@ function ScorerRanking() {
               ) : (
                 groupedScorers.map((group, idx) => {
                   const teamColor = getTeamColor(group.team)
+                  const nameRows = chunkNames(group.names, 3)
                   return (
                     <div
                       key={`${group.goals}-${group.team}-${idx}`}
@@ -240,17 +255,43 @@ function ScorerRanking() {
                         display: 'grid',
                         gridTemplateColumns: columns,
                         alignItems: 'center',
-                        padding: '9px 3%',
-                        fontSize: '18px',
+                        padding: ROW_PADDING,
+                        fontSize: ROW_FONT_SIZE,
                         fontWeight: '600',
                         background: 'rgba(0,0,0,0.75)',
                         borderBottom: '1px solid rgba(255,255,255,0.25)',
                       }}
                     >
-                      <span style={{ textAlign: 'center', color: 'white', fontWeight: '700', textShadow: '1px 1px 3px rgba(0,0,0,1)' }}>{group.rank}</span>
-                      <span style={{ textAlign: 'center', color: teamColor, fontWeight: '700', textShadow: '1px 1px 4px rgba(0,0,0,1)' }}>{group.team}</span>
-                      <span style={{ textAlign: 'center', color: teamColor, fontWeight: '700', textShadow: '1px 1px 4px rgba(0,0,0,1)' }}>{group.names.join(', ')}</span>
-                      <span style={{ textAlign: 'center', color: 'white', fontWeight: '600', textShadow: '1px 1px 3px rgba(0,0,0,1)' }}>{group.goals} 골</span>
+                      <span style={{ ...cellStyle, color: 'white', fontWeight: '700', textShadow: '1px 1px 3px rgba(0,0,0,1)' }}>{group.rank}</span>
+                      <span style={{ ...cellStyle, color: teamColor, fontWeight: '700', textShadow: '1px 1px 4px rgba(0,0,0,1)' }}>{group.team}</span>
+                      <span style={{
+                        ...cellStyle,
+                        flexDirection: 'column',
+                        color: teamColor,
+                        fontWeight: '700',
+                        textShadow: '1px 1px 4px rgba(0,0,0,1)',
+                        wordBreak: 'keep-all',
+                        lineHeight: 1.3,
+                        letterSpacing: '0.3px',
+                      }}>
+                        {nameRows.map((row, rowIdx) => (
+                          <span key={rowIdx} style={{ display: 'block', whiteSpace: 'nowrap' }}>
+                            {row.map((name, nameIdx) => {
+                              const isLastNameOfAll =
+                                rowIdx === nameRows.length - 1 && nameIdx === row.length - 1
+                              return (
+                                <span key={nameIdx} style={{ display: 'inline-block' }}>
+                                  {name}
+                                  {!isLastNameOfAll && (
+                                    <span style={{ display: 'inline-block', width: '0.55em' }}>,</span>
+                                  )}
+                                </span>
+                              )
+                            })}
+                          </span>
+                        ))}
+                      </span>
+                      <span style={{ ...cellStyle, color: 'white', fontWeight: '600', textShadow: '1px 1px 3px rgba(0,0,0,1)' }}>{group.goals} 골</span>
                     </div>
                   )
                 })
@@ -260,21 +301,9 @@ function ScorerRanking() {
               <div style={{ height: '18px' }}></div>
             </div>
           </div>
-          {/* ================= 캡처 영역 끝 ================= */}
+          {/* ================= 표시 영역 끝 ================= */}
         </div>
       </div>
-
-      {/* 📸 캡처 버튼 */}
-      <button
-        onClick={handleCapture}
-        className="mt-4 w-full bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-3 rounded-xl text-lg transition-colors"
-      >
-        📸 득점순위 이미지로 저장
-      </button>
-
-      <p className="text-center text-slate-500 text-sm mt-2">
-        저장된 이미지를 단톡방에 바로 공유하세요! 🚀
-      </p>
     </div>
   )
 }
