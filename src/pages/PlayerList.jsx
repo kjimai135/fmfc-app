@@ -2,37 +2,61 @@ import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 
+// ✅ 등급(권한) 라벨/색 — MemberRoles와 동일하게 통일
+const ROLE_LABELS = {
+  admin: '관리자',
+  executive: '임원',
+  captain: '주장·부주장',
+  member: '정회원',
+  associate: '준회원',
+}
+
+const ROLE_COLORS = {
+  admin: 'bg-red-500/20 text-red-400',
+  executive: 'bg-orange-500/20 text-orange-400',
+  captain: 'bg-blue-500/20 text-blue-400',
+  member: 'bg-emerald-500/20 text-emerald-400',
+  associate: 'bg-slate-500/20 text-slate-400',
+}
+
 function PlayerList() {
   const [players, setPlayers] = useState([])
+  const [profiles, setProfiles] = useState([])
   const [search, setSearch] = useState('')
-  const [filterCategory, setFilterCategory] = useState('')
+  const [filterRole, setFilterRole] = useState('')
   const [showInactive, setShowInactive] = useState(false)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetchPlayers()
+    fetchAll()
   }, [])
 
-  async function fetchPlayers() {
+  async function fetchAll() {
     setLoading(true)
-    const { data, error } = await supabase
-      .from('players')
-      .select('*')
-      .order('name')
+    const [playerRes, profileRes] = await Promise.all([
+      supabase.from('players').select('*').order('name'),
+      supabase.from('profiles').select('id, role, player_id'),
+    ])
 
-    if (error) {
-      console.error('Error:', error)
-    } else {
-      setPlayers(data || [])
-    }
+    if (playerRes.error) console.error('선수 불러오기 오류:', playerRes.error)
+    else setPlayers(playerRes.data || [])
+
+    if (profileRes.error) console.error('회원 불러오기 오류:', profileRes.error)
+    else setProfiles(profileRes.data || [])
+
     setLoading(false)
   }
 
-  // 탈퇴 처리 - 삭제 대신 사용 (데이터 보존) + 연결된 계정 권한을 예비회원으로 강등
-  async function withdrawPlayer(id, name) {
-    if (!window.confirm(`'${name}' 선수를 탈퇴 처리하시겠습니까?\n(데이터는 보존되며, 연결된 계정은 예비회원으로 전환됩니다)`)) return
+  // ✅ 선수 id → 연결된 profile의 role 찾기
+  function getRoleForPlayer(playerId) {
+    const prof = profiles.find((p) => p.player_id === playerId)
+    return prof ? prof.role : null // 연결 안 됐으면 null
+  }
 
-    // 1) 선수 비활성화
+  // 탈퇴 처리 - 삭제 대신 사용 (데이터 보존) + 연결된 계정 권한을 준회원으로 강등
+  async function withdrawPlayer(id, name) {
+    if (!window.confirm(`'${name}' 선수를 탈퇴 처리하시겠습니까?\n(데이터는 보존되며, 연결된 계정은 준회원으로 전환됩니다)`)) return
+
     const { error } = await supabase
       .from('players')
       .update({ is_active: false })
@@ -44,7 +68,6 @@ function PlayerList() {
       return
     }
 
-    // 2) 이 선수와 연결된 회원 계정의 권한을 예비회원(associate)으로 강등
     const { error: roleError } = await supabase
       .from('profiles')
       .update({ role: 'associate' })
@@ -55,10 +78,9 @@ function PlayerList() {
       alert('선수는 탈퇴 처리됐지만, 연결된 계정 권한 변경에 실패했습니다. 회원 권한 관리에서 확인해 주세요.')
     }
 
-    fetchPlayers()
+    fetchAll()
   }
 
-  // 복구(재가입)
   async function restorePlayer(id) {
     const { error } = await supabase
       .from('players')
@@ -69,11 +91,10 @@ function PlayerList() {
       console.error('복구 오류:', error)
       alert('처리에 실패했습니다.')
     } else {
-      fetchPlayers()
+      fetchAll()
     }
   }
 
-  // ⚠️ 완전 삭제 (탈퇴 상태에서만 가능, 강한 경고)
   async function deletePlayerForever(id, name) {
     const ok = window.confirm(
       `⚠️ '${name}' 선수를 완전히 삭제합니다.\n\n` +
@@ -94,7 +115,7 @@ function PlayerList() {
       console.error('삭제 오류:', error)
       alert('삭제에 실패했습니다.')
     } else {
-      fetchPlayers()
+      fetchAll()
     }
   }
 
@@ -103,9 +124,10 @@ function PlayerList() {
       p.name?.includes(search) ||
       p.address?.includes(search) ||
       p.main_position?.includes(search)
-    const matchCategory = filterCategory ? p.category === filterCategory : true
+    const role = getRoleForPlayer(p.id)
+    const matchRole = filterRole ? role === filterRole : true
     const matchActive = showInactive ? true : (p.is_active !== false)
-    return matchSearch && matchCategory && matchActive
+    return matchSearch && matchRole && matchActive
   })
 
   const positionColor = (pos) => {
@@ -114,15 +136,6 @@ function PlayerList() {
       case 'DF': return 'bg-blue-500/20 text-blue-400'
       case 'MF': return 'bg-green-500/20 text-green-400'
       case 'FW': return 'bg-red-500/20 text-red-400'
-      default: return 'bg-slate-500/20 text-slate-400'
-    }
-  }
-
-  const categoryColor = (cat) => {
-    switch(cat) {
-      case '정회원': return 'bg-emerald-500/20 text-emerald-400'
-      case '예비회원': return 'bg-orange-500/20 text-orange-400'
-      case '임원': return 'bg-purple-500/20 text-purple-400'
       default: return 'bg-slate-500/20 text-slate-400'
     }
   }
@@ -145,6 +158,12 @@ function PlayerList() {
         </Link>
       </div>
 
+      {/* 안내: 등급은 회원 권한 관리에서 */}
+      <div className="bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 mb-4 text-slate-400 text-sm flex items-center gap-2">
+        <span>ℹ️</span>
+        <span>등급(권한)은 <b>회원 권한 관리</b>에서 변경합니다. 여기서는 연결된 계정의 등급이 표시됩니다.</span>
+      </div>
+
       {/* 검색 & 필터 */}
       <div className="flex flex-col sm:flex-row gap-4 mb-4">
         <input
@@ -155,14 +174,16 @@ function PlayerList() {
           className="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
         />
         <select
-          value={filterCategory}
-          onChange={(e) => setFilterCategory(e.target.value)}
+          value={filterRole}
+          onChange={(e) => setFilterRole(e.target.value)}
           className="bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-emerald-500"
         >
-          <option value="">전체 카테고리</option>
-          <option value="정회원">정회원</option>
-          <option value="예비회원">예비회원</option>
-          <option value="임원">임원</option>
+          <option value="">전체 등급</option>
+          <option value="admin">관리자</option>
+          <option value="executive">임원</option>
+          <option value="captain">주장·부주장</option>
+          <option value="member">정회원</option>
+          <option value="associate">준회원</option>
         </select>
       </div>
 
@@ -195,7 +216,7 @@ function PlayerList() {
           <table className="w-full text-left">
             <thead>
               <tr className="border-b border-slate-700 bg-slate-800/80">
-                <th className="px-4 py-3 text-slate-400 text-sm font-medium">카테고리</th>
+                <th className="px-4 py-3 text-slate-400 text-sm font-medium">등급</th>
                 <th className="px-4 py-3 text-slate-400 text-sm font-medium">이름</th>
                 <th className="px-4 py-3 text-slate-400 text-sm font-medium">주소</th>
                 <th className="px-4 py-3 text-slate-400 text-sm font-medium">나이</th>
@@ -208,15 +229,22 @@ function PlayerList() {
             <tbody>
               {filtered.map(player => {
                 const inactive = player.is_active === false
+                const role = getRoleForPlayer(player.id)
                 return (
                   <tr
                     key={player.id}
                     className={`border-b border-slate-700/50 hover:bg-slate-700/30 transition-colors ${inactive ? 'opacity-50' : ''}`}
                   >
                     <td className="px-4 py-3">
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${categoryColor(player.category)}`}>
-                        {player.category || '-'}
-                      </span>
+                      {role ? (
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${ROLE_COLORS[role] || 'bg-slate-500/20 text-slate-400'}`}>
+                          {ROLE_LABELS[role] || role}
+                        </span>
+                      ) : (
+                        <span className="px-2 py-1 rounded-full text-xs font-medium bg-slate-600/30 text-slate-500" title="구글 계정과 연결되지 않음">
+                          미연결
+                        </span>
+                      )}
                       {inactive && (
                         <span className="ml-1 px-2 py-1 rounded-full text-xs font-medium bg-slate-600/40 text-slate-300">탈퇴</span>
                       )}
@@ -247,7 +275,6 @@ function PlayerList() {
 
                         {inactive ? (
                           <>
-                            {/* 복구(재가입) */}
                             <button
                               onClick={() => restorePlayer(player.id)}
                               className="bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 px-3 py-1 rounded-lg text-xs transition-colors"
@@ -255,7 +282,6 @@ function PlayerList() {
                             >
                               ↩️ 복구
                             </button>
-                            {/* 완전 삭제 */}
                             <button
                               onClick={() => deletePlayerForever(player.id, player.name)}
                               className="bg-red-500/10 hover:bg-red-500/20 text-red-400 px-3 py-1 rounded-lg text-xs transition-colors"
@@ -265,7 +291,6 @@ function PlayerList() {
                             </button>
                           </>
                         ) : (
-                          // 탈퇴 처리
                           <button
                             onClick={() => withdrawPlayer(player.id, player.name)}
                             className="bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 px-3 py-1 rounded-lg text-xs transition-colors"

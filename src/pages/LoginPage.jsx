@@ -7,7 +7,6 @@ function LoginPage() {
   return (
     <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-6">
       <img src={logoImg} alt="FM FC" className="w-32 h-32 object-contain mb-6" />
-      <h1 className="text-3xl font-bold text-emerald-400 mb-2">⚽ FM FC</h1>
       <p className="text-slate-400 mb-10 text-center">
         FIRST MIND FC 회원 전용 페이지입니다.<br />
         구글 계정으로 로그인해 주세요.

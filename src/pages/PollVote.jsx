@@ -114,9 +114,15 @@ function PollVote() {
     ? players.filter(p => p.name?.includes(search))
     : []
 
-  // 팀별 통계 계산
+  // ✅ 현재 실제로 존재하는 선수 id 집합
+  const validPlayerIds = new Set(players.map(p => p.id))
+
+  // ✅ 실제 선수와 연결된 응답만 (삭제된 선수의 유령 응답 제외)
+  const validResponses = responses.filter(r => validPlayerIds.has(r.player_id))
+
+  // 팀별 통계 계산 (유효 응답 기준)
   function getTeamStats(teamName) {
-    const teamResponses = responses.filter(r => r.team === teamName)
+    const teamResponses = validResponses.filter(r => r.team === teamName)
     return {
       참석: teamResponses.filter(r => r.response === '참석').length,
       불참: teamResponses.filter(r => r.response === '불참').length,
@@ -125,12 +131,12 @@ function PollVote() {
     }
   }
 
-  // 전체 통계
+  // 전체 통계 (유효 응답 기준)
   const totalStats = {
-    참석: responses.filter(r => r.response === '참석').length,
-    불참: responses.filter(r => r.response === '불참').length,
-    조퇴: responses.filter(r => r.response === '조퇴').length,
-    늦참: responses.filter(r => r.response === '늦참').length,
+    참석: validResponses.filter(r => r.response === '참석').length,
+    불참: validResponses.filter(r => r.response === '불참').length,
+    조퇴: validResponses.filter(r => r.response === '조퇴').length,
+    늦참: validResponses.filter(r => r.response === '늦참').length,
   }
 
   // 미배정 선수

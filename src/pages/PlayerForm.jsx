@@ -8,7 +8,6 @@ function PlayerForm() {
   const isEdit = Boolean(id)
 
   const [form, setForm] = useState({
-    category: '정회원',
     name: '',
     address: '',
     birth_year: '',
@@ -25,7 +24,7 @@ function PlayerForm() {
   }, [id])
 
   async function fetchPlayer() {
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from('players')
       .select('*')
       .eq('id', id)
@@ -33,7 +32,6 @@ function PlayerForm() {
 
     if (data) {
       setForm({
-        category: data.category || '정회원',
         name: data.name || '',
         address: data.address || '',
         birth_year: data.birth_year || '',
@@ -80,7 +78,7 @@ function PlayerForm() {
     if (error) {
       alert('오류가 발생했습니다: ' + error.message)
     } else {
-      navigate('/')
+      navigate('/players')
     }
   }
 
@@ -93,23 +91,14 @@ function PlayerForm() {
         {isEdit ? '✏️ 선수 정보 수정' : '➕ 새 선수 등록'}
       </h1>
 
+      {/* 등급 안내 */}
+      <div className="bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 mb-6 text-slate-400 text-sm flex items-center gap-2">
+        <span>ℹ️</span>
+        <span>등급(권한)은 <b>회원 권한 관리</b>에서 설정합니다. 여기서는 선수의 기본 정보만 입력합니다.</span>
+      </div>
+
       <form onSubmit={handleSubmit} className="bg-slate-800 rounded-xl p-6 border border-slate-700">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* 카테고리 */}
-          <div>
-            <label className={labelStyle}>카테고리 *</label>
-            <select
-              name="category"
-              value={form.category}
-              onChange={handleChange}
-              className={inputStyle}
-            >
-              <option value="정회원">정회원</option>
-              <option value="예비회원">예비회원</option>
-              <option value="임원">임원</option>
-            </select>
-          </div>
-
           {/* 이름 */}
           <div>
             <label className={labelStyle}>이름 *</label>
@@ -121,6 +110,19 @@ function PlayerForm() {
               placeholder="홍길동"
               className={inputStyle}
               required
+            />
+          </div>
+
+          {/* 연락처 */}
+          <div>
+            <label className={labelStyle}>연락처</label>
+            <input
+              type="tel"
+              name="phone"
+              value={form.phone}
+              onChange={handleChange}
+              placeholder="010-1234-5678"
+              className={inputStyle}
             />
           </div>
 
@@ -170,26 +172,13 @@ function PlayerForm() {
           </div>
 
           {/* 가입연월 */}
-          <div>
+          <div className="md:col-span-2">
             <label className={labelStyle}>가입연월</label>
             <input
               type="month"
               name="join_date"
               value={form.join_date}
               onChange={handleChange}
-              className={inputStyle}
-            />
-          </div>
-
-          {/* 연락처 */}
-          <div>
-            <label className={labelStyle}>연락처</label>
-            <input
-              type="tel"
-              name="phone"
-              value={form.phone}
-              onChange={handleChange}
-              placeholder="010-1234-5678"
               className={inputStyle}
             />
           </div>
@@ -206,7 +195,7 @@ function PlayerForm() {
           </button>
           <button
             type="button"
-            onClick={() => navigate('/')}
+            onClick={() => navigate('/players')}
             className="flex-1 bg-slate-700 hover:bg-slate-600 text-white py-3 rounded-xl font-semibold transition-colors"
           >
             ↩️ 취소
