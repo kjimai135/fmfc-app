@@ -1,7 +1,12 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
+import { useAuth } from '../contexts/AuthContext'
 
 function TeamRoster() {
+  const { role } = useAuth()
+  // ✅ 수정 권한: 관리자·임원·주장(부주장)만
+  const canEdit = role === 'admin' || role === 'executive' || role === 'captain'
+
   const [teams, setTeams] = useState([])
   const [players, setPlayers] = useState([])
   const [loading, setLoading] = useState(true)
@@ -30,6 +35,7 @@ function TeamRoster() {
   }
 
   async function assignTeam(playerId, teamName) {
+    if (!canEdit) return
     await supabase
       .from('players')
       .update({ current_team: teamName || null })
@@ -39,6 +45,7 @@ function TeamRoster() {
 
   // 🎨 팀 색상 저장
   async function updateTeamColor(teamId, color) {
+    if (!canEdit) return
     await supabase
       .from('teams')
       .update({ color })
@@ -95,7 +102,7 @@ function TeamRoster() {
                 <div className="px-4 py-3 font-bold text-lg border-b border-slate-700/50">
                   <div className="flex items-center gap-2">
                     <span
-                      className="inline-block w-4 h-4 rounded-full flex-shrink-0"
+                      className="inline-block w-3 h-3 rounded-full flex-shrink-0"
                       style={{ background: teamColor, border: '1px solid rgba(255,255,255,0.3)' }}
                     ></span>
                     <span style={{ color: teamColor }}>
@@ -104,25 +111,27 @@ function TeamRoster() {
                   </div>
                 </div>
 
-                {/* 🎨 색상 선택 */}
-                <div className="px-3 pt-3 pb-2 border-b border-slate-700/30">
-                  <p className="text-slate-400 text-xs mb-2">🎨 유니폼 색상</p>
-                  <div className="flex flex-wrap gap-2">
-                    {colorPalette.map(c => (
-                      <button
-                        key={c.value}
-                        onClick={() => updateTeamColor(team.id, c.value)}
-                        title={c.name}
-                        className="w-7 h-7 rounded-full border-2 transition-transform hover:scale-110"
-                        style={{
-                          background: c.value,
-                          borderColor: teamColor === c.value ? '#10b981' : 'rgba(255,255,255,0.3)',
-                          boxShadow: teamColor === c.value ? '0 0 0 2px #10b981' : 'none',
-                        }}
-                      />
-                    ))}
+                {/* 🎨 색상 선택 (권한 있을 때만) */}
+                {canEdit && (
+                  <div className="px-3 pt-3 pb-2 border-b border-slate-700/30">
+                    <p className="text-slate-400 text-xs mb-2">🎨 유니폼 색상</p>
+                    <div className="flex flex-wrap gap-2">
+                      {colorPalette.map(c => (
+                        <button
+                          key={c.value}
+                          onClick={() => updateTeamColor(team.id, c.value)}
+                          title={c.name}
+                          className="w-5 h-5 rounded-full border-2 transition-transform hover:scale-110"
+                          style={{
+                            background: c.value,
+                            borderColor: teamColor === c.value ? '#10b981' : 'rgba(255,255,255,0.3)',
+                            boxShadow: teamColor === c.value ? '0 0 0 2px #10b981' : 'none',
+                          }}
+                        />
+                      ))}
+                    </div>
                   </div>
-                </div>
+                )}
 
                 {/* 선수 목록 */}
                 <div className="p-3">
@@ -136,16 +145,20 @@ function TeamRoster() {
                           <span className="text-sm font-medium" style={{ color: playerNameColor }}>
                             {player.name}
                           </span>
-                          <select
-                            value={player.current_team || ''}
-                            onChange={(e) => assignTeam(player.id, e.target.value)}
-                            className="bg-slate-700 border border-slate-600 rounded-lg px-2 py-1 text-white text-xs focus:outline-none focus:border-emerald-500"
-                          >
-                            <option value="">미배정</option>
-                            {teams.map(t => (
-                              <option key={t.id} value={t.name}>{t.name}</option>
-                            ))}
-                          </select>
+                          {canEdit ? (
+                            <select
+                              value={player.current_team || ''}
+                              onChange={(e) => assignTeam(player.id, e.target.value)}
+                              className="bg-slate-700 border border-slate-600 rounded-lg px-2 py-1 text-white text-xs focus:outline-none focus:border-emerald-500"
+                            >
+                              <option value="">미배정</option>
+                              {teams.map(t => (
+                                <option key={t.id} value={t.name}>{t.name}</option>
+                              ))}
+                            </select>
+                          ) : (
+                            <span className="text-slate-500 text-xs">{player.current_team}</span>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -168,16 +181,20 @@ function TeamRoster() {
                   {unassignedPlayers.map(player => (
                     <div key={player.id} className="flex items-center justify-between bg-slate-800/50 rounded-lg px-3 py-2">
                       <span className="text-slate-500 text-sm font-medium">{player.name}</span>
-                      <select
-                        value={player.current_team || ''}
-                        onChange={(e) => assignTeam(player.id, e.target.value)}
-                        className="bg-slate-700 border border-slate-600 rounded-lg px-2 py-1 text-white text-xs focus:outline-none focus:border-emerald-500"
-                      >
-                        <option value="">미배정</option>
-                        {teams.map(t => (
-                          <option key={t.id} value={t.name}>{t.name}</option>
-                        ))}
-                      </select>
+                      {canEdit ? (
+                        <select
+                          value={player.current_team || ''}
+                          onChange={(e) => assignTeam(player.id, e.target.value)}
+                          className="bg-slate-700 border border-slate-600 rounded-lg px-2 py-1 text-white text-xs focus:outline-none focus:border-emerald-500"
+                        >
+                          <option value="">미배정</option>
+                          {teams.map(t => (
+                            <option key={t.id} value={t.name}>{t.name}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <span className="text-slate-500 text-xs">미배정</span>
+                      )}
                     </div>
                   ))}
                 </div>
