@@ -62,3 +62,23 @@ html, body {
 .date-input-white::-webkit-datetime-edit {
   padding-left: 44px;
 }
+
+/* 📢 공지 티커 흐르는 애니메이션 */
+@keyframes notice-scroll {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.notice-ticker-track {
+  animation: notice-scroll 18s linear infinite;
+  will-change: transform;
+}
+
+/* 마우스 올리면 잠깐 멈춤 (읽기 편하게) */
+.notice-ticker-track:hover {
+  animation-play-state: paused;
+}

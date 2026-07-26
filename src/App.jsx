@@ -20,6 +20,9 @@ import ScorerRanking from './pages/ScorerRanking'
 import MemberRoles from './pages/MemberRoles'
 import MemberRegister from './pages/MemberRegister'
 import PendingApproval from './pages/PendingApproval'
+import NoticeBoard from './pages/NoticeBoard'
+import NoticeDetail from './pages/NoticeDetail'
+import NoticeTicker from './components/NoticeTicker'
 import logoImg from './assets/logo.png'
 import './App.css'
 
@@ -43,6 +46,7 @@ const allMenu = [
   { to: '/players', label: '👤 선수 관리', roles: ['admin', 'executive'] },
   { to: '/attendance/stats', label: '📊 출석률 통계', roles: ['admin', 'executive', 'captain', 'member'] },
   { to: '/polls', label: '🗳️ 경기 참석 투표', roles: ['admin', 'executive', 'captain', 'member'] },
+  { to: '/notices', label: '📢 공지사항', roles: ['admin', 'executive', 'captain', 'member'] },
   { to: '/seasons', label: '📚 시즌별명단', roles: ['admin', 'executive'] },
   { to: '/member-roles', label: '🔑 회원 권한 관리', roles: ['admin', 'executive'] },
   // 준회원 전용 메뉴
@@ -79,22 +83,18 @@ function Protected({ allowed, children }) {
 // ✅ 준회원 홈: 신청 전이면 등록 페이지, 신청 후면 검토 중 페이지
 function AssociateHome() {
   const { profile } = useAuth()
-  // 선수가 연결되어 있으면(=신청 완료) → 검토 중 페이지
   if (profile?.player_id) {
     return <PendingApproval />
   }
-  // 아직 신청 안 함 → 회원 등록 페이지
   return <MemberRegister />
 }
 
 // ✅ 로그인 후 첫 화면 라우팅 (권한별 홈)
 function HomeRedirect() {
   const { role } = useAuth()
-  // 준회원은 회원 등록/검토 중 화면으로
   if (role === 'associate') {
     return <AssociateHome />
   }
-  // 그 외(관리자/임원/주장/정회원)는 선수 관리 또는 팀명단으로
   if (role === 'admin' || role === 'executive') {
     return <Navigate to="/players" replace />
   }
@@ -106,7 +106,6 @@ function AppContent() {
   const [menuOpen, setMenuOpen] = useState(false)
   const { profile, role, signOut } = useAuth()
 
-  // ✅ 내 권한으로 볼 수 있는 메뉴만 필터링
   const visibleMenu = allMenu.filter((item) => item.roles.includes(role))
 
   return (
@@ -116,7 +115,7 @@ function AppContent() {
         <img src={logoImg} alt="" className="w-96 h-96 object-contain opacity-[0.07]" />
       </div>
 
-      {/* 상단 네비게이션 (sticky) */}
+      {/* 상단 네비게이션 (sticky) - 메뉴바 + 티커가 한 덩어리로 고정 */}
       <nav className="bg-slate-800 border-b border-slate-700 sticky top-0 z-30">
         <div className="w-full max-w-6xl mx-auto flex items-center justify-between gap-3 px-4 py-4">
           {/* 🍔 메뉴 + 햄버거 버튼 (왼쪽) */}
@@ -179,6 +178,9 @@ function AppContent() {
             ))}
           </div>
         </div>
+
+        {/* 📢 공지 티커 (nav 안쪽 = 메뉴바에 딱 붙어서 함께 고정) */}
+        <NoticeTicker />
       </nav>
 
       {/* 🌑 배경 오버레이 (열렸을 때만) */}
@@ -223,6 +225,11 @@ function AppContent() {
           {/* 순위표 / 득점순위표 */}
           <Route path="/season-ranking" element={<Protected allowed={['admin', 'executive', 'captain', 'member']}><SeasonRanking /></Protected>} />
           <Route path="/scorer-ranking" element={<Protected allowed={['admin', 'executive', 'captain', 'member']}><ScorerRanking /></Protected>} />
+
+          {/* 공지사항 (모든 회원 열람) - 상세/작성/수정은 컴포넌트 내부에서 권한 처리 */}
+          <Route path="/notices" element={<Protected allowed={['admin', 'executive', 'captain', 'member']}><NoticeBoard /></Protected>} />
+          <Route path="/notices/new" element={<Protected allowed={['admin', 'executive']}><NoticeDetail /></Protected>} />
+          <Route path="/notices/:id" element={<Protected allowed={['admin', 'executive', 'captain', 'member']}><NoticeDetail /></Protected>} />
 
           {/* 회원 권한 관리 (관리자·임원) */}
           <Route path="/member-roles" element={<Protected allowed={['admin', 'executive']}><MemberRoles /></Protected>} />
