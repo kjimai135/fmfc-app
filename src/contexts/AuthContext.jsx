@@ -23,9 +23,22 @@ export function AuthProvider({ children }) {
     if (error) {
       console.error('프로필 불러오기 오류:', error)
       setProfile(null)
-    } else {
-      setProfile(data)
+      return
     }
+
+    // ✅ 연결된 선수(players) 이름으로 표시 이름 교체
+    let displayName = data.name
+    if (data.player_id) {
+      const { data: player } = await supabase
+        .from('players')
+        .select('name')
+        .eq('id', data.player_id)
+        .maybeSingle()
+      if (player?.name) displayName = player.name
+    }
+
+    // profile.name을 선수 이름으로 덮어쓰기 (선수 연결 안 됐으면 원래 이름 유지)
+    setProfile({ ...data, name: displayName })
   }
 
   useEffect(() => {

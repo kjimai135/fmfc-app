@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { BrowserRouter as Router, Routes, Route, Link, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import LoginPage from './pages/LoginPage'
+import Home from './pages/Home'
 import PlayerList from './pages/PlayerList'
 import PlayerForm from './pages/PlayerForm'
 import AttendanceCheck from './pages/AttendanceCheck'
@@ -91,14 +92,23 @@ function AssociateHome() {
 
 // ✅ 로그인 후 첫 화면 라우팅 (권한별 홈)
 function HomeRedirect() {
-  const { role } = useAuth()
+  const { role, profile } = useAuth()
+
+  if (!profile) {
+    return (
+      <div className="text-center py-20 text-slate-400">
+        ⏳ 권한 확인 중...
+      </div>
+    )
+  }
+
+  // 준회원: 기존대로 등록/검토 페이지
   if (role === 'associate') {
     return <AssociateHome />
   }
-  if (role === 'admin' || role === 'executive') {
-    return <Navigate to="/players" replace />
-  }
-  return <Navigate to="/roster" replace />
+
+  // 그 외 회원: 홈 대시보드
+  return <Home />
 }
 
 // 실제 앱 내용 (로그인한 사용자만 여기 도달)
@@ -194,7 +204,7 @@ function AppContent() {
       {/* 페이지 내용 */}
       <main className="w-full max-w-6xl mx-auto p-4 sm:p-6 relative z-0">
         <Routes>
-          {/* 홈 - 권한별 분기 */}
+          {/* 홈 - 권한별 분기 (대시보드 또는 준회원 페이지) */}
           <Route path="/" element={<HomeRedirect />} />
 
           {/* 선수 관리 (관리자·임원 전용) */}

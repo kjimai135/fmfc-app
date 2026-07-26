@@ -74,7 +74,7 @@ html, body {
 }
 
 .notice-ticker-track {
-  animation: notice-scroll 18s linear infinite;
+  animation: notice-scroll 8s linear infinite;
   will-change: transform;
 }
 

@@ -45,9 +45,9 @@ function NoticeTicker() {
       className="bg-emerald-600 text-white overflow-hidden whitespace-nowrap relative flex items-center h-9 border-b border-emerald-700 cursor-pointer hover:bg-emerald-500 transition-colors"
       title="클릭하면 공지 게시판으로 이동합니다"
     >
-      {/* 📢 고정 라벨 */}
+      {/* 📢 고정 라벨 (아이콘만) */}
       <div className="bg-emerald-700 h-full flex items-center px-3 font-bold text-sm flex-shrink-0 z-10">
-        📢 공지
+        📢
       </div>
 
       {/* 흐르는 텍스트 (제목만) */}
