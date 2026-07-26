@@ -127,44 +127,49 @@ function AppContent() {
 
       {/* 상단 네비게이션 (sticky) - 메뉴바 + 티커가 한 덩어리로 고정 */}
       <nav className="bg-slate-800 border-b border-slate-700 sticky top-0 z-30">
-        <div className="w-full max-w-6xl mx-auto flex items-center justify-between gap-3 px-4 py-4">
-          {/* 🍔 메뉴 + 햄버거 버튼 (왼쪽) */}
+        <div className="w-full max-w-6xl mx-auto flex items-center justify-between gap-3 px-4 py-6">
+          {/* 🍔 메뉴 (햄버거 아이콘만) */}
           <button
             onClick={() => setMenuOpen(!menuOpen)}
-            className="flex items-center gap-2 text-white px-3 py-2 rounded-lg hover:bg-slate-700 transition-colors flex-shrink-0"
+            title="메뉴"
+            className="flex items-center text-white p-2 rounded-lg hover:bg-slate-700 transition-colors flex-shrink-0"
             aria-label="메뉴"
           >
             {menuOpen ? (
-              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <svg xmlns="http://www.w3.org/2000/svg" width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <line x1="18" y1="6" x2="6" y2="18"></line>
                 <line x1="6" y1="6" x2="18" y2="18"></line>
               </svg>
             ) : (
-              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <svg xmlns="http://www.w3.org/2000/svg" width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <line x1="3" y1="12" x2="21" y2="12"></line>
                 <line x1="3" y1="6" x2="21" y2="6"></line>
                 <line x1="3" y1="18" x2="21" y2="18"></line>
               </svg>
             )}
-            <span className="font-medium text-base">메뉴</span>
           </button>
 
           {/* 오른쪽: 내 정보 + 로그아웃 + 로고 */}
-          <div className="flex items-center gap-3 flex-shrink-0">
+          <div className="flex items-center gap-4 flex-shrink-0">
             {profile && (
-              <div className="flex flex-col items-end leading-tight">
-                <span className="text-white text-xs sm:text-sm font-medium">{profile.name}</span>
-                <span className="text-emerald-400 text-[10px] sm:text-xs">{ROLE_LABELS[role] || role}</span>
-              </div>
+              <span className="text-white text-sm sm:text-lg font-medium whitespace-nowrap">
+                {profile.name}({ROLE_LABELS[role] || role})
+              </span>
             )}
             <button
               onClick={signOut}
-              className="text-slate-300 hover:text-white text-xs sm:text-sm px-2 sm:px-3 py-2 rounded-lg hover:bg-slate-700 transition-colors"
+              title="로그아웃"
+              aria-label="로그아웃"
+              className="text-slate-300 hover:text-white p-2 rounded-lg hover:bg-slate-700 transition-colors"
             >
-              로그아웃
+              <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                <polyline points="16 17 21 12 16 7"></polyline>
+                <line x1="21" y1="12" x2="9" y2="12"></line>
+              </svg>
             </button>
-            <Link to="/" className="text-lg sm:text-2xl font-bold text-emerald-400 whitespace-nowrap" onClick={() => setMenuOpen(false)}>
-              FM FC
+            <Link to="/" className="text-2xl sm:text-4xl font-bold text-emerald-400 whitespace-nowrap ml-4" onClick={() => setMenuOpen(false)}>
+              FM FC&nbsp;
             </Link>
           </div>
         </div>

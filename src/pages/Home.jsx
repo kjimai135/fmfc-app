@@ -47,8 +47,8 @@ function Home() {
         <p className="text-slate-400">FM FC 관리 시스템에 오신 것을 환영합니다. ⚽</p>
       </div>
 
-      {/* 메뉴 카드 그리드 */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+      {/* 메뉴 카드 그리드 (항상 3열 유지) */}
+      <div className="grid grid-cols-3 gap-4">
         {visibleMenu.map((item) => (
           <Link
             key={item.to}
