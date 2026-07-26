@@ -98,15 +98,19 @@ function TeamRoster() {
                   background: `${teamColor}14`,
                 }}
               >
-                {/* 팀 헤더 - 팀명에 색상 적용 */}
-                <div className="px-4 py-3 font-bold text-lg border-b border-slate-700/50">
-                  <div className="flex items-center gap-2">
+                {/* 팀 헤더 - 팀명에 색상 적용 (한 줄 유지) */}
+                <div className="px-4 py-3 font-bold text-sm border-b border-slate-700/50">
+                  <div className="flex items-center gap-2 min-w-0">
                     <span
                       className="inline-block w-3 h-3 rounded-full flex-shrink-0"
                       style={{ background: teamColor, border: '1px solid rgba(255,255,255,0.3)' }}
                     ></span>
-                    <span style={{ color: teamColor }}>
-                      {team.name} ({teamPlayers.length}명)
+                    <span
+                      className="whitespace-nowrap overflow-hidden text-ellipsis"
+                      style={{ color: teamColor }}
+                    >
+                      {team.name}{' '}
+                      <span className="text-xs font-semibold">({teamPlayers.length}명)</span>
                     </span>
                   </div>
                 </div>
@@ -170,8 +174,11 @@ function TeamRoster() {
 
           {/* 미배정 */}
           <div className="rounded-xl border border-slate-500/30 bg-slate-500/10 overflow-hidden">
-            <div className="px-4 py-3 font-bold text-slate-400 text-lg border-b border-slate-700/50">
-              ⚪ 미배정 ({unassignedPlayers.length}명)
+            <div className="px-4 py-3 font-bold text-slate-400 text-sm border-b border-slate-700/50">
+              <span className="whitespace-nowrap overflow-hidden text-ellipsis inline-block max-w-full align-bottom">
+                ⚪ 미배정{' '}
+                <span className="text-xs font-semibold">({unassignedPlayers.length}명)</span>
+              </span>
             </div>
             <div className="p-3">
               {unassignedPlayers.length === 0 ? (

@@ -15,19 +15,22 @@ const dashboardMenu = [
   { to: '/roster', icon: '📋', label: '팀명단', desc: '전체 선수 명단 확인', roles: ['admin', 'executive', 'captain', 'member'] },
   { to: '/attendance', icon: '✅', label: '출석체크', desc: '경기·훈련 출석 체크', roles: ['admin', 'executive', 'captain', 'member'] },
   { to: '/attendance/history', icon: '🗓️', label: '출석현황', desc: '날짜별 출석 기록', roles: ['admin', 'executive', 'captain', 'member'] },
-  { to: '/matches', icon: '⚽', label: '경기순서 & 결과', desc: '경기 일정과 결과 기록', roles: ['admin', 'executive', 'captain'] },
+  // ⚽ 경기순서&결과: 정회원도 열람 가능(단, 정회원은 화면 내부에서 읽기 전용 처리)
+  { to: '/matches', icon: '⚽', label: '경기순서 & 결과', desc: '경기 일정과 결과 기록', roles: ['admin', 'executive', 'captain', 'member'] },
   { to: '/season-ranking', icon: '🏆', label: '순위표', desc: '시즌 순위 확인', roles: ['admin', 'executive', 'captain', 'member'] },
   { to: '/scorer-ranking', icon: '👟', label: '득점순위표', desc: '득점왕 순위 확인', roles: ['admin', 'executive', 'captain', 'member'] },
   { to: '/players', icon: '👤', label: '선수 관리', desc: '선수 등록·수정·삭제', roles: ['admin', 'executive'] },
   { to: '/attendance/stats', icon: '📊', label: '출석률 통계', desc: '선수별 출석률 분석', roles: ['admin', 'executive', 'captain', 'member'] },
   { to: '/polls', icon: '🗳️', label: '경기 참석 투표', desc: '경기 참석 여부 투표', roles: ['admin', 'executive', 'captain', 'member'] },
   { to: '/notices', icon: '📢', label: '공지사항', desc: '팀 공지 확인·작성', roles: ['admin', 'executive', 'captain', 'member'] },
+  // 💌 마음의 편지 (익명 게시판): 준회원 제외 전 회원 (답글은 회장만)
+  { to: '/letter', icon: '💌', label: '마음의 편지', desc: '익명으로 남기고 함께 보기', roles: ['admin', 'executive', 'captain', 'member'] },
   { to: '/seasons', icon: '📚', label: '시즌별명단', desc: '시즌별 선수 명단', roles: ['admin', 'executive'] },
   { to: '/member-roles', icon: '🔑', label: '회원 권한 관리', desc: '회원 권한 부여·변경', roles: ['admin', 'executive'] },
 ]
 
 function Home() {
-  const { profile, role } = useAuth()
+  const { profile, role, isPresident } = useAuth()
 
   // 권한에 맞는 메뉴만 필터링
   const visibleMenu = dashboardMenu.filter((item) => item.roles.includes(role))
@@ -41,7 +44,7 @@ function Home() {
             안녕하세요, {profile?.name || '회원'}님 👋
           </h1>
           <span className="text-xs bg-emerald-500/20 text-emerald-400 px-3 py-1 rounded-full font-medium">
-            {ROLE_LABELS[role] || role}
+            {isPresident ? '회장' : (ROLE_LABELS[role] || role)}
           </span>
         </div>
         <p className="text-slate-400">FM FC 관리 시스템에 오신 것을 환영합니다. ⚽</p>

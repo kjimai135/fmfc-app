@@ -82,6 +82,7 @@ export function AuthProvider({ children }) {
     user: session?.user ?? null,
     profile,
     role: profile?.role ?? null,   // 편하게 쓰기 위한 권한 값
+    isPresident: profile?.is_president === true,  // 👑 회장 여부
     loading,
     signInWithGoogle,
     signOut,

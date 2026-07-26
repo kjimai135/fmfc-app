@@ -23,6 +23,7 @@ import MemberRegister from './pages/MemberRegister'
 import PendingApproval from './pages/PendingApproval'
 import NoticeBoard from './pages/NoticeBoard'
 import NoticeDetail from './pages/NoticeDetail'
+import LetterBoard from './pages/LetterBoard'
 import NoticeTicker from './components/NoticeTicker'
 import logoImg from './assets/logo.png'
 import './App.css'
@@ -41,13 +42,16 @@ const allMenu = [
   { to: '/roster', label: '📋 팀명단', roles: ['admin', 'executive', 'captain', 'member'] },
   { to: '/attendance', label: '✅ 출석체크', roles: ['admin', 'executive', 'captain', 'member'] },
   { to: '/attendance/history', label: '📋 출석현황', roles: ['admin', 'executive', 'captain', 'member'] },
-  { to: '/matches', label: '⚽ 경기순서&결과', roles: ['admin', 'executive', 'captain'] },
+  // ⚽ 경기순서&결과: 정회원도 열람 가능(단, 정회원은 화면 내부에서 읽기 전용 처리)
+  { to: '/matches', label: '⚽ 경기순서&결과', roles: ['admin', 'executive', 'captain', 'member'] },
   { to: '/season-ranking', label: '📸 순위표', roles: ['admin', 'executive', 'captain', 'member'] },
   { to: '/scorer-ranking', label: '📸 득점순위표', roles: ['admin', 'executive', 'captain', 'member'] },
   { to: '/players', label: '👤 선수 관리', roles: ['admin', 'executive'] },
   { to: '/attendance/stats', label: '📊 출석률 통계', roles: ['admin', 'executive', 'captain', 'member'] },
   { to: '/polls', label: '🗳️ 경기 참석 투표', roles: ['admin', 'executive', 'captain', 'member'] },
   { to: '/notices', label: '📢 공지사항', roles: ['admin', 'executive', 'captain', 'member'] },
+  // 💌 마음의 편지 (익명 게시판): 준회원 제외 전 회원 (답글은 회장만)
+  { to: '/letter', label: '💌 마음의 편지', roles: ['admin', 'executive', 'captain', 'member'] },
   { to: '/seasons', label: '📚 시즌별명단', roles: ['admin', 'executive'] },
   { to: '/member-roles', label: '🔑 회원 권한 관리', roles: ['admin', 'executive'] },
   // 준회원 전용 메뉴
@@ -114,7 +118,7 @@ function HomeRedirect() {
 // 실제 앱 내용 (로그인한 사용자만 여기 도달)
 function AppContent() {
   const [menuOpen, setMenuOpen] = useState(false)
-  const { profile, role, signOut } = useAuth()
+  const { profile, role, isPresident, signOut } = useAuth()
 
   const visibleMenu = allMenu.filter((item) => item.roles.includes(role))
 
@@ -153,7 +157,7 @@ function AppContent() {
           <div className="flex items-center gap-4 flex-shrink-0">
             {profile && (
               <span className="text-white text-sm sm:text-lg font-medium whitespace-nowrap">
-                {profile.name}({ROLE_LABELS[role] || role})
+                {profile.name}({isPresident ? '회장' : (ROLE_LABELS[role] || role)})
               </span>
             )}
             <button
@@ -234,8 +238,8 @@ function AppContent() {
           <Route path="/polls/new" element={<Protected allowed={['admin', 'executive', 'captain', 'member']}><PollCreate /></Protected>} />
           <Route path="/polls/:id" element={<Protected allowed={['admin', 'executive', 'captain', 'member']}><PollVote /></Protected>} />
 
-          {/* 경기 */}
-          <Route path="/matches" element={<Protected allowed={['admin', 'executive', 'captain']}><MatchRecord /></Protected>} />
+          {/* 경기 - 정회원도 열람 가능(단, 정회원은 컴포넌트 내부에서 읽기 전용) */}
+          <Route path="/matches" element={<Protected allowed={['admin', 'executive', 'captain', 'member']}><MatchRecord /></Protected>} />
 
           {/* 순위표 / 득점순위표 */}
           <Route path="/season-ranking" element={<Protected allowed={['admin', 'executive', 'captain', 'member']}><SeasonRanking /></Protected>} />
@@ -245,6 +249,9 @@ function AppContent() {
           <Route path="/notices" element={<Protected allowed={['admin', 'executive', 'captain', 'member']}><NoticeBoard /></Protected>} />
           <Route path="/notices/new" element={<Protected allowed={['admin', 'executive']}><NoticeDetail /></Protected>} />
           <Route path="/notices/:id" element={<Protected allowed={['admin', 'executive', 'captain', 'member']}><NoticeDetail /></Protected>} />
+
+          {/* 💌 마음의 편지 (익명 게시판) - 준회원 제외 전 회원, 답글은 회장만(컴포넌트 내부 처리) */}
+          <Route path="/letter" element={<Protected allowed={['admin', 'executive', 'captain', 'member']}><LetterBoard /></Protected>} />
 
           {/* 회원 권한 관리 (관리자·임원) */}
           <Route path="/member-roles" element={<Protected allowed={['admin', 'executive']}><MemberRoles /></Protected>} />

@@ -1,7 +1,12 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
+import { useAuth } from '../contexts/AuthContext'
 
 function MatchRecord() {
+  const { role } = useAuth()
+  // ✅ 수정 권한: 관리자·임원·주장(부주장)만. 정회원(member)은 열람만 가능(읽기 전용)
+  const canEdit = role === 'admin' || role === 'executive' || role === 'captain'
+
   const [teams, setTeams] = useState([])
   const [players, setPlayers] = useState([])
   const [matches, setMatches] = useState([])
@@ -157,6 +162,7 @@ function MatchRecord() {
   }
 
   async function createDayMatches() {
+    if (!canEdit) return // 🔒 정회원 차단
     if (teams.length < 3) {
       alert('팀이 3개 이상 필요합니다!')
       return
@@ -227,6 +233,7 @@ function MatchRecord() {
   }
 
   async function updateScore(matchId, field, value) {
+    if (!canEdit) return // 🔒 정회원 차단
     const score = Math.max(0, parseInt(value) || 0)
     await supabase
       .from('matches')
@@ -236,6 +243,7 @@ function MatchRecord() {
   }
 
   async function updateTeamName(matchId, field, value) {
+    if (!canEdit) return // 🔒 정회원 차단
     await supabase
       .from('matches')
       .update({ [field]: value })
@@ -244,6 +252,7 @@ function MatchRecord() {
   }
 
   async function addGoal(matchId, playerId, playerName, team) {
+    if (!canEdit) return // 🔒 정회원 차단
     await supabase.from('goals').insert({
       match_id: matchId,
       game_date: selectedDate,
@@ -255,11 +264,13 @@ function MatchRecord() {
   }
 
   async function removeGoal(goalId) {
+    if (!canEdit) return // 🔒 정회원 차단
     await supabase.from('goals').delete().eq('id', goalId)
     fetchGoals(selectedDate)
   }
 
   async function deleteDay() {
+    if (!canEdit) return // 🔒 정회원 차단
     if (!window.confirm(`${selectedDate} 경기 기록을 전부 삭제하시겠습니까?`)) return
 
     for (const m of matches) {
@@ -358,7 +369,8 @@ function MatchRecord() {
     <div className="max-w-4xl mx-auto">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
         <h1 className="text-3xl font-bold text-white">⚽ 경기순서&결과</h1>
-        {matches.length === 0 && (
+        {/* 🔒 경기 생성 버튼: 수정 권한자만 */}
+        {canEdit && matches.length === 0 && (
           <button
             onClick={() => setShowCreate(true)}
             className="bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-3 rounded-xl font-semibold transition-colors"
@@ -367,6 +379,13 @@ function MatchRecord() {
           </button>
         )}
       </div>
+
+      {/* 🔒 읽기 전용 안내 (정회원) */}
+      {!canEdit && (
+        <div className="bg-slate-800/60 border border-slate-700 rounded-xl px-4 py-3 mb-6 text-slate-400 text-sm">
+          👀 열람 전용 화면입니다. 경기 기록 수정은 관리자·임원·주장만 가능합니다.
+        </div>
+      )}
 
       {/* 날짜 선택 */}
       <div className="flex flex-col sm:flex-row gap-4 mb-6">
@@ -399,8 +418,8 @@ function MatchRecord() {
         </div>
       </div>
 
-      {/* 경기 생성 모달 */}
-      {showCreate && (
+      {/* 경기 생성 모달 (수정 권한자만) */}
+      {canEdit && showCreate && (
         <div className="bg-slate-800 rounded-xl p-6 border border-slate-700 mb-6">
           <h2 className="text-lg font-bold text-white mb-3">📅 {selectedDate} 경기 생성</h2>
           <p className="text-slate-400 text-sm mb-2">6경기 (1Q ~ 6Q)가 자동 생성됩니다.</p>
@@ -437,11 +456,11 @@ function MatchRecord() {
         <div className="text-center py-20 text-slate-400">
           <p className="text-4xl mb-4">⚽</p>
           <p className="text-xl">해당 날짜의 경기 기록이 없습니다</p>
-          <p className="mt-2">"오늘 경기 생성" 버튼을 눌러주세요</p>
+          {canEdit && <p className="mt-2">"오늘 경기 생성" 버튼을 눌러주세요</p>}
         </div>
       ) : (
         <>
-          {/* 개별 경기 스코어 입력 */}
+          {/* 개별 경기 스코어 */}
           <div className="space-y-4 mb-8">
             {matches.map(match => {
               const matchGoals = goals.filter(g => g.match_id === match.id)
@@ -456,46 +475,70 @@ function MatchRecord() {
                     <span className="text-emerald-400 text-sm font-bold">{match.match_number}Q</span>
                   </div>
 
-                  {/* 팀 이름 수정 + 스코어 */}
+                  {/* 팀 이름 + 스코어 */}
                   <div className="flex items-center justify-center gap-3 mb-2">
                     <div className="text-center flex-1">
-                      <select
-                        value={match.team_a}
-                        onChange={(e) => updateTeamName(match.id, 'team_a', e.target.value)}
-                        className="bg-slate-700 border border-slate-600 rounded-lg px-2 py-1 text-lg font-extrabold focus:outline-none focus:border-emerald-500 text-center"
-                        style={{ color: colorA }}
-                      >
-                        {allTeamNames.map(name => (
-                          <option key={name} value={name} style={{ color: '#fff' }}>{name}</option>
-                        ))}
-                      </select>
+                      {canEdit ? (
+                        <select
+                          value={match.team_a}
+                          onChange={(e) => updateTeamName(match.id, 'team_a', e.target.value)}
+                          className="bg-slate-700 border border-slate-600 rounded-lg px-2 py-1 text-lg font-extrabold focus:outline-none focus:border-emerald-500 text-center"
+                          style={{ color: colorA }}
+                        >
+                          {allTeamNames.map(name => (
+                            <option key={name} value={name} style={{ color: '#fff' }}>{name}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <p className="text-lg font-extrabold text-center" style={{ color: colorA }}>
+                          {match.team_a}
+                        </p>
+                      )}
                     </div>
-                    <input
-                      type="number"
-                      min="0"
-                      value={match.score_a}
-                      onChange={(e) => updateScore(match.id, 'score_a', e.target.value)}
-                      className="w-16 bg-slate-700 border border-slate-600 rounded-lg px-2 py-2 text-white text-center text-xl font-bold focus:outline-none focus:border-emerald-500"
-                    />
+
+                    {canEdit ? (
+                      <input
+                        type="number"
+                        min="0"
+                        value={match.score_a}
+                        onChange={(e) => updateScore(match.id, 'score_a', e.target.value)}
+                        className="w-16 bg-slate-700 border border-slate-600 rounded-lg px-2 py-2 text-white text-center text-xl font-bold focus:outline-none focus:border-emerald-500"
+                      />
+                    ) : (
+                      <span className="w-16 text-white text-center text-xl font-bold">{match.score_a}</span>
+                    )}
+
                     <span className="text-slate-400 text-xl font-bold">:</span>
-                    <input
-                      type="number"
-                      min="0"
-                      value={match.score_b}
-                      onChange={(e) => updateScore(match.id, 'score_b', e.target.value)}
-                      className="w-16 bg-slate-700 border border-slate-600 rounded-lg px-2 py-2 text-white text-center text-xl font-bold focus:outline-none focus:border-emerald-500"
-                    />
+
+                    {canEdit ? (
+                      <input
+                        type="number"
+                        min="0"
+                        value={match.score_b}
+                        onChange={(e) => updateScore(match.id, 'score_b', e.target.value)}
+                        className="w-16 bg-slate-700 border border-slate-600 rounded-lg px-2 py-2 text-white text-center text-xl font-bold focus:outline-none focus:border-emerald-500"
+                      />
+                    ) : (
+                      <span className="w-16 text-white text-center text-xl font-bold">{match.score_b}</span>
+                    )}
+
                     <div className="text-center flex-1">
-                      <select
-                        value={match.team_b}
-                        onChange={(e) => updateTeamName(match.id, 'team_b', e.target.value)}
-                        className="bg-slate-700 border border-slate-600 rounded-lg px-2 py-1 text-lg font-extrabold focus:outline-none focus:border-emerald-500 text-center"
-                        style={{ color: colorB }}
-                      >
-                        {allTeamNames.map(name => (
-                          <option key={name} value={name} style={{ color: '#fff' }}>{name}</option>
-                        ))}
-                      </select>
+                      {canEdit ? (
+                        <select
+                          value={match.team_b}
+                          onChange={(e) => updateTeamName(match.id, 'team_b', e.target.value)}
+                          className="bg-slate-700 border border-slate-600 rounded-lg px-2 py-1 text-lg font-extrabold focus:outline-none focus:border-emerald-500 text-center"
+                          style={{ color: colorB }}
+                        >
+                          {allTeamNames.map(name => (
+                            <option key={name} value={name} style={{ color: '#fff' }}>{name}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <p className="text-lg font-extrabold text-center" style={{ color: colorB }}>
+                          {match.team_b}
+                        </p>
+                      )}
                     </div>
                   </div>
 
@@ -506,48 +549,56 @@ function MatchRecord() {
                       {goalsA.map(g => (
                         <div key={g.id} className="flex items-center justify-end gap-2 bg-slate-700/50 rounded px-2 py-1 mb-1 w-full">
                           <span className="text-white text-xs">{g.player_name}</span>
-                          <button onClick={() => removeGoal(g.id)} className="text-red-400 text-xs">✕</button>
+                          {canEdit && (
+                            <button onClick={() => removeGoal(g.id)} className="text-red-400 text-xs">✕</button>
+                          )}
                         </div>
                       ))}
-                      <select
-                        onChange={(e) => {
-                          if (e.target.value) {
-                            const p = players.find(p => p.id === e.target.value)
-                            if (p) addGoal(match.id, p.id, p.name, match.team_a)
-                            e.target.value = ''
-                          }
-                        }}
-                        className="w-full bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white text-xs mt-1 focus:outline-none focus:border-emerald-500 text-right"
-                      >
-                        <option value="">+ 골 추가 (전체 선수)</option>
-                        {players.map(p => (
-                          <option key={p.id} value={p.id}>{p.name} {p.current_team ? `(${p.current_team})` : ''}</option>
-                        ))}
-                      </select>
+                      {canEdit && (
+                        <select
+                          onChange={(e) => {
+                            if (e.target.value) {
+                              const p = players.find(p => p.id === e.target.value)
+                              if (p) addGoal(match.id, p.id, p.name, match.team_a)
+                              e.target.value = ''
+                            }
+                          }}
+                          className="w-full bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white text-xs mt-1 focus:outline-none focus:border-emerald-500 text-right"
+                        >
+                          <option value="">+ 골 추가 (전체 선수)</option>
+                          {players.map(p => (
+                            <option key={p.id} value={p.id}>{p.name} {p.current_team ? `(${p.current_team})` : ''}</option>
+                          ))}
+                        </select>
+                      )}
                     </div>
                     <div className="flex flex-col items-start">
                       <p className="text-xs mb-2" style={{ color: colorB }}>⚽ {match.team_b} 골</p>
                       {goalsB.map(g => (
                         <div key={g.id} className="flex items-center justify-start gap-2 bg-slate-700/50 rounded px-2 py-1 mb-1 w-full">
-                          <button onClick={() => removeGoal(g.id)} className="text-red-400 text-xs">✕</button>
+                          {canEdit && (
+                            <button onClick={() => removeGoal(g.id)} className="text-red-400 text-xs">✕</button>
+                          )}
                           <span className="text-white text-xs">{g.player_name}</span>
                         </div>
                       ))}
-                      <select
-                        onChange={(e) => {
-                          if (e.target.value) {
-                            const p = players.find(p => p.id === e.target.value)
-                            if (p) addGoal(match.id, p.id, p.name, match.team_b)
-                            e.target.value = ''
-                          }
-                        }}
-                        className="w-full bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white text-xs mt-1 focus:outline-none focus:border-emerald-500"
-                      >
-                        <option value="">+ 골 추가 (전체 선수)</option>
-                        {players.map(p => (
-                          <option key={p.id} value={p.id}>{p.name} {p.current_team ? `(${p.current_team})` : ''}</option>
-                        ))}
-                      </select>
+                      {canEdit && (
+                        <select
+                          onChange={(e) => {
+                            if (e.target.value) {
+                              const p = players.find(p => p.id === e.target.value)
+                              if (p) addGoal(match.id, p.id, p.name, match.team_b)
+                              e.target.value = ''
+                            }
+                          }}
+                          className="w-full bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white text-xs mt-1 focus:outline-none focus:border-emerald-500"
+                        >
+                          <option value="">+ 골 추가 (전체 선수)</option>
+                          {players.map(p => (
+                            <option key={p.id} value={p.id}>{p.name} {p.current_team ? `(${p.current_team})` : ''}</option>
+                          ))}
+                        </select>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -594,15 +645,17 @@ function MatchRecord() {
             </div>
           )}
 
-          {/* 삭제 버튼 */}
-          <div className="text-right">
-            <button
-              onClick={deleteDay}
-              className="bg-red-500/10 hover:bg-red-500/20 text-red-400 px-4 py-2 rounded-lg text-sm"
-            >
-              🗑️ 이 날 경기 전체 삭제
-            </button>
-          </div>
+          {/* 🔒 삭제 버튼: 수정 권한자만 */}
+          {canEdit && (
+            <div className="text-right">
+              <button
+                onClick={deleteDay}
+                className="bg-red-500/10 hover:bg-red-500/20 text-red-400 px-4 py-2 rounded-lg text-sm"
+              >
+                🗑️ 이 날 경기 전체 삭제
+              </button>
+            </div>
+          )}
         </>
       )}
     </div>
