@@ -33,6 +33,7 @@ function MemberRoles() {
   const [loading, setLoading] = useState(true)
   const [savingId, setSavingId] = useState(null)
   const [search, setSearch] = useState('')
+  const [roleFilter, setRoleFilter] = useState('all')
 
   useEffect(() => {
     fetchAll()
@@ -103,11 +104,53 @@ function MemberRoles() {
     setSavingId(null)
   }
 
+  // 🗑️ 계정 삭제 (profiles만 삭제, 선수·기록은 유지)
+  async function deleteAccount(profile) {
+    // 본인 계정은 삭제 불가 (실수 방지)
+    if (profile.id === user?.id) {
+      alert('⚠️ 본인 계정은 삭제할 수 없습니다.')
+      return
+    }
+
+    const ok = confirm(
+      `'${profile.name || profile.email}' 님의 계정을 삭제하시겠습니까?\n\n` +
+      `✅ 선수 정보와 골·출석 기록은 그대로 유지됩니다.\n` +
+      `❌ 로그인 계정(권한)만 삭제됩니다.\n\n` +
+      `이 작업은 되돌릴 수 없습니다.`
+    )
+    if (!ok) return
+
+    setSavingId(profile.id)
+    const { error } = await supabase
+      .from('profiles')
+      .delete()
+      .eq('id', profile.id)
+
+    if (error) {
+      console.error('계정 삭제 오류:', error)
+      alert('계정 삭제에 실패했습니다: ' + error.message)
+    } else {
+      setProfiles((prev) => prev.filter((p) => p.id !== profile.id))
+      alert('✅ 계정이 삭제되었습니다. (선수 기록은 유지됨)')
+    }
+    setSavingId(null)
+  }
+
   const linkedPlayerIds = new Set(
     profiles.map((p) => p.player_id).filter(Boolean)
   )
 
+  // 권한별 인원수 계산
+  function countByRole(role) {
+    if (role === 'all') return profiles.length
+    return profiles.filter((p) => p.role === role).length
+  }
+
   const filtered = profiles.filter((p) => {
+    // 1) 권한 필터
+    if (roleFilter !== 'all' && p.role !== roleFilter) return false
+
+    // 2) 이름/이메일 검색
     const q = search.trim().toLowerCase()
     if (!q) return true
     return (
@@ -117,7 +160,7 @@ function MemberRoles() {
   })
 
   return (
-    <div className="max-w-3xl mx-auto">
+    <div className="max-w-5xl mx-auto">
       <h1 className="text-2xl font-bold text-white mb-1">🔑 회원 권한 관리</h1>
       <p className="text-slate-400 text-sm mb-6">
         회원의 권한을 변경하고, 선수 정보를 연결할 수 있습니다. (관리자·임원 전용)
@@ -131,12 +174,39 @@ function MemberRoles() {
         className="w-full mb-4 bg-slate-800 border border-slate-600 rounded-lg px-4 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
       />
 
+      {/* 🏷️ 권한 필터 버튼 */}
+      <div className="flex flex-wrap gap-2 mb-6">
+        <button
+          onClick={() => setRoleFilter('all')}
+          className={`px-3 py-1.5 rounded-full text-sm font-medium border transition-colors ${
+            roleFilter === 'all'
+              ? 'bg-emerald-500 text-white border-emerald-500'
+              : 'bg-slate-800 text-slate-300 border-slate-600 hover:bg-slate-700'
+          }`}
+        >
+          전체 ({countByRole('all')})
+        </button>
+        {ROLE_OPTIONS.map((opt) => (
+          <button
+            key={opt.value}
+            onClick={() => setRoleFilter(opt.value)}
+            className={`px-3 py-1.5 rounded-full text-sm font-medium border transition-colors ${
+              roleFilter === opt.value
+                ? 'bg-emerald-500 text-white border-emerald-500'
+                : 'bg-slate-800 text-slate-300 border-slate-600 hover:bg-slate-700'
+            }`}
+          >
+            {opt.label} ({countByRole(opt.value)})
+          </button>
+        ))}
+      </div>
+
       {loading ? (
         <div className="text-center text-slate-400 py-10">⏳ 불러오는 중...</div>
       ) : filtered.length === 0 ? (
-        <div className="text-center text-slate-400 py-10">회원이 없습니다.</div>
+        <div className="text-center text-slate-400 py-10">해당하는 회원이 없습니다.</div>
       ) : (
-        <div className="space-y-2">
+        <div className="grid grid-cols-2 gap-3">
           {filtered.map((p) => {
             const linkedPlayer = players.find((pl) => pl.id === p.player_id)
             // 준회원이면서 선수가 연결돼 있으면 = 정회원 요청 상태
@@ -167,7 +237,7 @@ function MemberRoles() {
                 <div className="text-slate-400 text-xs mb-3 truncate">{p.email}</div>
 
                 {/* 하단: 권한 변경 + 선수 연결 */}
-                <div className="flex flex-col sm:flex-row gap-2">
+                <div className="flex flex-col gap-2">
                   <div className="flex-1">
                     <label className="block text-slate-500 text-[11px] mb-1">권한</label>
                     <select
@@ -204,6 +274,19 @@ function MemberRoles() {
                     </select>
                   </div>
                 </div>
+
+                {/* 🗑️ 계정 삭제 버튼 (본인은 숨김) */}
+                {p.id !== user?.id && (
+                  <div className="mt-3 pt-3 border-t border-slate-700/50 flex justify-end">
+                    <button
+                      onClick={() => deleteAccount(p)}
+                      disabled={savingId === p.id}
+                      className="bg-red-500/10 hover:bg-red-500/20 text-red-400 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors disabled:opacity-50"
+                    >
+                      🗑️ 계정 삭제
+                    </button>
+                  </div>
+                )}
               </div>
             )
           })}

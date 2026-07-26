@@ -18,6 +18,8 @@ import TopScorers from './pages/TopScorers'
 import SeasonRanking from './pages/SeasonRanking'
 import ScorerRanking from './pages/ScorerRanking'
 import MemberRoles from './pages/MemberRoles'
+import MemberRegister from './pages/MemberRegister'
+import PendingApproval from './pages/PendingApproval'
 import logoImg from './assets/logo.png'
 import './App.css'
 
@@ -38,11 +40,13 @@ const allMenu = [
   { to: '/matches', label: '⚽ 경기순서&결과', roles: ['admin', 'executive', 'captain'] },
   { to: '/season-ranking', label: '📸 순위표', roles: ['admin', 'executive', 'captain', 'member'] },
   { to: '/scorer-ranking', label: '📸 득점순위표', roles: ['admin', 'executive', 'captain', 'member'] },
-  { to: '/', label: '👤 선수 관리', roles: ['admin', 'executive', 'associate'] },
+  { to: '/players', label: '👤 선수 관리', roles: ['admin', 'executive'] },
   { to: '/attendance/stats', label: '📊 출석률 통계', roles: ['admin', 'executive', 'captain', 'member'] },
   { to: '/polls', label: '🗳️ 경기 참석 투표', roles: ['admin', 'executive', 'captain', 'member'] },
   { to: '/seasons', label: '📚 시즌별명단', roles: ['admin', 'executive'] },
   { to: '/member-roles', label: '🔑 회원 권한 관리', roles: ['admin', 'executive'] },
+  // 준회원 전용 메뉴
+  { to: '/register', label: '📝 회원 등록/정회원 요청', roles: ['associate'] },
 ]
 
 // ✅ 권한 없을 때 보여줄 화면
@@ -70,6 +74,31 @@ function Protected({ allowed, children }) {
 
   if (!allowed.includes(role)) return <NoAccess />
   return children
+}
+
+// ✅ 준회원 홈: 신청 전이면 등록 페이지, 신청 후면 검토 중 페이지
+function AssociateHome() {
+  const { profile } = useAuth()
+  // 선수가 연결되어 있으면(=신청 완료) → 검토 중 페이지
+  if (profile?.player_id) {
+    return <PendingApproval />
+  }
+  // 아직 신청 안 함 → 회원 등록 페이지
+  return <MemberRegister />
+}
+
+// ✅ 로그인 후 첫 화면 라우팅 (권한별 홈)
+function HomeRedirect() {
+  const { role } = useAuth()
+  // 준회원은 회원 등록/검토 중 화면으로
+  if (role === 'associate') {
+    return <AssociateHome />
+  }
+  // 그 외(관리자/임원/주장/정회원)는 선수 관리 또는 팀명단으로
+  if (role === 'admin' || role === 'executive') {
+    return <Navigate to="/players" replace />
+  }
+  return <Navigate to="/roster" replace />
 }
 
 // 실제 앱 내용 (로그인한 사용자만 여기 도달)
@@ -163,10 +192,16 @@ function AppContent() {
       {/* 페이지 내용 */}
       <main className="w-full max-w-6xl mx-auto p-4 sm:p-6 relative z-0">
         <Routes>
-          {/* 선수 관리 (홈) */}
-          <Route path="/" element={<Protected allowed={['admin', 'executive', 'associate']}><PlayerList /></Protected>} />
-          <Route path="/players/new" element={<Protected allowed={['admin', 'executive', 'associate']}><PlayerForm /></Protected>} />
-          <Route path="/players/:id/edit" element={<Protected allowed={['admin', 'executive', 'associate']}><PlayerForm /></Protected>} />
+          {/* 홈 - 권한별 분기 */}
+          <Route path="/" element={<HomeRedirect />} />
+
+          {/* 선수 관리 (관리자·임원 전용) */}
+          <Route path="/players" element={<Protected allowed={['admin', 'executive']}><PlayerList /></Protected>} />
+          <Route path="/players/new" element={<Protected allowed={['admin', 'executive']}><PlayerForm /></Protected>} />
+          <Route path="/players/:id/edit" element={<Protected allowed={['admin', 'executive']}><PlayerForm /></Protected>} />
+
+          {/* 준회원: 회원 등록/정회원 요청 */}
+          <Route path="/register" element={<Protected allowed={['associate', 'admin', 'executive']}><MemberRegister /></Protected>} />
 
           {/* 출석 */}
           <Route path="/attendance" element={<Protected allowed={['admin', 'executive', 'captain', 'member']}><AttendanceCheck /></Protected>} />
