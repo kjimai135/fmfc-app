@@ -164,7 +164,7 @@ function AppContent() {
               로그아웃
             </button>
             <Link to="/" className="text-lg sm:text-2xl font-bold text-emerald-400 whitespace-nowrap" onClick={() => setMenuOpen(false)}>
-              ⚽ FM FC
+              FM FC
             </Link>
           </div>
         </div>
