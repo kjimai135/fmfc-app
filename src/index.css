@@ -74,8 +74,20 @@ html, body {
 }
 
 .notice-ticker-track {
-  animation: notice-scroll 8s linear infinite;
-  will-change: transform;
+  animation-name: notice-ticker;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+  /* animation-duration은 JS(NoticeTicker.jsx)에서 동적으로 설정 */
+}
+
+@keyframes notice-ticker {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    /* 텍스트를 2번 반복했으므로 -50%까지만 이동해야 자연스럽게 이어짐 */
+    transform: translateX(-50%);
+  }
 }
 
 /* 마우스 올리면 잠깐 멈춤 (읽기 편하게) */
