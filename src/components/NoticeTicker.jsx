@@ -27,11 +27,18 @@ function NoticeTicker() {
   }, [])
 
   async function fetchNotices() {
+    const nowISO = new Date().toISOString()
+
     const { data } = await supabase
       .from('notices')
       .select('*')
       .eq('is_active', true)
+      // 시작일이 없거나(항상), 시작일이 지금 이전
+      .or(`ticker_start_at.is.null,ticker_start_at.lte.${nowISO}`)
+      // 종료일이 없거나(무기한), 종료일이 지금 이후
+      .or(`ticker_end_at.is.null,ticker_end_at.gte.${nowISO}`)
       .order('created_at', { ascending: false })
+
     setNotices(data || [])
   }
 

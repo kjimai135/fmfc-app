@@ -3,6 +3,39 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 
+// timestamptz(ISO) → date 입력값(YYYY-MM-DD)으로 변환
+function toDateInput(isoString) {
+  if (!isoString) return ''
+  const d = new Date(isoString)
+  if (isNaN(d.getTime())) return ''
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+}
+
+// 시작일(YYYY-MM-DD) → 그날 00:00:00 ISO
+function startOfDayISO(dateStr) {
+  if (!dateStr) return null
+  const d = new Date(`${dateStr}T00:00:00`)
+  if (isNaN(d.getTime())) return null
+  return d.toISOString()
+}
+
+// 종료일(YYYY-MM-DD) → 그날 23:59:59 ISO (종료일 당일도 하루 종일 표시)
+function endOfDayISO(dateStr) {
+  if (!dateStr) return null
+  const d = new Date(`${dateStr}T23:59:59`)
+  if (isNaN(d.getTime())) return null
+  return d.toISOString()
+}
+
+// YYYY-MM-DD → "2026. 7. 26." 형태로 표시
+function formatDateLabel(dateStr) {
+  if (!dateStr) return ''
+  const d = new Date(`${dateStr}T00:00:00`)
+  if (isNaN(d.getTime())) return ''
+  return d.toLocaleDateString('ko-KR')
+}
+
 function NoticeDetail() {
   const params = useParams()
   const id = params.id || 'new'   // id 없으면(/notices/new) 'new'로 취급
@@ -21,6 +54,8 @@ function NoticeDetail() {
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
   const [isActive, setIsActive] = useState(true)
+  const [tickerStartAt, setTickerStartAt] = useState('')
+  const [tickerEndAt, setTickerEndAt] = useState('')
 
   useEffect(() => {
     if (isNew) {
@@ -28,6 +63,8 @@ function NoticeDetail() {
       setTitle('')
       setContent('')
       setIsActive(true)
+      setTickerStartAt('')
+      setTickerEndAt('')
       setEditing(true)
       setLoading(false)
     } else {
@@ -57,6 +94,8 @@ function NoticeDetail() {
         setTitle(data.title || '')
         setContent(data.content || '')
         setIsActive(data.is_active)
+        setTickerStartAt(toDateInput(data.ticker_start_at))
+        setTickerEndAt(toDateInput(data.ticker_end_at))
       }
     } catch (e) {
       console.error('공지 불러오기 예외:', e)
@@ -74,7 +113,17 @@ function NoticeDetail() {
       alert('내용을 입력해주세요!')
       return
     }
+
+    // 기간 유효성 검사: 시작일 > 종료일이면 막기
+    if (tickerStartAt && tickerEndAt && new Date(tickerStartAt) > new Date(tickerEndAt)) {
+      alert('티커 노출 종료일이 시작일보다 빠릅니다. 다시 확인해주세요!')
+      return
+    }
+
     setSaving(true)
+
+    const startISO = startOfDayISO(tickerStartAt)
+    const endISO = endOfDayISO(tickerEndAt)
 
     if (isNew) {
       // ✅ 연결된 선수(players) 이름 가져오기
@@ -95,6 +144,8 @@ function NoticeDetail() {
           content: content.trim(),
           author: authorName,
           is_active: isActive,
+          ticker_start_at: startISO,
+          ticker_end_at: endISO,
         }])
         .select()
         .single()
@@ -112,6 +163,8 @@ function NoticeDetail() {
           title: title.trim(),
           content: content.trim(),
           is_active: isActive,
+          ticker_start_at: startISO,
+          ticker_end_at: endISO,
         })
         .eq('id', id)
 
@@ -191,6 +244,106 @@ function NoticeDetail() {
             </label>
           </div>
 
+          {/* 티커 노출 기간 */}
+          <div className="bg-slate-900/40 border border-slate-700 rounded-lg p-4 space-y-3">
+            <p className="text-slate-300 text-sm font-medium">
+              ⏰ 티커 노출 기간 <span className="text-slate-500 text-xs ml-1">(선택 · 비워두면 항상 표시)</span>
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* 시작일 */}
+              <div>
+                <label className="block text-slate-400 text-xs mb-1">시작일</label>
+                <div className="flex items-center gap-2 bg-slate-700 border border-slate-600 rounded-lg px-3 py-2">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      const input = e.currentTarget.nextElementSibling
+                      input.showPicker ? input.showPicker() : input.focus()
+                    }}
+                    className="text-lg leading-none hover:scale-110 transition-transform"
+                    title="달력 열기"
+                  >
+                    📅
+                  </button>
+                  {/* 실제 date input은 화면에서 숨김 */}
+                  <input
+                    type="date"
+                    value={tickerStartAt}
+                    onChange={(e) => setTickerStartAt(e.target.value)}
+                    className="w-0 h-0 opacity-0 absolute pointer-events-none"
+                    tabIndex={-1}
+                  />
+                  <span className={`text-sm ${tickerStartAt ? 'text-white' : 'text-slate-500'}`}>
+                    {tickerStartAt
+                      ? `${formatDateLabel(tickerStartAt)} 00:00 부터`
+                      : '날짜 선택 안 함'}
+                  </span>
+                </div>
+              </div>
+
+              {/* 종료일 */}
+              <div>
+                <label className="block text-slate-400 text-xs mb-1">종료일</label>
+                <div className="flex items-center gap-2 bg-slate-700 border border-slate-600 rounded-lg px-3 py-2">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      const input = e.currentTarget.nextElementSibling
+                      input.showPicker ? input.showPicker() : input.focus()
+                    }}
+                    className="text-lg leading-none hover:scale-110 transition-transform"
+                    title="달력 열기"
+                  >
+                    📅
+                  </button>
+                  <input
+                    type="date"
+                    value={tickerEndAt}
+                    onChange={(e) => setTickerEndAt(e.target.value)}
+                    className="w-0 h-0 opacity-0 absolute pointer-events-none"
+                    tabIndex={-1}
+                  />
+                  <span className={`text-sm ${tickerEndAt ? 'text-white' : 'text-slate-500'}`}>
+                    {tickerEndAt
+                      ? `${formatDateLabel(tickerEndAt)} 23:59 까지`
+                      : '날짜 선택 안 함'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* 선택된 노출 기간 요약 */}
+            {(tickerStartAt || tickerEndAt) && (
+              <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-lg px-3 py-2">
+                <p className="text-emerald-300 text-sm">
+                  📢 노출 기간:{' '}
+                  <span className="font-medium">
+                    {tickerStartAt ? `${formatDateLabel(tickerStartAt)} 00:00` : '즉시'}
+                  </span>
+                  {' ~ '}
+                  <span className="font-medium">
+                    {tickerEndAt ? `${formatDateLabel(tickerEndAt)} 23:59` : '무기한'}
+                  </span>
+                </p>
+              </div>
+            )}
+
+            {(tickerStartAt || tickerEndAt) && (
+              <button
+                type="button"
+                onClick={() => { setTickerStartAt(''); setTickerEndAt('') }}
+                className="text-slate-400 hover:text-white text-xs underline"
+              >
+                기간 지우기 (항상 표시)
+              </button>
+            )}
+            <p className="text-slate-500 text-xs leading-relaxed">
+              · 시작일 당일 0시부터 티커에 나타납니다 (비우면 즉시)<br />
+              · 종료일 당일까지 표시되고, 다음 날부터 자동으로 사라집니다 (비우면 무기한)<br />
+              · 티커에서 사라져도 공지 게시판에는 계속 남아 있습니다
+            </p>
+          </div>
+
           {/* 버튼 */}
           <div className="flex gap-3 pt-2">
             <button
@@ -243,10 +396,27 @@ function NoticeDetail() {
         </div>
 
         {/* 작성 정보 */}
-        <p className="text-slate-500 text-sm mb-6 pb-4 border-b border-slate-700">
+        <p className="text-slate-500 text-sm mb-2">
           {notice.author ? `${notice.author} · ` : ''}
           {new Date(notice.created_at).toLocaleString('ko-KR')}
         </p>
+
+        {/* 티커 노출 기간 표시 (설정된 경우만) */}
+        {notice.is_active && (notice.ticker_start_at || notice.ticker_end_at) && (
+          <p className="text-emerald-400/80 text-xs mb-6 pb-4 border-b border-slate-700">
+            ⏰ 티커 노출:{' '}
+            {notice.ticker_start_at
+              ? `${new Date(notice.ticker_start_at).toLocaleDateString('ko-KR')} 00:00`
+              : '즉시'}
+            {' ~ '}
+            {notice.ticker_end_at
+              ? `${new Date(notice.ticker_end_at).toLocaleDateString('ko-KR')} 23:59`
+              : '무기한'}
+          </p>
+        )}
+        {!(notice.is_active && (notice.ticker_start_at || notice.ticker_end_at)) && (
+          <div className="mb-6 pb-4 border-b border-slate-700" />
+        )}
 
         {/* 내용 (줄바꿈 유지) */}
         <div className="text-slate-200 whitespace-pre-wrap leading-relaxed min-h-[100px]">
