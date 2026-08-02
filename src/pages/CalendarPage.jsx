@@ -42,6 +42,9 @@ function CalendarPage() {
   const { role } = useAuth()
   // ✅ 수정 권한: 관리자·임원만
   const canEdit = role === 'admin' || role === 'executive'
+  // 👀 전체 내용 열람 권한: 관리자·임원·주장(부주장)
+  //    → 정회원(member)은 '확정된 예약'만 볼 수 있음
+  const canSeeAll = role === 'admin' || role === 'executive' || role === 'captain'
 
   const today = new Date()
   const [year, setYear] = useState(today.getFullYear())
@@ -69,8 +72,9 @@ function CalendarPage() {
   }, [year, month])
 
   useEffect(() => {
-    fetchPlayers()
-  }, [])
+    if (canEdit) fetchPlayers()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canEdit])
 
   // 팝오버 바깥 클릭 시 닫기
   useEffect(() => {
@@ -99,19 +103,24 @@ function CalendarPage() {
     const from = toKey(new Date(year, month - 1, -7))
     const to = toKey(new Date(year, month - 1, lastDay + 7))
 
-    const [resRes, memoRes] = await Promise.all([
-      supabase
-        .from('reservations')
-        .select('*')
-        .gte('date', from)
-        .lte('date', to)
-        .order('sort_order'),
-      supabase
-        .from('calendar_memos')
-        .select('*')
-        .gte('date', from)
-        .lte('date', to),
-    ])
+    // 예약 조회 (정회원은 확정된 것만)
+    let resQuery = supabase
+      .from('reservations')
+      .select('*')
+      .gte('date', from)
+      .lte('date', to)
+      .order('sort_order')
+
+    if (!canSeeAll) {
+      resQuery = resQuery.eq('is_confirmed', true)
+    }
+
+    // 메모는 전체 열람 권한자만 조회
+    const memoPromise = canSeeAll
+      ? supabase.from('calendar_memos').select('*').gte('date', from).lte('date', to)
+      : Promise.resolve({ data: [] })
+
+    const [resRes, memoRes] = await Promise.all([resQuery, memoPromise])
 
     setReservations(resRes.data || [])
 
@@ -322,11 +331,15 @@ function CalendarPage() {
         )}
       </div>
 
-      {canEdit && (
+      {canEdit ? (
         <p className="text-slate-500 text-xs mb-2">
           💡 날짜 칸을 클릭하면 예약을 추가·수정할 수 있습니다. (확정하면 노란색으로 표시)
         </p>
-      )}
+      ) : !canSeeAll ? (
+        <p className="text-slate-500 text-xs mb-2">
+          ✅ <b className="text-yellow-300">확정된 예약</b>만 표시됩니다. (구장 · 시간)
+        </p>
+      ) : null}
 
       {loading ? (
         <div className="text-center text-slate-400 py-20">⏳ 불러오는 중...</div>
@@ -413,8 +426,8 @@ function CalendarPage() {
                       {d.getDate()}
                     </div>
 
-                    {/* ★ 메모 (빨간 글씨) */}
-                    {memo && (
+                    {/* ★ 메모 (빨간 글씨) - 전체 열람 권한자만 */}
+                    {canSeeAll && memo && (
                       <div
                         style={{
                           fontSize: '10px',
@@ -430,23 +443,29 @@ function CalendarPage() {
                     )}
 
                     {/* 예약 목록 */}
-                    {dayRes.map((r, i) => (
-                      <div
-                        key={i}
-                        style={{
-                          fontSize: '10.5px',
-                          color: r.is_confirmed ? '#fef08a' : '#e2e8f0',
-                          fontWeight: r.is_confirmed ? 700 : 400,
-                          lineHeight: 1.4,
-                          whiteSpace: 'nowrap',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                        }}
-                        title={[r.venue, r.time, r.reserver].filter(Boolean).join('-')}
-                      >
-                        {[r.venue, r.time, r.reserver].filter(Boolean).join('-')}
-                      </div>
-                    ))}
+                    {dayRes.map((r, i) => {
+                      // 정회원: 구장 - 시간만 / 그 외: 구장 - 시간 - 예약자
+                      const text = canSeeAll
+                        ? [r.venue, r.time, r.reserver].filter(Boolean).join('-')
+                        : [r.venue, r.time].filter(Boolean).join('-')
+                      return (
+                        <div
+                          key={i}
+                          style={{
+                            fontSize: '10.5px',
+                            color: r.is_confirmed ? '#fef08a' : '#e2e8f0',
+                            fontWeight: r.is_confirmed ? 700 : 400,
+                            lineHeight: 1.4,
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                          }}
+                          title={text}
+                        >
+                          {text}
+                        </div>
+                      )
+                    })}
                   </div>
                 )
               })}
