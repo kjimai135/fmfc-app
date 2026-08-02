@@ -27,7 +27,11 @@ const ROLE_COLORS = {
 }
 
 function MemberRoles() {
-  const { user } = useAuth()
+  const { user, role, isPresident } = useAuth()
+
+  // ✅ 수정 권한: 관리자 또는 현재 회장만 (임원은 열람 전용)
+  const canEdit = role === 'admin' || isPresident === true
+
   const [profiles, setProfiles] = useState([])
   const [players, setPlayers] = useState([])
   const [loading, setLoading] = useState(true)
@@ -63,6 +67,8 @@ function MemberRoles() {
   }
 
   async function changeRole(profileId, newRole) {
+    if (!canEdit) return
+
     if (profileId === user?.id && newRole !== 'admin') {
       const ok = confirm('본인의 권한을 변경하려고 합니다. 관리자 권한을 잃으면 이 화면에 다시 들어올 수 없습니다. 계속할까요?')
       if (!ok) return
@@ -86,6 +92,8 @@ function MemberRoles() {
   }
 
   async function changePlayer(profileId, newPlayerId) {
+    if (!canEdit) return
+
     setSavingId(profileId)
     const value = newPlayerId === '' ? null : newPlayerId
     const { error } = await supabase
@@ -106,6 +114,11 @@ function MemberRoles() {
 
   // 👑 회장 지정/해제 (회장은 한 명만 유지 → 새로 지정 시 기존 회장 자동 해제)
   async function togglePresident(profile) {
+    if (!canEdit) {
+      alert('⚠️ 회장 지정은 관리자와 회장만 할 수 있습니다.')
+      return
+    }
+
     const makePresident = !profile.is_president
 
     if (makePresident) {
@@ -163,6 +176,8 @@ function MemberRoles() {
 
   // 🗑️ 계정 삭제 (profiles만 삭제, 선수·기록은 유지)
   async function deleteAccount(profile) {
+    if (!canEdit) return
+
     // 본인 계정은 삭제 불가 (실수 방지)
     if (profile.id === user?.id) {
       alert('⚠️ 본인 계정은 삭제할 수 없습니다.')
@@ -198,9 +213,9 @@ function MemberRoles() {
   )
 
   // 권한별 인원수 계산
-  function countByRole(role) {
-    if (role === 'all') return profiles.length
-    return profiles.filter((p) => p.role === role).length
+  function countByRole(r) {
+    if (r === 'all') return profiles.length
+    return profiles.filter((p) => p.role === r).length
   }
 
   const filtered = profiles.filter((p) => {
@@ -219,9 +234,18 @@ function MemberRoles() {
   return (
     <div className="max-w-5xl mx-auto">
       <h1 className="text-2xl font-bold text-white mb-1">🔑 회원 권한 관리</h1>
-      <p className="text-slate-400 text-sm mb-6">
-        회원의 권한을 변경하고, 선수 정보를 연결할 수 있습니다. (관리자·임원 전용)
+      <p className="text-slate-400 text-sm mb-4">
+        {canEdit
+          ? '회원의 권한을 변경하고, 선수 정보를 연결할 수 있습니다.'
+          : '등록된 회원 목록입니다.'}
       </p>
+
+      {/* 👀 열람 전용 배너 (임원 등) */}
+      {!canEdit && (
+        <div className="mb-5 bg-sky-500/10 border border-sky-500/40 text-sky-200 rounded-xl px-4 py-3 text-sm">
+          👀 <b>열람 전용</b> — 회원 권한 변경·선수 연결·회장 지정은 <b>관리자와 회장</b>만 가능합니다.
+        </div>
+      )}
 
       <input
         type="text"
@@ -268,6 +292,7 @@ function MemberRoles() {
             const linkedPlayer = players.find((pl) => pl.id === p.player_id)
             // 준회원이면서 선수가 연결돼 있으면 = 정회원 요청 상태
             const isRequesting = p.role === 'associate' && !!p.player_id
+            const isMe = p.id === user?.id
             return (
               <div
                 key={p.id}
@@ -295,7 +320,7 @@ function MemberRoles() {
                       🙋 정회원 요청
                     </span>
                   )}
-                  {p.id === user?.id && (
+                  {isMe && (
                     <span className="text-[11px] text-emerald-400">(나)</span>
                   )}
                   {linkedPlayer && (
@@ -304,71 +329,85 @@ function MemberRoles() {
                 </div>
                 <div className="text-slate-400 text-xs mb-3 truncate">{p.email}</div>
 
-                {/* 하단: 권한 변경 + 선수 연결 */}
+                {/* 하단: 권한 + 선수 연결 (수정 권한 없으면 텍스트로 표시) */}
                 <div className="flex flex-col gap-2">
                   <div className="flex-1">
                     <label className="block text-slate-500 text-[11px] mb-1">권한</label>
-                    <select
-                      value={p.role}
-                      disabled={savingId === p.id}
-                      onChange={(e) => changeRole(p.id, e.target.value)}
-                      className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-emerald-500 disabled:opacity-50"
-                    >
-                      {ROLE_OPTIONS.map((opt) => (
-                        <option key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </option>
-                      ))}
-                    </select>
+                    {canEdit ? (
+                      <select
+                        value={p.role}
+                        disabled={savingId === p.id}
+                        onChange={(e) => changeRole(p.id, e.target.value)}
+                        className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-emerald-500 disabled:opacity-50"
+                      >
+                        {ROLE_OPTIONS.map((opt) => (
+                          <option key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <div className="w-full bg-slate-700/40 border border-slate-700 rounded-lg px-3 py-2 text-slate-300 text-sm">
+                        {ROLE_LABELS[p.role] || p.role}
+                      </div>
+                    )}
                   </div>
 
                   <div className="flex-1">
                     <label className="block text-slate-500 text-[11px] mb-1">선수 연결</label>
-                    <select
-                      value={p.player_id || ''}
-                      disabled={savingId === p.id}
-                      onChange={(e) => changePlayer(p.id, e.target.value)}
-                      className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-emerald-500 disabled:opacity-50"
-                    >
-                      <option value="">— 연결 안 함 —</option>
-                      {players.map((pl) => {
-                        const isLinkedByOther = linkedPlayerIds.has(pl.id) && pl.id !== p.player_id
-                        return (
-                          <option key={pl.id} value={pl.id} disabled={isLinkedByOther}>
-                            {pl.name}{isLinkedByOther ? ' (연결됨)' : ''}
-                          </option>
-                        )
-                      })}
-                    </select>
+                    {canEdit ? (
+                      <select
+                        value={p.player_id || ''}
+                        disabled={savingId === p.id}
+                        onChange={(e) => changePlayer(p.id, e.target.value)}
+                        className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-emerald-500 disabled:opacity-50"
+                      >
+                        <option value="">— 연결 안 함 —</option>
+                        {players.map((pl) => {
+                          const isLinkedByOther = linkedPlayerIds.has(pl.id) && pl.id !== p.player_id
+                          return (
+                            <option key={pl.id} value={pl.id} disabled={isLinkedByOther}>
+                              {pl.name}{isLinkedByOther ? ' (연결됨)' : ''}
+                            </option>
+                          )
+                        })}
+                      </select>
+                    ) : (
+                      <div className="w-full bg-slate-700/40 border border-slate-700 rounded-lg px-3 py-2 text-slate-300 text-sm">
+                        {linkedPlayer ? linkedPlayer.name : '— 연결 안 함 —'}
+                      </div>
+                    )}
                   </div>
                 </div>
 
-                {/* 👑 회장 지정 + 🗑️ 계정 삭제 */}
-                <div className="mt-3 pt-3 border-t border-slate-700/50 flex items-center justify-between gap-2">
-                  {/* 회장 지정/해제 버튼 */}
-                  <button
-                    onClick={() => togglePresident(p)}
-                    disabled={savingId === p.id}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors disabled:opacity-50 border ${
-                      p.is_president
-                        ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40 hover:bg-indigo-500/30'
-                        : 'bg-slate-700/50 text-slate-300 border-slate-600 hover:bg-slate-700'
-                    }`}
-                  >
-                    {p.is_president ? '👑 회장 해제' : '회장 지정'}
-                  </button>
-
-                  {/* 계정 삭제 버튼 (본인은 숨김) */}
-                  {p.id !== user?.id && (
+                {/* 👑 회장 지정 + 🗑️ 계정 삭제 (수정 권한 있을 때만 노출) */}
+                {canEdit && (
+                  <div className="mt-3 pt-3 border-t border-slate-700/50 flex items-center justify-between gap-2">
+                    {/* 회장 지정/해제 버튼 */}
                     <button
-                      onClick={() => deleteAccount(p)}
+                      onClick={() => togglePresident(p)}
                       disabled={savingId === p.id}
-                      className="bg-red-500/10 hover:bg-red-500/20 text-red-400 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors disabled:opacity-50"
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors disabled:opacity-50 border ${
+                        p.is_president
+                          ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40 hover:bg-indigo-500/30'
+                          : 'bg-slate-700/50 text-slate-300 border-slate-600 hover:bg-slate-700'
+                      }`}
                     >
-                      🗑️ 계정 삭제
+                      {p.is_president ? '👑 회장 해제' : '회장 지정'}
                     </button>
-                  )}
-                </div>
+
+                    {/* 계정 삭제 버튼 (본인은 숨김) */}
+                    {!isMe && (
+                      <button
+                        onClick={() => deleteAccount(p)}
+                        disabled={savingId === p.id}
+                        className="bg-red-500/10 hover:bg-red-500/20 text-red-400 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors disabled:opacity-50"
+                      >
+                        🗑️ 계정 삭제
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             )
           })}
