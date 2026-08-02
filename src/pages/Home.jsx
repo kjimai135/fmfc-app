@@ -16,7 +16,7 @@ const dashboardMenu = [
   { to: '/attendance', icon: '✅', label: '출석체크', desc: '경기·훈련 출석 체크', roles: ['admin', 'executive', 'captain', 'member'] },
   { to: '/attendance/history', icon: '🗓️', label: '출석현황', desc: '날짜별 출석 기록', roles: ['admin', 'executive', 'captain', 'member'] },
   { to: '/matches', icon: '⚽', label: '경기순서 & 결과', desc: '경기 일정과 결과 기록', roles: ['admin', 'executive', 'captain', 'member'] },
-  { to: '/calendar', icon: '📅', label: '구장 예약 달력', desc: '월별 구장 예약 일정', roles: ['admin', 'executive', 'captain', 'member'] },
+  { to: '/calendar', icon: '📅', label: '경기 스케쥴', desc: '월별 경기·구장 일정', roles: ['admin', 'executive', 'captain', 'member'] },
   { to: '/season-ranking', icon: '🏆', label: '순위표', desc: '시즌 순위 확인', roles: ['admin', 'executive', 'captain', 'member'] },
   { to: '/scorer-ranking', icon: '👟', label: '득점순위표', desc: '득점왕 순위 확인', roles: ['admin', 'executive', 'captain', 'member'] },
   { to: '/players', icon: '👤', label: '선수 관리', desc: '선수 등록·수정·삭제', roles: ['admin', 'executive'] },

@@ -45,8 +45,8 @@ const allMenu = [
   { to: '/attendance/history', label: '📋 출석현황', roles: ['admin', 'executive', 'captain', 'member'] },
   // ⚽ 경기순서&결과: 정회원도 열람 가능(단, 정회원은 화면 내부에서 읽기 전용 처리)
   { to: '/matches', label: '⚽ 경기순서&결과', roles: ['admin', 'executive', 'captain', 'member'] },
-  // 📅 구장 예약 달력: 전 회원 열람, 수정은 관리자·임원 (컴포넌트 내부 처리)
-  { to: '/calendar', label: '📅 구장 예약 달력', roles: ['admin', 'executive', 'captain', 'member'] },
+  // 📅 경기 스케쥴: 전 회원 열람(정회원은 확정 일정만), 수정은 관리자·임원 (컴포넌트 내부 처리)
+  { to: '/calendar', label: '📅 경기 스케쥴', roles: ['admin', 'executive', 'captain', 'member'] },
   { to: '/season-ranking', label: '📸 순위표', roles: ['admin', 'executive', 'captain', 'member'] },
   { to: '/scorer-ranking', label: '📸 득점순위표', roles: ['admin', 'executive', 'captain', 'member'] },
   { to: '/players', label: '👤 선수 관리', roles: ['admin', 'executive'] },
@@ -244,7 +244,7 @@ function AppContent() {
           {/* 경기 - 정회원도 열람 가능(단, 정회원은 컴포넌트 내부에서 읽기 전용) */}
           <Route path="/matches" element={<Protected allowed={['admin', 'executive', 'captain', 'member']}><MatchRecord /></Protected>} />
 
-          {/* 📅 구장 예약 달력 - 전 회원 열람, 수정은 관리자·임원(컴포넌트 내부 처리) */}
+          {/* 📅 경기 스케쥴 - 전 회원 열람(정회원은 확정 일정만), 수정은 관리자·임원(컴포넌트 내부 처리) */}
           <Route path="/calendar" element={<Protected allowed={['admin', 'executive', 'captain', 'member']}><CalendarPage /></Protected>} />
 
           {/* 순위표 / 득점순위표 */}

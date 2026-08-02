@@ -43,7 +43,7 @@ function CalendarPage() {
   // ✅ 수정 권한: 관리자·임원만
   const canEdit = role === 'admin' || role === 'executive'
   // 👀 전체 내용 열람 권한: 관리자·임원·주장(부주장)
-  //    → 정회원(member)은 '확정된 예약'만 볼 수 있음
+  //    → 정회원(member)은 '확정된 일정'만 볼 수 있음
   const canSeeAll = role === 'admin' || role === 'executive' || role === 'captain'
 
   const today = new Date()
@@ -103,7 +103,7 @@ function CalendarPage() {
     const from = toKey(new Date(year, month - 1, -7))
     const to = toKey(new Date(year, month - 1, lastDay + 7))
 
-    // 예약 조회 (정회원은 확정된 것만)
+    // 일정 조회 (정회원은 확정된 것만)
     let resQuery = supabase
       .from('reservations')
       .select('*')
@@ -150,7 +150,7 @@ function CalendarPage() {
     setPickerOpen(false)
   }
 
-  // 날짜별 예약 목록
+  // 날짜별 일정 목록
   function getReservations(key) {
     return reservations.filter((r) => r.date === key)
   }
@@ -187,7 +187,7 @@ function CalendarPage() {
     if (!canEdit || !editKey) return
     setSaving(true)
 
-    // 1) 해당 날짜 예약 전부 삭제 후 다시 저장
+    // 1) 해당 날짜 일정 전부 삭제 후 다시 저장
     const { error: delErr } = await supabase
       .from('reservations')
       .delete()
@@ -244,7 +244,7 @@ function CalendarPage() {
     <div className="max-w-full mx-auto">
       {/* 헤더 */}
       <div className="flex flex-wrap items-center gap-3 mb-3">
-        <h1 className="text-2xl font-bold text-white">📅 구장 예약 달력</h1>
+        <h1 className="text-2xl font-bold text-white">📅 경기 스케쥴</h1>
 
         {/* 📆 연/월 선택 버튼 + 팝오버 */}
         <div className="relative" ref={pickerRef}>
@@ -333,11 +333,11 @@ function CalendarPage() {
 
       {canEdit ? (
         <p className="text-slate-500 text-xs mb-2">
-          💡 날짜 칸을 클릭하면 예약을 추가·수정할 수 있습니다. (확정하면 노란색으로 표시)
+          💡 날짜 칸을 클릭하면 일정을 추가·수정할 수 있습니다. (확정하면 노란색으로 표시)
         </p>
       ) : !canSeeAll ? (
         <p className="text-slate-500 text-xs mb-2">
-          ✅ <b className="text-yellow-300">확정된 예약</b>만 표시됩니다. (구장 · 시간)
+          ✅ <b className="text-yellow-300">확정된 일정</b>만 표시됩니다. (구장 · 시간)
         </p>
       ) : null}
 
@@ -442,7 +442,7 @@ function CalendarPage() {
                       </div>
                     )}
 
-                    {/* 예약 목록 */}
+                    {/* 일정 목록 */}
                     {dayRes.map((r, i) => {
                       // 정회원: 구장 - 시간만 / 그 외: 구장 - 시간 - 예약자
                       const text = canSeeAll
@@ -504,7 +504,7 @@ function CalendarPage() {
             }}
           >
             <h2 className="text-white text-lg font-bold mb-1">
-              📅 {editKey.replace(/-/g, '. ')} 예약
+              📅 {editKey.replace(/-/g, '. ')} 일정
             </h2>
             <p className="text-slate-400 text-xs mb-4">
               구장 · 시간 · 예약자를 입력하세요. 확정하면 달력에 노란색으로 표시됩니다.
@@ -524,8 +524,8 @@ function CalendarPage() {
               />
             </div>
 
-            {/* 예약 항목들 */}
-            <label className="block text-slate-300 text-sm font-medium mb-2">예약 항목</label>
+            {/* 일정 항목들 */}
+            <label className="block text-slate-300 text-sm font-medium mb-2">일정 항목</label>
             <div className="space-y-2 mb-3">
               {editRows.map((r, idx) => (
                 <div key={idx} className="flex flex-wrap items-center gap-2 bg-slate-900/60 rounded-lg p-2">
@@ -586,7 +586,7 @@ function CalendarPage() {
               onClick={addRow}
               className="text-emerald-400 hover:text-emerald-300 text-sm mb-5"
             >
-              + 예약 추가
+              + 일정 추가
             </button>
 
             {/* 액션 버튼 (2배 크기) */}
