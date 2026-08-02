@@ -31,7 +31,11 @@ function TeamRoster() {
       .from('players')
       .select('*')
       .order('name')
-    setPlayers(data || [])
+
+    // ✅ 탈퇴한 선수(is_active === false) 제외
+    //    (is_active가 null이거나 없는 예전 데이터는 활동중으로 취급)
+    const activePlayers = (data || []).filter(p => p.is_active !== false)
+    setPlayers(activePlayers)
   }
 
   async function assignTeam(playerId, teamName) {
