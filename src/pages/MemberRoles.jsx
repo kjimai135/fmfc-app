@@ -374,6 +374,9 @@ function MemberRoles() {
           })}
         </div>
       )}
+
+      {/* ⬇️ 하단 여백용 빈 공간 (인라인 스타일로 강제 적용) */}
+      <div style={{ height: '70px', width: '100%' }} aria-hidden="true"></div>
     </div>
   )
 }

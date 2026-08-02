@@ -210,8 +210,8 @@ function AppContent() {
         ></div>
       )}
 
-      {/* 페이지 내용 */}
-      <main className="w-full max-w-6xl mx-auto p-4 sm:p-6 relative z-0">
+      {/* 페이지 내용 (pb-24: 모든 페이지 하단 여백 확보) */}
+      <main className="w-full max-w-6xl mx-auto p-4 sm:p-6 pb-24 sm:pb-28 relative z-0">
         <Routes>
           {/* 홈 - 권한별 분기 (대시보드 또는 준회원 페이지) */}
           <Route path="/" element={<HomeRedirect />} />
