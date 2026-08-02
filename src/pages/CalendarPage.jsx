@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 
-const WEEK_LABELS = ['월요일', '화요일', '수요일', '목요일', '금요일', '토요일', '일요일']
+const WEEK_LABELS = ['월', '화', '수', '목', '금', '토', '일']
 
 // 요일 헤더 색상 (월~금 하늘 / 토 주황 / 일 빨강) — 투명 톤
 function headerStyle(idx) {
@@ -323,23 +323,13 @@ function CalendarPage() {
         >
           오늘
         </button>
-
-        {!canEdit && (
-          <span className="text-xs bg-sky-500/15 text-sky-300 border border-sky-500/40 px-2 py-1 rounded-full">
-            👀 열람 전용
-          </span>
-        )}
       </div>
 
-      {canEdit ? (
+      {canEdit && (
         <p className="text-slate-500 text-xs mb-2">
           💡 날짜 칸을 클릭하면 일정을 추가·수정할 수 있습니다. (확정하면 노란색으로 표시)
         </p>
-      ) : !canSeeAll ? (
-        <p className="text-slate-500 text-xs mb-2">
-          ✅ <b className="text-yellow-300">확정된 일정</b>만 표시됩니다. (구장 · 시간)
-        </p>
-      ) : null}
+      )}
 
       {loading ? (
         <div className="text-center text-slate-400 py-20">⏳ 불러오는 중...</div>
@@ -360,9 +350,9 @@ function CalendarPage() {
                 style={{
                   ...headerStyle(i),
                   textAlign: 'center',
-                  fontSize: '12px',
+                  fontSize: '13px',
                   fontWeight: 700,
-                  padding: '5px 0',
+                  padding: '6px 0',
                   borderRight: i === 6 ? 'none' : '1px solid rgba(148,163,184,0.25)',
                   borderBottom: '1px solid rgba(148,163,184,0.3)',
                 }}
