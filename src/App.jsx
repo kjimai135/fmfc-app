@@ -24,6 +24,7 @@ import PendingApproval from './pages/PendingApproval'
 import NoticeBoard from './pages/NoticeBoard'
 import NoticeDetail from './pages/NoticeDetail'
 import LetterBoard from './pages/LetterBoard'
+import CalendarPage from './pages/CalendarPage'
 import NoticeTicker from './components/NoticeTicker'
 import logoImg from './assets/logo.png'
 import './App.css'
@@ -44,6 +45,8 @@ const allMenu = [
   { to: '/attendance/history', label: '📋 출석현황', roles: ['admin', 'executive', 'captain', 'member'] },
   // ⚽ 경기순서&결과: 정회원도 열람 가능(단, 정회원은 화면 내부에서 읽기 전용 처리)
   { to: '/matches', label: '⚽ 경기순서&결과', roles: ['admin', 'executive', 'captain', 'member'] },
+  // 📅 구장 예약 달력: 전 회원 열람, 수정은 관리자·임원 (컴포넌트 내부 처리)
+  { to: '/calendar', label: '📅 구장 예약 달력', roles: ['admin', 'executive', 'captain', 'member'] },
   { to: '/season-ranking', label: '📸 순위표', roles: ['admin', 'executive', 'captain', 'member'] },
   { to: '/scorer-ranking', label: '📸 득점순위표', roles: ['admin', 'executive', 'captain', 'member'] },
   { to: '/players', label: '👤 선수 관리', roles: ['admin', 'executive'] },
@@ -210,8 +213,8 @@ function AppContent() {
         ></div>
       )}
 
-      {/* 페이지 내용 (pb-24: 모든 페이지 하단 여백 확보) */}
-      <main className="w-full max-w-6xl mx-auto p-4 sm:p-6 pb-24 sm:pb-28 relative z-0">
+      {/* 페이지 내용 */}
+      <main className="w-full max-w-6xl mx-auto p-4 sm:p-6 relative z-0">
         <Routes>
           {/* 홈 - 권한별 분기 (대시보드 또는 준회원 페이지) */}
           <Route path="/" element={<HomeRedirect />} />
@@ -240,6 +243,9 @@ function AppContent() {
 
           {/* 경기 - 정회원도 열람 가능(단, 정회원은 컴포넌트 내부에서 읽기 전용) */}
           <Route path="/matches" element={<Protected allowed={['admin', 'executive', 'captain', 'member']}><MatchRecord /></Protected>} />
+
+          {/* 📅 구장 예약 달력 - 전 회원 열람, 수정은 관리자·임원(컴포넌트 내부 처리) */}
+          <Route path="/calendar" element={<Protected allowed={['admin', 'executive', 'captain', 'member']}><CalendarPage /></Protected>} />
 
           {/* 순위표 / 득점순위표 */}
           <Route path="/season-ranking" element={<Protected allowed={['admin', 'executive', 'captain', 'member']}><SeasonRanking /></Protected>} />
