@@ -2,6 +2,10 @@ import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 
+// 🎯 라운드 기준점: 이 날짜가 (13, 14)라운드
+const ANCHOR_DATE = '2026-08-08'
+const ANCHOR_FIRST_ROUND = 13 // 그 날의 첫 라운드 (두 번째는 +1)
+
 function MatchRecord() {
   const { role } = useAuth()
   // ✅ 수정 권한: 관리자·임원·주장(부주장)만. 정회원(member)은 열람만 가능(읽기 전용)
@@ -17,6 +21,9 @@ function MatchRecord() {
   const [loading, setLoading] = useState(false)
   const [showCreate, setShowCreate] = useState(false)
 
+  // 📅 스케쥴(구장/시간) + 라운드 정보
+  const [dayInfo, setDayInfo] = useState({ venue: '', time: '', rounds: null })
+
   // 📅 숨겨진 날짜 입력 참조
   const dateInputRef = useRef(null)
 
@@ -29,6 +36,7 @@ function MatchRecord() {
     if (selectedDate) {
       fetchMatches(selectedDate)
       fetchGoals(selectedDate)
+      fetchDayInfo(selectedDate)
     }
   }, [selectedDate])
 
@@ -63,6 +71,55 @@ function MatchRecord() {
       .select('*')
       .eq('game_date', date)
     setGoals(data || [])
+  }
+
+  // 📅 그 날의 장소/시간(스케쥴) + 라운드 계산
+  async function fetchDayInfo(date) {
+    // 1) 장소/시간: reservations의 확정 예약 우선, 없으면 아무 예약
+    const { data: resList } = await supabase
+      .from('reservations')
+      .select('*')
+      .eq('date', date)
+      .order('is_confirmed', { ascending: false })
+      .order('sort_order', { ascending: true })
+
+    let venue = ''
+    let time = ''
+    if (resList && resList.length > 0) {
+      const confirmed = resList.find(r => r.is_confirmed) || resList[0]
+      venue = confirmed.venue || ''
+      time = confirmed.time || ''
+    }
+
+    // 2) 라운드: 경기가 있는 모든 날짜를 모아 ANCHOR 기준으로 계산
+    const rounds = await calcRounds(date)
+
+    setDayInfo({ venue, time, rounds })
+  }
+
+  // 🔢 라운드 자동 계산 (경기일 1일 = 2라운드, ANCHOR_DATE = 13·14 고정)
+  async function calcRounds(date) {
+    // 경기가 존재하는 모든 날짜 조회
+    const { data } = await supabase
+      .from('matches')
+      .select('game_date')
+
+    const dates = [...new Set((data || []).map(d => d.game_date))]
+    // 기준점이 목록에 없을 수도 있으니 함께 넣어 정렬 (offset 계산용)
+    if (!dates.includes(ANCHOR_DATE)) dates.push(ANCHOR_DATE)
+    if (!dates.includes(date)) dates.push(date)
+    dates.sort() // YYYY-MM-DD 문자열 정렬 = 날짜순
+
+    const anchorIdx = dates.indexOf(ANCHOR_DATE)
+    const targetIdx = dates.indexOf(date)
+    if (anchorIdx === -1 || targetIdx === -1) return null
+
+    // ANCHOR로부터 몇 번째 경기일 차이인지 → 라운드 offset(2씩)
+    const offset = targetIdx - anchorIdx
+    const first = ANCHOR_FIRST_ROUND + offset * 2
+    const second = first + 1
+    if (first <= 0) return null
+    return { first, second }
   }
 
   // 🏆 이전까지의 누적 순위 계산 (오늘 날짜 제외)
@@ -192,6 +249,7 @@ function MatchRecord() {
     setShowCreate(false)
     setLoading(false)
     fetchMatches(selectedDate)
+    fetchDayInfo(selectedDate)
     alert(
       hasHistory
         ? `순위 기반으로 6경기가 생성되었습니다!\n🥇${first} 🥈${second} 🥉${third}`
@@ -231,7 +289,6 @@ function MatchRecord() {
       .from('matches')
       .update({ [field]: value })
       .eq('id', matchId)
-    // 팀 이름이 바뀌면 골의 team 값과 매칭이 달라질 수 있으므로 점수 재동기화
     await syncMatchScore(matchId)
     fetchMatches(selectedDate)
     fetchGoals(selectedDate)
@@ -306,6 +363,7 @@ function MatchRecord() {
 
     fetchMatches(selectedDate)
     fetchGoals(selectedDate)
+    fetchDayInfo(selectedDate)
     alert('삭제되었습니다.')
   }
 
@@ -402,13 +460,12 @@ function MatchRecord() {
     if (typeof el.showPicker === 'function') {
       el.showPicker()
     } else {
-      // showPicker 미지원 브라우저 폴백
       el.focus()
       el.click()
     }
   }
 
-  // 득점 영역 (한 팀) 렌더링 - 태그 + 통합 드롭다운 (그룹 없이 한 목록)
+  // 득점 영역 (한 팀) 렌더링 - 태그 + 통합 드롭다운
   function GoalArea({ match, field, teamGoals, align }) {
     const isRight = align === 'right'
     return (
@@ -463,16 +520,15 @@ function MatchRecord() {
       )}
 
       {/* 날짜 선택 (달력 버튼) + 오늘 경기 생성 버튼 */}
-      <div className="bg-slate-800/50 border border-slate-700 rounded-2xl p-4 mb-6">
+      <div className="bg-slate-800/50 border border-slate-700 rounded-2xl p-4 mb-4">
         <div className="flex flex-wrap items-center gap-3">
-          {/* 날짜 선택 버튼 (오늘 경기 생성 버튼과 동일한 크기) */}
+          {/* 날짜 선택 버튼 */}
           <div className="relative">
             <button
               onClick={openDatePicker}
               title="날짜 선택"
               className="flex items-center gap-2 bg-slate-900 hover:bg-slate-700 border border-slate-600 text-white px-5 py-2 rounded-xl font-semibold transition-colors"
             >
-              {/* 달력 아이콘 (흰색) */}
               <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
                 <line x1="16" y1="2" x2="16" y2="6"></line>
@@ -483,7 +539,6 @@ function MatchRecord() {
               <span className="text-slate-400 text-xs">▾</span>
             </button>
 
-            {/* 숨겨진 네이티브 날짜 입력 (버튼 클릭 시 이 피커가 바로 열림) */}
             <input
               ref={dateInputRef}
               type="date"
@@ -496,7 +551,7 @@ function MatchRecord() {
             />
           </div>
 
-          {/* 오늘 경기 생성 버튼 (달력 바로 옆) */}
+          {/* 오늘 경기 생성 버튼 */}
           {canEdit && matches.length === 0 && (
             <button
               onClick={() => setShowCreate(true)}
@@ -508,7 +563,28 @@ function MatchRecord() {
         </div>
       </div>
 
-      {/* 경기 생성 모달 (수정 권한자만) */}
+      {/* 📍 경기 정보 (장소 / 시간 / 라운드) — 경기가 있는 날만 표시 */}
+      {matches.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 mb-6">
+          {dayInfo.rounds && (
+            <span className="inline-flex items-center gap-1 bg-emerald-500/15 text-emerald-300 text-sm font-bold px-3 py-1.5 rounded-lg border border-emerald-500/30">
+              🏆 {dayInfo.rounds.first}·{dayInfo.rounds.second} 라운드
+            </span>
+          )}
+          {dayInfo.time && (
+            <span className="inline-flex items-center gap-1 bg-slate-700/60 text-slate-100 text-sm font-medium px-3 py-1.5 rounded-lg">
+              ⏰ {dayInfo.time}
+            </span>
+          )}
+          {dayInfo.venue && (
+            <span className="inline-flex items-center gap-1 bg-slate-700/60 text-slate-100 text-sm font-medium px-3 py-1.5 rounded-lg">
+              📍 {dayInfo.venue}
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* 경기 생성 모달 */}
       {canEdit && showCreate && (
         <div className="bg-slate-800 rounded-2xl p-6 border border-slate-700 mb-6">
           <h2 className="text-lg font-bold text-white mb-3">📅 {selectedDate} 경기 생성</h2>
@@ -556,7 +632,6 @@ function MatchRecord() {
               const matchGoals = goals.filter(g => g.match_id === match.id)
               const goalsA = matchGoals.filter(g => g.team === match.team_a)
               const goalsB = matchGoals.filter(g => g.team === match.team_b)
-              // ✅ 점수 = 득점(골) 개수
               const scoreA = goalsA.length
               const scoreB = goalsB.length
               const colorA = getTeamColor(match.team_a)
@@ -602,7 +677,7 @@ function MatchRecord() {
                         )}
                       </div>
 
-                      {/* 스코어 (골 개수 자동 반영, +/- 버튼 없음) */}
+                      {/* 스코어 (골 개수) */}
                       <div className="flex items-center gap-3">
                         <span
                           className="text-3xl font-black tabular-nums leading-none w-7 text-center"
@@ -640,7 +715,7 @@ function MatchRecord() {
                       </div>
                     </div>
 
-                    {/* 골 기록 (통합 드롭다운) */}
+                    {/* 골 기록 */}
                     <div className="grid grid-cols-2 gap-3 pt-3 border-t border-slate-700/40">
                       <GoalArea match={match} field="score_a" teamGoals={goalsA} align="right" />
                       <GoalArea match={match} field="score_b" teamGoals={goalsB} align="left" />
@@ -697,7 +772,7 @@ function MatchRecord() {
             </div>
           )}
 
-          {/* 🔒 삭제 버튼: 수정 권한자만 */}
+          {/* 🔒 삭제 버튼 */}
           {canEdit && (
             <div className="text-right">
               <button
