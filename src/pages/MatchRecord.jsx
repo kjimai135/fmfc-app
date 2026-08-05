@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 
@@ -14,14 +14,15 @@ function MatchRecord() {
   const [selectedDate, setSelectedDate] = useState(
     new Date(new Date().getTime() + 9 * 60 * 60 * 1000).toISOString().split('T')[0]
   )
-  const [availableDates, setAvailableDates] = useState([])
   const [loading, setLoading] = useState(false)
   const [showCreate, setShowCreate] = useState(false)
+
+  // 📅 숨겨진 날짜 입력 참조
+  const dateInputRef = useRef(null)
 
   useEffect(() => {
     fetchTeams()
     fetchPlayers()
-    fetchAvailableDates()
   }, [])
 
   useEffect(() => {
@@ -47,18 +48,6 @@ function MatchRecord() {
     setPlayers(data || [])
   }
 
-  async function fetchAvailableDates() {
-    const { data } = await supabase
-      .from('matches')
-      .select('game_date')
-      .order('game_date', { ascending: false })
-
-    if (data) {
-      const unique = [...new Set(data.map(d => d.game_date))]
-      setAvailableDates(unique)
-    }
-  }
-
   async function fetchMatches(date) {
     const { data } = await supabase
       .from('matches')
@@ -77,9 +66,7 @@ function MatchRecord() {
   }
 
   // 🏆 이전까지의 누적 순위 계산 (오늘 날짜 제외)
-  // SeasonRanking.jsx의 getStandings() 로직과 동일
   async function getPreviousStandings() {
-    // 오늘(selectedDate)을 제외한 모든 과거 경기 가져오기
     const { data: allMatches } = await supabase
       .from('matches')
       .select('*')
@@ -87,11 +74,8 @@ function MatchRecord() {
       .order('game_date', { ascending: false })
 
     const pastMatches = allMatches || []
-
-    // 날짜별로 그룹화
     const dates = [...new Set(pastMatches.map(m => m.game_date))]
 
-    // 대진별 합산 (전반 + 후반)
     const allMatchups = []
     for (const date of dates) {
       const dayMatches = pastMatches
@@ -124,7 +108,6 @@ function MatchRecord() {
       }
     }
 
-    // 승점 계산
     const standings = {}
     for (const team of teams) {
       standings[team.name] = {
@@ -151,7 +134,6 @@ function MatchRecord() {
       }
     }
 
-    // 정렬: 승점 → 골득실 → 다득점
     return Object.values(standings).sort((a, b) => {
       if (b.points !== a.points) return b.points - a.points
       const gdA = a.goalsFor - a.goalsAgainst
@@ -162,7 +144,7 @@ function MatchRecord() {
   }
 
   async function createDayMatches() {
-    if (!canEdit) return // 🔒 정회원 차단
+    if (!canEdit) return
     if (teams.length < 3) {
       alert('팀이 3개 이상 필요합니다!')
       return
@@ -176,11 +158,8 @@ function MatchRecord() {
 
     setLoading(true)
 
-    // 🏆 이전 순위 계산
     const standings = await getPreviousStandings()
 
-    // 순위대로 팀 배정 (1위, 2위, 3위)
-    // 과거 경기가 없으면 teams의 display_order 순서 사용
     let rankedTeams
     const hasHistory = standings.some(s => s.points > 0 || s.goalsFor > 0)
 
@@ -192,17 +171,6 @@ function MatchRecord() {
 
     const [first, second, third] = rankedTeams
 
-    // 🥇 1위 → 2,3,5,6쿼터
-    // 🥈 2위 → 1,2,4,5쿼터
-    // 🥉 3위 → 1,3,4,6쿼터
-    //
-    // 쿼터별 대진:
-    // 1Q: 2위 vs 3위
-    // 2Q: 1위 vs 2위
-    // 3Q: 1위 vs 3위
-    // 4Q: 2위 vs 3위
-    // 5Q: 1위 vs 2위
-    // 6Q: 1위 vs 3위
     const dayMatches = [
       { match_number: 1, half: '전반', team_a: second, team_b: third },
       { match_number: 2, half: '전반', team_a: first, team_b: second },
@@ -224,7 +192,6 @@ function MatchRecord() {
     setShowCreate(false)
     setLoading(false)
     fetchMatches(selectedDate)
-    fetchAvailableDates()
     alert(
       hasHistory
         ? `순위 기반으로 6경기가 생성되었습니다!\n🥇${first} 🥈${second} 🥉${third}`
@@ -232,18 +199,20 @@ function MatchRecord() {
     )
   }
 
-  async function updateScore(matchId, field, value) {
-    if (!canEdit) return // 🔒 정회원 차단
-    const score = Math.max(0, parseInt(value) || 0)
+  // ➕➖ 점수 증감 (현재 값 기준)
+  async function bumpScore(match, field, delta) {
+    if (!canEdit) return
+    const cur = field === 'score_a' ? match.score_a : match.score_b
+    const next = Math.max(0, (cur || 0) + delta)
     await supabase
       .from('matches')
-      .update({ [field]: score })
-      .eq('id', matchId)
+      .update({ [field]: next })
+      .eq('id', match.id)
     fetchMatches(selectedDate)
   }
 
   async function updateTeamName(matchId, field, value) {
-    if (!canEdit) return // 🔒 정회원 차단
+    if (!canEdit) return
     await supabase
       .from('matches')
       .update({ [field]: value })
@@ -252,7 +221,7 @@ function MatchRecord() {
   }
 
   async function addGoal(matchId, playerId, playerName, team) {
-    if (!canEdit) return // 🔒 정회원 차단
+    if (!canEdit) return
     await supabase.from('goals').insert({
       match_id: matchId,
       game_date: selectedDate,
@@ -263,14 +232,66 @@ function MatchRecord() {
     fetchGoals(selectedDate)
   }
 
+  // 🥅🎯 특수 골(자책골/PK) 추가 - 득점자 없이 점수만 반영
+  async function addSpecialGoal(match, field, goalType) {
+    if (!canEdit) return
+    const team = field === 'score_a' ? match.team_a : match.team_b
+
+    const cur = field === 'score_a' ? match.score_a : match.score_b
+    await supabase
+      .from('matches')
+      .update({ [field]: (cur || 0) + 1 })
+      .eq('id', match.id)
+
+    await supabase.from('goals').insert({
+      match_id: match.id,
+      game_date: selectedDate,
+      player_id: null,
+      player_name: goalType,
+      team: team,
+    })
+
+    fetchMatches(selectedDate)
+    fetchGoals(selectedDate)
+  }
+
+  // 통합 드롭다운 처리: 선수골 / PK / 자책골
+  function handleGoalSelect(match, field, value) {
+    if (!value) return
+    if (value === '__PK__') {
+      addSpecialGoal(match, field, 'PK(핸디캡)')
+    } else if (value === '__OG__') {
+      addSpecialGoal(match, field, '자책골')
+    } else {
+      const p = players.find(p => p.id === value)
+      const team = field === 'score_a' ? match.team_a : match.team_b
+      if (p) addGoal(match.id, p.id, p.name, team)
+    }
+  }
+
   async function removeGoal(goalId) {
-    if (!canEdit) return // 🔒 정회원 차단
+    if (!canEdit) return
+    const g = goals.find(x => x.id === goalId)
     await supabase.from('goals').delete().eq('id', goalId)
+
+    if (g && !g.player_id) {
+      const match = matches.find(m => m.id === g.match_id)
+      if (match) {
+        const field = g.team === match.team_a ? 'score_a' : 'score_b'
+        const cur = field === 'score_a' ? match.score_a : match.score_b
+        await supabase
+          .from('matches')
+          .update({ [field]: Math.max(0, (cur || 0) - 1) })
+          .eq('id', match.id)
+        fetchMatches(selectedDate)
+      }
+    }
+
     fetchGoals(selectedDate)
   }
 
   async function deleteDay() {
-    if (!canEdit) return // 🔒 정회원 차단
+    if (!canEdit) return
     if (!window.confirm(`${selectedDate} 경기 기록을 전부 삭제하시겠습니까?`)) return
 
     for (const m of matches) {
@@ -279,7 +300,6 @@ function MatchRecord() {
 
     fetchMatches(selectedDate)
     fetchGoals(selectedDate)
-    fetchAvailableDates()
     alert('삭제되었습니다.')
   }
 
@@ -289,15 +309,16 @@ function MatchRecord() {
     const color = team?.color || '#ffffff'
     const c = color.toLowerCase()
     if (c === '#1d4ed8' || c === '#2563eb' || c === '#1e40af' || c === '#1e3a8a') {
-      return '#60a5fa' // 밝은 파랑
+      return '#60a5fa'
     }
     return color
   }
 
-  const teamEmojis = ['⚪', '⚫', '🟡', '🔵', '🟣', '🟠']
-  const getTeamEmoji = (teamName) => {
-    const idx = teams.findIndex(t => t.name === teamName)
-    return teamEmojis[idx] || '⚽'
+  // 특수 골 표시용 라벨
+  function goalLabel(g) {
+    if (g.player_name === '자책골') return '🥅 자책골'
+    if (g.player_name === 'PK(핸디캡)' || g.player_name === 'PK') return '🎯 PK(핸디캡)'
+    return `⚽ ${g.player_name}`
   }
 
   function getMatchupResults() {
@@ -337,10 +358,6 @@ function MatchRecord() {
           pairs.push({
             teamA: first.team_a,
             teamB: first.team_b,
-            firstHalf: `${first.score_a} : ${first.score_b}`,
-            secondHalf: first.team_a === second.team_a
-              ? `${second.score_a} : ${second.score_b}`
-              : `${second.score_b} : ${second.score_a}`,
             total: `${totalA} : ${totalB}`,
             totalA,
             totalB,
@@ -365,69 +382,136 @@ function MatchRecord() {
     ...matches.map(m => m.team_b),
   ])]
 
+  // 날짜 표기 (2026. 08. 04.)
+  function formatDate(d) {
+    if (!d) return ''
+    const [y, m, day] = d.split('-')
+    return `${y}. ${m}. ${day}.`
+  }
+
+  // 📅 달력 바로 열기 (숨겨진 date input의 네이티브 피커 호출)
+  function openDatePicker() {
+    const el = dateInputRef.current
+    if (!el) return
+    if (typeof el.showPicker === 'function') {
+      el.showPicker()
+    } else {
+      // showPicker 미지원 브라우저 폴백
+      el.focus()
+      el.click()
+    }
+  }
+
+  // 득점 영역 (한 팀) 렌더링 - 태그 + 통합 드롭다운 (그룹 없이 한 목록)
+  function GoalArea({ match, field, teamGoals, align }) {
+    const isRight = align === 'right'
+    return (
+      <div className={`flex flex-col ${isRight ? 'items-end' : 'items-start'}`}>
+        <div className={`flex flex-wrap gap-1 ${isRight ? 'justify-end' : 'justify-start'} mb-1.5 min-h-[20px]`}>
+          {teamGoals.length === 0 && (
+            <span className="text-slate-600 text-[11px]">득점 없음</span>
+          )}
+          {teamGoals.map(g => (
+            <span
+              key={g.id}
+              className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] ${
+                g.player_id ? 'bg-slate-700/60 text-white' : 'bg-amber-500/20 text-amber-200'
+              }`}
+            >
+              {goalLabel(g)}
+              {canEdit && (
+                <button onClick={() => removeGoal(g.id)} className="text-red-400 hover:text-red-300 leading-none">✕</button>
+              )}
+            </span>
+          ))}
+        </div>
+        {canEdit && (
+          <select
+            value=""
+            onChange={(e) => { handleGoalSelect(match, field, e.target.value); e.target.value = '' }}
+            className={`w-full bg-slate-800/70 border border-slate-600 rounded-lg px-2 py-1.5 text-white text-xs focus:outline-none focus:border-emerald-500 ${isRight ? 'text-right' : ''}`}
+          >
+            <option value="">+ 득점 추가</option>
+            <option value="__PK__">🎯 PK(핸디캡)</option>
+            <option value="__OG__">🥅 자책골</option>
+            {players.map(p => (
+              <option key={p.id} value={p.id}>{p.name} {p.current_team ? `(${p.current_team})` : ''}</option>
+            ))}
+          </select>
+        )}
+      </div>
+    )
+  }
+
   return (
     <div className="max-w-4xl mx-auto">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
-        <h1 className="text-3xl font-bold text-white">⚽ 경기순서&결과</h1>
-        {/* 🔒 경기 생성 버튼: 수정 권한자만 */}
-        {canEdit && matches.length === 0 && (
-          <button
-            onClick={() => setShowCreate(true)}
-            className="bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-3 rounded-xl font-semibold transition-colors"
-          >
-            + 오늘 경기 생성
-          </button>
-        )}
+      <div className="mb-6">
+        <h1 className="text-3xl font-bold text-white">⚽ 경기순서 & 결과</h1>
       </div>
 
       {/* 🔒 읽기 전용 안내 (정회원) */}
       {!canEdit && (
-        <div className="bg-slate-800/60 border border-slate-700 rounded-xl px-4 py-3 mb-6 text-slate-400 text-sm">
+        <div className="bg-sky-500/10 border border-sky-500/30 rounded-xl px-4 py-3 mb-6 text-sky-200 text-sm">
           👀 열람 전용 화면입니다. 경기 기록 수정은 관리자·임원·주장만 가능합니다.
         </div>
       )}
 
-      {/* 날짜 선택 */}
-      <div className="flex flex-col sm:flex-row gap-4 mb-6">
-        <div>
-          <label className="block text-slate-300 text-sm font-medium mb-2">날짜 선택</label>
-          <input
-            type="date"
-            value={selectedDate}
-            onChange={(e) => setSelectedDate(e.target.value)}
-            className="bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-emerald-500"
-          />
-        </div>
-        <div>
-          <label className="block text-slate-300 text-sm font-medium mb-2">최근 경기</label>
-          <div className="flex flex-wrap gap-2">
-            {availableDates.slice(0, 6).map(date => (
-              <button
-                key={date}
-                onClick={() => setSelectedDate(date)}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  selectedDate === date
-                    ? 'bg-emerald-500 text-white'
-                    : 'bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700'
-                }`}
-              >
-                {date}
-              </button>
-            ))}
+      {/* 날짜 선택 (달력 버튼) + 오늘 경기 생성 버튼 */}
+      <div className="bg-slate-800/50 border border-slate-700 rounded-2xl p-4 mb-6">
+        <div className="flex flex-wrap items-center gap-3">
+          {/* 날짜 선택 버튼 (오늘 경기 생성 버튼과 동일한 크기) */}
+          <div className="relative">
+            <button
+              onClick={openDatePicker}
+              title="날짜 선택"
+              className="flex items-center gap-2 bg-slate-900 hover:bg-slate-700 border border-slate-600 text-white px-5 py-2 rounded-xl font-semibold transition-colors"
+            >
+              {/* 달력 아이콘 (흰색) */}
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                <line x1="16" y1="2" x2="16" y2="6"></line>
+                <line x1="8" y1="2" x2="8" y2="6"></line>
+                <line x1="3" y1="10" x2="21" y2="10"></line>
+              </svg>
+              <span className="text-emerald-400 font-bold leading-none">{formatDate(selectedDate)}</span>
+              <span className="text-slate-400 text-xs">▾</span>
+            </button>
+
+            {/* 숨겨진 네이티브 날짜 입력 (버튼 클릭 시 이 피커가 바로 열림) */}
+            <input
+              ref={dateInputRef}
+              type="date"
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+              className="absolute left-0 bottom-0 opacity-0 pointer-events-none w-0 h-0"
+              style={{ colorScheme: 'dark' }}
+              tabIndex={-1}
+              aria-hidden="true"
+            />
           </div>
+
+          {/* 오늘 경기 생성 버튼 (달력 바로 옆) */}
+          {canEdit && matches.length === 0 && (
+            <button
+              onClick={() => setShowCreate(true)}
+              className="bg-emerald-500 hover:bg-emerald-600 text-white px-5 py-2 rounded-xl font-semibold transition-colors shadow-lg shadow-emerald-500/20"
+            >
+              + 오늘 경기 생성
+            </button>
+          )}
         </div>
       </div>
 
       {/* 경기 생성 모달 (수정 권한자만) */}
       {canEdit && showCreate && (
-        <div className="bg-slate-800 rounded-xl p-6 border border-slate-700 mb-6">
+        <div className="bg-slate-800 rounded-2xl p-6 border border-slate-700 mb-6">
           <h2 className="text-lg font-bold text-white mb-3">📅 {selectedDate} 경기 생성</h2>
           <p className="text-slate-400 text-sm mb-2">6경기 (1Q ~ 6Q)가 자동 생성됩니다.</p>
           <p className="text-slate-500 text-xs mb-4">
             📊 이전 순위표를 기반으로 팀이 자동 배정됩니다.
           </p>
 
-          <div className="bg-slate-700/50 rounded-lg p-3 mb-4 text-sm text-slate-300">
+          <div className="bg-slate-700/50 rounded-lg p-3 mb-4 text-sm text-slate-300 space-y-1">
             <p>🥇 1위: 2,3,5,6쿼터</p>
             <p>🥈 2위: 1,2,4,5쿼터</p>
             <p>🥉 3위: 1,3,4,6쿼터</p>
@@ -437,7 +521,7 @@ function MatchRecord() {
             <button
               onClick={createDayMatches}
               disabled={loading}
-              className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white py-3 rounded-xl font-semibold transition-colors"
+              className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white py-3 rounded-xl font-semibold transition-colors disabled:opacity-50"
             >
               {loading ? '생성 중...' : '✅ 경기 생성'}
             </button>
@@ -461,144 +545,128 @@ function MatchRecord() {
       ) : (
         <>
           {/* 개별 경기 스코어 */}
-          <div className="space-y-4 mb-8">
+          <div className="space-y-3 mb-8">
             {matches.map(match => {
               const matchGoals = goals.filter(g => g.match_id === match.id)
               const goalsA = matchGoals.filter(g => g.team === match.team_a)
               const goalsB = matchGoals.filter(g => g.team === match.team_b)
               const colorA = getTeamColor(match.team_a)
               const colorB = getTeamColor(match.team_b)
+              const aWin = match.score_a > match.score_b
+              const bWin = match.score_b > match.score_a
 
               return (
-                <div key={match.id} className="bg-slate-800 rounded-xl border border-slate-700 p-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="text-emerald-400 text-sm font-bold">{match.match_number}Q</span>
+                <div
+                  key={match.id}
+                  className="rounded-2xl border border-slate-700 overflow-hidden"
+                  style={{
+                    background: `linear-gradient(135deg, ${colorA}12 0%, rgba(15,23,42,0.6) 40%, rgba(15,23,42,0.6) 60%, ${colorB}12 100%)`,
+                  }}
+                >
+                  {/* 쿼터 라벨 */}
+                  <div className="flex items-center justify-center py-1 bg-slate-900/50 border-b border-slate-700/50">
+                    <span className="text-emerald-400 text-xs font-extrabold tracking-wide">
+                      {match.match_number}Q
+                    </span>
                   </div>
 
-                  {/* 팀 이름 + 스코어 */}
-                  <div className="flex items-center justify-center gap-3 mb-2">
-                    <div className="text-center flex-1">
-                      {canEdit ? (
-                        <select
-                          value={match.team_a}
-                          onChange={(e) => updateTeamName(match.id, 'team_a', e.target.value)}
-                          className="bg-slate-700 border border-slate-600 rounded-lg px-2 py-1 text-lg font-extrabold focus:outline-none focus:border-emerald-500 text-center"
-                          style={{ color: colorA }}
-                        >
-                          {allTeamNames.map(name => (
-                            <option key={name} value={name} style={{ color: '#fff' }}>{name}</option>
-                          ))}
-                        </select>
-                      ) : (
-                        <p className="text-lg font-extrabold text-center" style={{ color: colorA }}>
-                          {match.team_a}
-                        </p>
-                      )}
-                    </div>
+                  <div className="p-3">
+                    {/* 팀 이름 + 스코어 */}
+                    <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 mb-3">
+                      {/* 팀 A */}
+                      <div className="text-center">
+                        {canEdit ? (
+                          <select
+                            value={match.team_a}
+                            onChange={(e) => updateTeamName(match.id, 'team_a', e.target.value)}
+                            className="bg-slate-800/80 border border-slate-600 rounded-lg px-2 py-1.5 text-base font-extrabold focus:outline-none focus:border-emerald-500 text-center w-full max-w-[120px]"
+                            style={{ color: colorA }}
+                          >
+                            {allTeamNames.map(name => (
+                              <option key={name} value={name} style={{ color: '#fff' }}>{name}</option>
+                            ))}
+                          </select>
+                        ) : (
+                          <p className="text-lg font-extrabold" style={{ color: colorA, opacity: bWin ? 0.55 : 1 }}>
+                            {match.team_a}
+                          </p>
+                        )}
+                      </div>
 
-                    {canEdit ? (
-                      <input
-                        type="number"
-                        min="0"
-                        value={match.score_a}
-                        onChange={(e) => updateScore(match.id, 'score_a', e.target.value)}
-                        className="w-16 bg-slate-700 border border-slate-600 rounded-lg px-2 py-2 text-white text-center text-xl font-bold focus:outline-none focus:border-emerald-500"
-                      />
-                    ) : (
-                      <span className="w-16 text-white text-center text-xl font-bold">{match.score_a}</span>
-                    )}
-
-                    <span className="text-slate-400 text-xl font-bold">:</span>
-
-                    {canEdit ? (
-                      <input
-                        type="number"
-                        min="0"
-                        value={match.score_b}
-                        onChange={(e) => updateScore(match.id, 'score_b', e.target.value)}
-                        className="w-16 bg-slate-700 border border-slate-600 rounded-lg px-2 py-2 text-white text-center text-xl font-bold focus:outline-none focus:border-emerald-500"
-                      />
-                    ) : (
-                      <span className="w-16 text-white text-center text-xl font-bold">{match.score_b}</span>
-                    )}
-
-                    <div className="text-center flex-1">
-                      {canEdit ? (
-                        <select
-                          value={match.team_b}
-                          onChange={(e) => updateTeamName(match.id, 'team_b', e.target.value)}
-                          className="bg-slate-700 border border-slate-600 rounded-lg px-2 py-1 text-lg font-extrabold focus:outline-none focus:border-emerald-500 text-center"
-                          style={{ color: colorB }}
-                        >
-                          {allTeamNames.map(name => (
-                            <option key={name} value={name} style={{ color: '#fff' }}>{name}</option>
-                          ))}
-                        </select>
-                      ) : (
-                        <p className="text-lg font-extrabold text-center" style={{ color: colorB }}>
-                          {match.team_b}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* 골 기록 */}
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="flex flex-col items-end">
-                      <p className="text-xs mb-2" style={{ color: colorA }}>⚽ {match.team_a} 골</p>
-                      {goalsA.map(g => (
-                        <div key={g.id} className="flex items-center justify-end gap-2 bg-slate-700/50 rounded px-2 py-1 mb-1 w-full">
-                          <span className="text-white text-xs">{g.player_name}</span>
+                      {/* 스코어 */}
+                      <div className="flex items-center gap-2">
+                        {/* A 점수 */}
+                        <div className="flex items-center gap-1">
                           {canEdit && (
-                            <button onClick={() => removeGoal(g.id)} className="text-red-400 text-xs">✕</button>
+                            <button
+                              onClick={() => bumpScore(match, 'score_a', -1)}
+                              className="w-6 h-6 rounded-full bg-slate-700 hover:bg-slate-600 text-slate-300 text-sm leading-none flex items-center justify-center"
+                            >−</button>
+                          )}
+                          <span
+                            className="text-3xl font-black tabular-nums leading-none w-7 text-center"
+                            style={{ color: aWin ? '#fef08a' : '#ffffff' }}
+                          >
+                            {match.score_a}
+                          </span>
+                          {canEdit && (
+                            <button
+                              onClick={() => bumpScore(match, 'score_a', 1)}
+                              className="w-6 h-6 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white text-sm leading-none flex items-center justify-center"
+                            >+</button>
                           )}
                         </div>
-                      ))}
-                      {canEdit && (
-                        <select
-                          onChange={(e) => {
-                            if (e.target.value) {
-                              const p = players.find(p => p.id === e.target.value)
-                              if (p) addGoal(match.id, p.id, p.name, match.team_a)
-                              e.target.value = ''
-                            }
-                          }}
-                          className="w-full bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white text-xs mt-1 focus:outline-none focus:border-emerald-500 text-right"
-                        >
-                          <option value="">+ 골 추가 (전체 선수)</option>
-                          {players.map(p => (
-                            <option key={p.id} value={p.id}>{p.name} {p.current_team ? `(${p.current_team})` : ''}</option>
-                          ))}
-                        </select>
-                      )}
-                    </div>
-                    <div className="flex flex-col items-start">
-                      <p className="text-xs mb-2" style={{ color: colorB }}>⚽ {match.team_b} 골</p>
-                      {goalsB.map(g => (
-                        <div key={g.id} className="flex items-center justify-start gap-2 bg-slate-700/50 rounded px-2 py-1 mb-1 w-full">
+
+                        <span className="text-slate-500 text-xl font-bold">:</span>
+
+                        {/* B 점수 */}
+                        <div className="flex items-center gap-1">
                           {canEdit && (
-                            <button onClick={() => removeGoal(g.id)} className="text-red-400 text-xs">✕</button>
+                            <button
+                              onClick={() => bumpScore(match, 'score_b', -1)}
+                              className="w-6 h-6 rounded-full bg-slate-700 hover:bg-slate-600 text-slate-300 text-sm leading-none flex items-center justify-center"
+                            >−</button>
                           )}
-                          <span className="text-white text-xs">{g.player_name}</span>
+                          <span
+                            className="text-3xl font-black tabular-nums leading-none w-7 text-center"
+                            style={{ color: bWin ? '#fef08a' : '#ffffff' }}
+                          >
+                            {match.score_b}
+                          </span>
+                          {canEdit && (
+                            <button
+                              onClick={() => bumpScore(match, 'score_b', 1)}
+                              className="w-6 h-6 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white text-sm leading-none flex items-center justify-center"
+                            >+</button>
+                          )}
                         </div>
-                      ))}
-                      {canEdit && (
-                        <select
-                          onChange={(e) => {
-                            if (e.target.value) {
-                              const p = players.find(p => p.id === e.target.value)
-                              if (p) addGoal(match.id, p.id, p.name, match.team_b)
-                              e.target.value = ''
-                            }
-                          }}
-                          className="w-full bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white text-xs mt-1 focus:outline-none focus:border-emerald-500"
-                        >
-                          <option value="">+ 골 추가 (전체 선수)</option>
-                          {players.map(p => (
-                            <option key={p.id} value={p.id}>{p.name} {p.current_team ? `(${p.current_team})` : ''}</option>
-                          ))}
-                        </select>
-                      )}
+                      </div>
+
+                      {/* 팀 B */}
+                      <div className="text-center">
+                        {canEdit ? (
+                          <select
+                            value={match.team_b}
+                            onChange={(e) => updateTeamName(match.id, 'team_b', e.target.value)}
+                            className="bg-slate-800/80 border border-slate-600 rounded-lg px-2 py-1.5 text-base font-extrabold focus:outline-none focus:border-emerald-500 text-center w-full max-w-[120px]"
+                            style={{ color: colorB }}
+                          >
+                            {allTeamNames.map(name => (
+                              <option key={name} value={name} style={{ color: '#fff' }}>{name}</option>
+                            ))}
+                          </select>
+                        ) : (
+                          <p className="text-lg font-extrabold" style={{ color: colorB, opacity: aWin ? 0.55 : 1 }}>
+                            {match.team_b}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* 골 기록 (통합 드롭다운) */}
+                    <div className="grid grid-cols-2 gap-3 pt-3 border-t border-slate-700/40">
+                      <GoalArea match={match} field="score_a" teamGoals={goalsA} align="right" />
+                      <GoalArea match={match} field="score_b" teamGoals={goalsB} align="left" />
                     </div>
                   </div>
                 </div>
@@ -608,34 +676,41 @@ function MatchRecord() {
 
           {/* 합산 결과 */}
           {matchupResults.length > 0 && (
-            <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 mb-6">
+            <div className="bg-slate-800 rounded-2xl border border-slate-700 p-6 mb-6">
               <h2 className="text-lg font-bold text-white mb-4">📊 합산 결과</h2>
-              <div className="space-y-4">
+              <div className="space-y-3">
                 {matchupResults.map((r, idx) => {
                   const colorA = getTeamColor(r.teamA)
                   const colorB = getTeamColor(r.teamB)
+                  const isDraw = r.result === '무'
                   return (
-                    <div key={idx} className="bg-slate-700/30 rounded-xl p-4">
-                      <div className="flex items-center justify-center gap-6">
-                        <div className="text-center flex-1">
-                          <p className="font-extrabold text-xl" style={{ color: colorA, opacity: r.result === r.teamB ? 0.5 : 1 }}>
+                    <div
+                      key={idx}
+                      className="rounded-xl p-4 border border-slate-700/50"
+                      style={{
+                        background: `linear-gradient(135deg, ${colorA}15 0%, rgba(15,23,42,0.5) 45%, rgba(15,23,42,0.5) 55%, ${colorB}15 100%)`,
+                      }}
+                    >
+                      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4">
+                        <div className="text-center">
+                          <p className="font-extrabold text-lg" style={{ color: colorA, opacity: r.result === r.teamB ? 0.45 : 1 }}>
                             {r.teamA}
                           </p>
                         </div>
                         <div className="text-center">
-                          <p className="text-white text-2xl font-bold">{r.total}</p>
+                          <p className="text-white text-2xl font-black tabular-nums">{r.total}</p>
                         </div>
-                        <div className="text-center flex-1">
-                          <p className="font-extrabold text-xl" style={{ color: colorB, opacity: r.result === r.teamA ? 0.5 : 1 }}>
+                        <div className="text-center">
+                          <p className="font-extrabold text-lg" style={{ color: colorB, opacity: r.result === r.teamA ? 0.45 : 1 }}>
                             {r.teamB}
                           </p>
                         </div>
                       </div>
                       <div className="text-center mt-2">
-                        {r.result === '무' ? (
-                          <span className="bg-yellow-500/20 text-yellow-400 px-3 py-1 rounded-full text-sm">무승부</span>
+                        {isDraw ? (
+                          <span className="bg-yellow-500/20 text-yellow-400 px-3 py-1 rounded-full text-xs font-semibold">무승부</span>
                         ) : (
-                          <span className="bg-emerald-500/20 text-emerald-400 px-3 py-1 rounded-full text-sm">{r.result} 승!</span>
+                          <span className="bg-emerald-500/20 text-emerald-400 px-3 py-1 rounded-full text-xs font-semibold">🏆 {r.result} 승!</span>
                         )}
                       </div>
                     </div>
@@ -650,7 +725,7 @@ function MatchRecord() {
             <div className="text-right">
               <button
                 onClick={deleteDay}
-                className="bg-red-500/10 hover:bg-red-500/20 text-red-400 px-4 py-2 rounded-lg text-sm"
+                className="bg-red-500/10 hover:bg-red-500/20 text-red-400 px-4 py-2 rounded-lg text-sm transition-colors"
               >
                 🗑️ 이 날 경기 전체 삭제
               </button>
@@ -658,6 +733,9 @@ function MatchRecord() {
           )}
         </>
       )}
+
+      {/* ⬇️ 하단 여백 */}
+      <div style={{ height: '40px', width: '100%' }} aria-hidden="true"></div>
     </div>
   )
 }

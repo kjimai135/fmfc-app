@@ -40,8 +40,10 @@ function buildWeeks(year, month) {
 
 function CalendarPage() {
   const { role } = useAuth()
-  // ✅ 수정 권한: 관리자·임원만
+  // ✅ 수정 권한(일정 편집): 관리자·임원만
   const canEdit = role === 'admin' || role === 'executive'
+  // ⚽ 경기 생성 권한: 관리자·임원·주장 (MatchRecord와 동일)
+  const canCreateMatch = role === 'admin' || role === 'executive' || role === 'captain'
   // 👀 전체 내용 열람 권한: 관리자·임원·주장(부주장)
   //    → 정회원(member)은 '확정된 일정'만 볼 수 있음
   const canSeeAll = role === 'admin' || role === 'executive' || role === 'captain'
@@ -55,6 +57,13 @@ function CalendarPage() {
   const [players, setPlayers] = useState([])
   const [loading, setLoading] = useState(true)
 
+  // ⚽ 경기가 등록된 날짜 목록 (Set)
+  const [matchDates, setMatchDates] = useState(new Set())
+  // ⚽ 팀 목록 (결과 표시 색상 + 생성용)
+  const [teams, setTeams] = useState([])
+  // ⚽ 경기 생성 중인 날짜 (버튼 로딩 표시)
+  const [creatingKey, setCreatingKey] = useState(null)
+
   // 📅 연/월 선택 팝오버
   const [pickerOpen, setPickerOpen] = useState(false)
   const [pickerYear, setPickerYear] = useState(today.getFullYear())
@@ -66,6 +75,12 @@ function CalendarPage() {
   const [editMemo, setEditMemo] = useState('')
   const [saving, setSaving] = useState(false)
 
+  // ⚽ 경기 결과 모달 상태
+  const [resultKey, setResultKey] = useState(null) // 결과 보는 날짜
+  const [resultMatches, setResultMatches] = useState([])
+  const [resultGoals, setResultGoals] = useState([])
+  const [resultLoading, setResultLoading] = useState(false)
+
   useEffect(() => {
     fetchData()
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -73,6 +88,7 @@ function CalendarPage() {
 
   useEffect(() => {
     if (canEdit) fetchPlayers()
+    fetchTeams()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canEdit])
 
@@ -93,6 +109,14 @@ function CalendarPage() {
       .select('id, name, is_active')
       .order('name')
     setPlayers((data || []).filter((p) => p.is_active !== false))
+  }
+
+  async function fetchTeams() {
+    const { data } = await supabase
+      .from('teams')
+      .select('*')
+      .order('display_order')
+    setTeams(data || [])
   }
 
   async function fetchData() {
@@ -120,7 +144,14 @@ function CalendarPage() {
       ? supabase.from('calendar_memos').select('*').gte('date', from).lte('date', to)
       : Promise.resolve({ data: [] })
 
-    const [resRes, memoRes] = await Promise.all([resQuery, memoPromise])
+    // ⚽ 경기가 등록된 날짜 조회
+    const matchPromise = supabase
+      .from('matches')
+      .select('game_date')
+      .gte('game_date', from)
+      .lte('game_date', to)
+
+    const [resRes, memoRes, matchRes] = await Promise.all([resQuery, memoPromise, matchPromise])
 
     setReservations(resRes.data || [])
 
@@ -129,6 +160,9 @@ function CalendarPage() {
       memoMap[m.date] = m.content
     })
     setMemos(memoMap)
+
+    const mDates = new Set((matchRes.data || []).map((m) => m.game_date))
+    setMatchDates(mDates)
 
     setLoading(false)
   }
@@ -167,6 +201,230 @@ function CalendarPage() {
     setEditRows(rows.length > 0 ? rows : [{ venue: '', time: '', reserver: '', is_confirmed: false }])
     setEditMemo(memos[key] || '')
     setEditKey(key)
+  }
+
+  // ⚽ 경기 결과 모달 열기
+  async function openResult(key, e) {
+    if (e) e.stopPropagation() // 셀 클릭(편집) 전파 방지
+    setResultKey(key)
+    setResultLoading(true)
+
+    const [mRes, gRes] = await Promise.all([
+      supabase.from('matches').select('*').eq('game_date', key).order('match_number'),
+      supabase.from('goals').select('*').eq('game_date', key),
+    ])
+
+    setResultMatches(mRes.data || [])
+    setResultGoals(gRes.data || [])
+    setResultLoading(false)
+  }
+
+  // 🏆 이전까지의 누적 순위 계산 (해당 날짜 제외) — MatchRecord와 동일
+  async function getPreviousStandings(targetDate) {
+    const { data: allMatches } = await supabase
+      .from('matches')
+      .select('*')
+      .neq('game_date', targetDate)
+      .order('game_date', { ascending: false })
+
+    const pastMatches = allMatches || []
+    const dates = [...new Set(pastMatches.map((m) => m.game_date))]
+
+    const allMatchups = []
+    for (const date of dates) {
+      const dayMatches = pastMatches
+        .filter((m) => m.game_date === date)
+        .sort((a, b) => a.match_number - b.match_number)
+
+      if (dayMatches.length >= 6) {
+        const pairs = [
+          { first: dayMatches[0], second: dayMatches[3] },
+          { first: dayMatches[1], second: dayMatches[4] },
+          { first: dayMatches[2], second: dayMatches[5] },
+        ]
+        for (const pair of pairs) {
+          const teamA = pair.first.team_a
+          const teamB = pair.first.team_b
+
+          let totalA = pair.first.score_a
+          let totalB = pair.first.score_b
+
+          if (pair.second.team_a === teamA) {
+            totalA += pair.second.score_a
+            totalB += pair.second.score_b
+          } else {
+            totalA += pair.second.score_b
+            totalB += pair.second.score_a
+          }
+
+          allMatchups.push({ teamA, teamB, totalA, totalB })
+        }
+      }
+    }
+
+    const standings = {}
+    for (const team of teams) {
+      standings[team.name] = {
+        name: team.name,
+        points: 0,
+        goalsFor: 0,
+        goalsAgainst: 0,
+      }
+    }
+
+    for (const m of allMatchups) {
+      if (!standings[m.teamA] || !standings[m.teamB]) continue
+      standings[m.teamA].goalsFor += m.totalA
+      standings[m.teamA].goalsAgainst += m.totalB
+      standings[m.teamB].goalsFor += m.totalB
+      standings[m.teamB].goalsAgainst += m.totalA
+      if (m.totalA > m.totalB) {
+        standings[m.teamA].points += 3
+      } else if (m.totalA < m.totalB) {
+        standings[m.teamB].points += 3
+      } else {
+        standings[m.teamA].points += 1
+        standings[m.teamB].points += 1
+      }
+    }
+
+    return Object.values(standings).sort((a, b) => {
+      if (b.points !== a.points) return b.points - a.points
+      const gdA = a.goalsFor - a.goalsAgainst
+      const gdB = b.goalsFor - b.goalsAgainst
+      if (gdB !== gdA) return gdB - gdA
+      return b.goalsFor - a.goalsFor
+    })
+  }
+
+  // ⚽ 경기 생성 (MatchRecord와 동일: 순위 기반 6경기 자동 배정)
+  async function createMatchesForDay(key, e) {
+    if (e) e.stopPropagation() // 셀 클릭(편집) 전파 방지
+    if (!canCreateMatch) return
+    if (teams.length < 3) {
+      alert('팀이 3개 이상 필요합니다!')
+      return
+    }
+    if (matchDates.has(key)) {
+      alert('이미 해당 날짜에 경기가 등록되어 있습니다!')
+      return
+    }
+    if (!window.confirm(`${key.replace(/-/g, '. ')} 에 6경기(1Q~6Q)를 생성할까요?`)) return
+
+    setCreatingKey(key)
+
+    const standings = await getPreviousStandings(key)
+
+    let rankedTeams
+    const hasHistory = standings.some((s) => s.points > 0 || s.goalsFor > 0)
+
+    if (hasHistory) {
+      rankedTeams = standings.map((s) => s.name).slice(0, 3)
+    } else {
+      rankedTeams = teams.map((t) => t.name).slice(0, 3)
+    }
+
+    const [first, second, third] = rankedTeams
+
+    const dayMatches = [
+      { match_number: 1, half: '전반', team_a: second, team_b: third },
+      { match_number: 2, half: '전반', team_a: first, team_b: second },
+      { match_number: 3, half: '전반', team_a: first, team_b: third },
+      { match_number: 4, half: '후반', team_a: second, team_b: third },
+      { match_number: 5, half: '후반', team_a: first, team_b: second },
+      { match_number: 6, half: '후반', team_a: first, team_b: third },
+    ]
+
+    for (const m of dayMatches) {
+      await supabase.from('matches').insert({
+        game_date: key,
+        score_a: 0,
+        score_b: 0,
+        ...m,
+      })
+    }
+
+    setCreatingKey(null)
+    // 버튼이 즉시 '결과'로 바뀌도록 목록 갱신
+    await fetchData()
+
+    alert(
+      hasHistory
+        ? `순위 기반으로 6경기가 생성되었습니다!\n🥇${first} 🥈${second} 🥉${third}`
+        : '6경기가 생성되었습니다! (과거 기록이 없어 기본 순서로 배정)'
+    )
+  }
+
+  // 🎨 팀 색상 가져오기 (파랑은 밝은 파랑으로 변환)
+  function getTeamColor(teamName) {
+    const team = teams.find((t) => t.name === teamName)
+    const color = team?.color || '#ffffff'
+    const c = color.toLowerCase()
+    if (c === '#1d4ed8' || c === '#2563eb' || c === '#1e40af' || c === '#1e3a8a') {
+      return '#60a5fa'
+    }
+    return color
+  }
+
+  // 특수 골 표시용 라벨
+  function goalLabel(g) {
+    if (g.player_name === '자책골') return '🥅 자책골'
+    if (g.player_name === 'PK(핸디캡)' || g.player_name === 'PK') return '🎯 PK(핸디캡)'
+    return `⚽ ${g.player_name}`
+  }
+
+  // 합산 결과 계산 (MatchRecord와 동일 로직)
+  function getMatchupResults() {
+    if (resultMatches.length < 6) return []
+
+    const pairs = []
+    const used = new Set()
+
+    for (let i = 0; i < resultMatches.length; i++) {
+      if (used.has(i)) continue
+      for (let j = i + 1; j < resultMatches.length; j++) {
+        if (used.has(j)) continue
+        const a = resultMatches[i]
+        const b = resultMatches[j]
+
+        const sameMatchup =
+          (a.team_a === b.team_a && a.team_b === b.team_b) ||
+          (a.team_a === b.team_b && a.team_b === b.team_a)
+
+        if (sameMatchup && a.half !== b.half) {
+          const first = a.half === '전반' ? a : b
+          const second = a.half === '전반' ? b : a
+
+          let totalA, totalB
+          if (first.team_a === second.team_a) {
+            totalA = first.score_a + second.score_a
+            totalB = first.score_b + second.score_b
+          } else {
+            totalA = first.score_a + second.score_b
+            totalB = first.score_b + second.score_a
+          }
+
+          let result = '무'
+          if (totalA > totalB) result = first.team_a
+          if (totalB > totalA) result = first.team_b
+
+          pairs.push({
+            teamA: first.team_a,
+            teamB: first.team_b,
+            total: `${totalA} : ${totalB}`,
+            totalA,
+            totalB,
+            result,
+          })
+
+          used.add(i)
+          used.add(j)
+          break
+        }
+      }
+    }
+
+    return pairs
   }
 
   function updateRow(idx, field, value) {
@@ -239,6 +497,7 @@ function CalendarPage() {
 
   const weeks = buildWeeks(year, month)
   const todayKey = toKey(today)
+  const matchupResults = getMatchupResults()
 
   return (
     <div className="max-w-full mx-auto">
@@ -325,9 +584,9 @@ function CalendarPage() {
         </button>
       </div>
 
-      {canEdit && (
+      {(canEdit || canCreateMatch) && (
         <p className="text-slate-500 text-xs mb-2">
-          💡 날짜 칸을 클릭하면 일정을 추가·수정할 수 있습니다. (확정하면 노란색으로 표시)
+          💡 날짜 칸을 클릭하면 일정을 추가·수정할 수 있습니다. (확정하면 노란색) · ⚽ 결과 / + 경기생성 버튼으로 경기를 관리할 수 있습니다.
         </p>
       )}
 
@@ -380,6 +639,8 @@ function CalendarPage() {
                 const memo = memos[key]
                 const isWeekend = di >= 5
                 const isToday = key === todayKey
+                const hasMatch = matchDates.has(key)
+                const isCreating = creatingKey === key
 
                 return (
                   <div
@@ -399,21 +660,83 @@ function CalendarPage() {
                       overflow: 'hidden',
                     }}
                   >
-                    {/* 날짜 숫자 (우측 상단) */}
+                    {/* 상단 줄: ⚽ 결과 / + 경기생성 버튼(왼쪽) + 날짜 숫자(오른쪽) */}
                     <div
                       style={{
-                        textAlign: 'right',
-                        fontSize: '12px',
-                        fontWeight: isToday ? 800 : 500,
-                        color: isToday
-                          ? '#34d399'
-                          : isWeekend
-                          ? '#f87171'
-                          : '#cbd5e1',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: '4px',
                         marginBottom: '2px',
                       }}
                     >
-                      {d.getDate()}
+                      {/* 왼쪽 버튼 영역 (가로로 길게) */}
+                      {hasMatch ? (
+                        <button
+                          onClick={(e) => openResult(key, e)}
+                          title="경기 결과 보기"
+                          style={{
+                            flex: 1,
+                            minWidth: 0,
+                            fontSize: '10px',
+                            fontWeight: 700,
+                            color: '#fff',
+                            background: 'rgba(16,185,129,0.85)',
+                            border: '1px solid rgba(16,185,129,1)',
+                            borderRadius: '6px',
+                            padding: '1px 4px',
+                            cursor: 'pointer',
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            lineHeight: 1.4,
+                          }}
+                        >
+                          ⚽ 결과
+                        </button>
+                      ) : canCreateMatch && inMonth && hasConfirmed ? (
+                        <button
+                          onClick={(e) => createMatchesForDay(key, e)}
+                          disabled={isCreating}
+                          title="이 날 경기 생성"
+                          style={{
+                            flex: 1,
+                            minWidth: 0,
+                            fontSize: '10px',
+                            fontWeight: 700,
+                            color: isCreating ? '#94a3b8' : '#065f46',
+                            background: 'rgba(255,255,255,0.75)',
+                            border: '1px dashed rgba(6,95,70,0.7)',
+                            borderRadius: '6px',
+                            padding: '1px 4px',
+                            cursor: isCreating ? 'default' : 'pointer',
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            lineHeight: 1.4,
+                          }}
+                        >
+                          {isCreating ? '생성중…' : '+ 경기생성'}
+                        </button>
+                      ) : (
+                        <span style={{ flex: 1 }} />
+                      )}
+
+                      {/* 날짜 숫자 (우측) */}
+                      <span
+                        style={{
+                          flexShrink: 0,
+                          fontSize: '12px',
+                          fontWeight: isToday ? 800 : 500,
+                          color: isToday
+                            ? '#34d399'
+                            : isWeekend
+                            ? '#f87171'
+                            : '#cbd5e1',
+                        }}
+                      >
+                        {d.getDate()}
+                      </span>
                     </div>
 
                     {/* ★ 메모 (빨간 글씨) - 전체 열람 권한자만 */}
@@ -596,6 +919,196 @@ function CalendarPage() {
                 {saving ? '저장 중...' : '저장'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ⚽ 경기 결과 모달 */}
+      {resultKey && (
+        <div
+          onClick={() => setResultKey(null)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.7)',
+            zIndex: 100,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '20px',
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: '#1e293b',
+              border: '1px solid #475569',
+              borderRadius: '16px',
+              width: '100%',
+              maxWidth: '560px',
+              maxHeight: '85vh',
+              overflowY: 'auto',
+              padding: '22px',
+              boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
+            }}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-white text-lg font-bold">
+                ⚽ {resultKey.replace(/-/g, '. ')} 경기 결과
+              </h2>
+              <button
+                onClick={() => setResultKey(null)}
+                className="text-slate-400 hover:text-white text-xl leading-none px-2"
+                title="닫기"
+              >
+                ✕
+              </button>
+            </div>
+
+            {resultLoading ? (
+              <div className="text-center text-slate-400 py-10">⏳ 불러오는 중...</div>
+            ) : resultMatches.length === 0 ? (
+              <div className="text-center text-slate-400 py-10">경기 기록이 없습니다.</div>
+            ) : (
+              <>
+                {/* 개별 경기 스코어 */}
+                <div className="space-y-2 mb-5">
+                  {resultMatches.map((match) => {
+                    const matchGoals = resultGoals.filter((g) => g.match_id === match.id)
+                    const goalsA = matchGoals.filter((g) => g.team === match.team_a)
+                    const goalsB = matchGoals.filter((g) => g.team === match.team_b)
+                    const colorA = getTeamColor(match.team_a)
+                    const colorB = getTeamColor(match.team_b)
+                    const aWin = match.score_a > match.score_b
+                    const bWin = match.score_b > match.score_a
+
+                    return (
+                      <div
+                        key={match.id}
+                        className="rounded-xl border border-slate-700 overflow-hidden"
+                        style={{
+                          background: `linear-gradient(135deg, ${colorA}12 0%, rgba(15,23,42,0.6) 40%, rgba(15,23,42,0.6) 60%, ${colorB}12 100%)`,
+                        }}
+                      >
+                        {/* 쿼터 라벨 */}
+                        <div className="flex items-center justify-center py-1 bg-slate-900/50 border-b border-slate-700/50">
+                          <span className="text-emerald-400 text-xs font-extrabold tracking-wide">
+                            {match.match_number}Q
+                          </span>
+                        </div>
+
+                        <div className="p-3">
+                          {/* 팀 이름 + 스코어 */}
+                          <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 mb-2">
+                            <div className="text-center">
+                              <p className="text-base font-extrabold" style={{ color: colorA, opacity: bWin ? 0.55 : 1 }}>
+                                {match.team_a}
+                              </p>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                              <span
+                                className="text-2xl font-black tabular-nums leading-none w-6 text-center"
+                                style={{ color: aWin ? '#fef08a' : '#ffffff' }}
+                              >
+                                {match.score_a}
+                              </span>
+                              <span className="text-slate-500 text-lg font-bold">:</span>
+                              <span
+                                className="text-2xl font-black tabular-nums leading-none w-6 text-center"
+                                style={{ color: bWin ? '#fef08a' : '#ffffff' }}
+                              >
+                                {match.score_b}
+                              </span>
+                            </div>
+
+                            <div className="text-center">
+                              <p className="text-base font-extrabold" style={{ color: colorB, opacity: aWin ? 0.55 : 1 }}>
+                                {match.team_b}
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* 득점자 */}
+                          <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-700/40">
+                            <div className="flex flex-wrap gap-1 justify-end">
+                              {goalsA.length === 0 && (
+                                <span className="text-slate-600 text-[11px]">-</span>
+                              )}
+                              {goalsA.map((g) => (
+                                <span
+                                  key={g.id}
+                                  className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] ${
+                                    g.player_id ? 'bg-slate-700/60 text-white' : 'bg-amber-500/20 text-amber-200'
+                                  }`}
+                                >
+                                  {goalLabel(g)}
+                                </span>
+                              ))}
+                            </div>
+                            <div className="flex flex-wrap gap-1 justify-start">
+                              {goalsB.length === 0 && (
+                                <span className="text-slate-600 text-[11px]">-</span>
+                              )}
+                              {goalsB.map((g) => (
+                                <span
+                                  key={g.id}
+                                  className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] ${
+                                    g.player_id ? 'bg-slate-700/60 text-white' : 'bg-amber-500/20 text-amber-200'
+                                  }`}
+                                >
+                                  {goalLabel(g)}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+
+                {/* 합산 결과 */}
+                {matchupResults.length > 0 && (
+                  <div className="bg-slate-800 rounded-xl border border-slate-700 p-4">
+                    <h3 className="text-base font-bold text-white mb-3">📊 합산 결과</h3>
+                    <div className="space-y-2">
+                      {matchupResults.map((r, idx) => {
+                        const colorA = getTeamColor(r.teamA)
+                        const colorB = getTeamColor(r.teamB)
+                        const isDraw = r.result === '무'
+                        return (
+                          <div
+                            key={idx}
+                            className="rounded-lg p-3 border border-slate-700/50"
+                            style={{
+                              background: `linear-gradient(135deg, ${colorA}15 0%, rgba(15,23,42,0.5) 45%, rgba(15,23,42,0.5) 55%, ${colorB}15 100%)`,
+                            }}
+                          >
+                            <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+                              <p className="text-center font-extrabold" style={{ color: colorA, opacity: r.result === r.teamB ? 0.45 : 1 }}>
+                                {r.teamA}
+                              </p>
+                              <p className="text-center text-white text-xl font-black tabular-nums">{r.total}</p>
+                              <p className="text-center font-extrabold" style={{ color: colorB, opacity: r.result === r.teamA ? 0.45 : 1 }}>
+                                {r.teamB}
+                              </p>
+                            </div>
+                            <div className="text-center mt-1.5">
+                              {isDraw ? (
+                                <span className="bg-yellow-500/20 text-yellow-400 px-3 py-0.5 rounded-full text-xs font-semibold">무승부</span>
+                              ) : (
+                                <span className="bg-emerald-500/20 text-emerald-400 px-3 py-0.5 rounded-full text-xs font-semibold">🏆 {r.result} 승!</span>
+                              )}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
           </div>
         </div>
       )}

@@ -43,8 +43,8 @@ const allMenu = [
   { to: '/roster', label: '📋 팀명단', roles: ['admin', 'executive', 'captain', 'member'] },
   { to: '/attendance', label: '✅ 출석체크', roles: ['admin', 'executive', 'captain', 'member'] },
   { to: '/attendance/history', label: '📋 출석현황', roles: ['admin', 'executive', 'captain', 'member'] },
-  // ⚽ 경기순서&결과: 정회원도 열람 가능(단, 정회원은 화면 내부에서 읽기 전용 처리)
-  { to: '/matches', label: '⚽ 경기순서&결과', roles: ['admin', 'executive', 'captain', 'member'] },
+  // ⚽ 경기순서&결과: 정회원 메뉴에서 숨김 (결과는 '경기 스케쥴'에서 열람 가능)
+  { to: '/matches', label: '⚽ 경기순서&결과', roles: ['admin', 'executive', 'captain'] },
   // 📅 경기 스케쥴: 전 회원 열람(정회원은 확정 일정만), 수정은 관리자·임원 (컴포넌트 내부 처리)
   { to: '/calendar', label: '📅 경기 스케쥴', roles: ['admin', 'executive', 'captain', 'member'] },
   { to: '/season-ranking', label: '📸 순위표', roles: ['admin', 'executive', 'captain', 'member'] },
@@ -241,10 +241,10 @@ function AppContent() {
           <Route path="/polls/new" element={<Protected allowed={['admin', 'executive', 'captain', 'member']}><PollCreate /></Protected>} />
           <Route path="/polls/:id" element={<Protected allowed={['admin', 'executive', 'captain', 'member']}><PollVote /></Protected>} />
 
-          {/* 경기 - 정회원도 열람 가능(단, 정회원은 컴포넌트 내부에서 읽기 전용) */}
+          {/* 경기 - 정회원은 메뉴에서 숨겼지만, 직접 접근 시 읽기 전용으로 열람 가능(컴포넌트 내부 처리) */}
           <Route path="/matches" element={<Protected allowed={['admin', 'executive', 'captain', 'member']}><MatchRecord /></Protected>} />
 
-          {/* 📅 경기 스케쥴 - 전 회원 열람(정회원은 확정 일정만), 수정은 관리자·임원(컴포넌트 내부 처리) */}
+          {/* 📅 경기 스케쥴 - 전 회원 열람(정회원은 확정 일정만 + 결과 열람), 수정은 관리자·임원(컴포넌트 내부 처리) */}
           <Route path="/calendar" element={<Protected allowed={['admin', 'executive', 'captain', 'member']}><CalendarPage /></Protected>} />
 
           {/* 순위표 / 득점순위표 */}
