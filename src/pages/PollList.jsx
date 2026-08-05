@@ -30,9 +30,6 @@ function PollList() {
   }
 
   // 📅 경기 스케쥴(확정=노란색)에 맞춰 투표 자동 생성
-  // - 오늘 기준 2주 이내(오늘 ~ 오늘+14일)의 확정 예약만 대상
-  // - 같은 날짜에 이미 투표가 있으면 건너뜀
-  // - 그 날 확정 예약의 구장/시간을 제목 정보로 채움
   async function generateFromSchedule() {
     if (generating) return
     setGenerating(true)
@@ -199,7 +196,7 @@ function PollList() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
         <div>
           <h1 className="text-3xl font-bold text-white flex items-center gap-2">
-            🗳️ 투표
+            🗳️ 경기 참석 투표
           </h1>
           <p className="text-slate-400 mt-1">
             총 <span className="text-emerald-400 font-semibold">{polls.length}</span>개의 경기
@@ -296,7 +293,7 @@ function PollList() {
               )
             }
 
-            /* 📋 일반 보기 모드 (통계 제거, 간결화) */
+            /* 📋 일반 보기 모드 (한 줄 컴팩트) */
             return (
               <div
                 key={poll.id}
@@ -309,70 +306,67 @@ function PollList() {
                     : 'bg-slate-600'
                 }`} />
 
-                <div className="p-4 pl-6">
-                  {/* 1줄: 날짜박스 + (D-day / 시간 / 장소) */}
-                  <div className="flex items-center gap-3">
-                    {/* 날짜 박스 */}
-                    <div className="flex flex-col items-center justify-center bg-slate-900/70 rounded-xl px-2.5 py-1.5 min-w-[56px] border border-slate-700 flex-shrink-0">
-                      <span className={`text-[10px] font-bold leading-none ${
-                        isSunday ? 'text-red-400' : isSaturday ? 'text-sky-400' : 'text-slate-400'
-                      }`}>
-                        {month}월
-                      </span>
-                      <span className="text-xl font-black text-white leading-tight">{day}</span>
-                      <span className={`text-[10px] font-bold leading-none ${
-                        isSunday ? 'text-red-400' : isSaturday ? 'text-sky-400' : 'text-slate-300'
-                      }`}>
-                        {weekday}
-                      </span>
-                    </div>
+                <div className="flex items-center gap-3 p-3 pl-5">
+                  {/* 날짜 박스 */}
+                  <div className="flex flex-col items-center justify-center bg-slate-900/70 rounded-xl px-2.5 py-1.5 min-w-[56px] border border-slate-700 flex-shrink-0">
+                    <span className={`text-[10px] font-bold leading-none ${
+                      isSunday ? 'text-red-400' : isSaturday ? 'text-sky-400' : 'text-slate-400'
+                    }`}>
+                      {month}월
+                    </span>
+                    <span className="text-xl font-black text-white leading-tight">{day}</span>
+                    <span className={`text-[10px] font-bold leading-none ${
+                      isSunday ? 'text-red-400' : isSaturday ? 'text-sky-400' : 'text-slate-300'
+                    }`}>
+                      {weekday}
+                    </span>
+                  </div>
 
-                    {/* 오른쪽: D-day + 시간·장소 */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        {dday && (
-                          <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${
-                            dday.tone === 'today' ? 'bg-yellow-400/20 text-yellow-300'
-                              : dday.tone === 'upcoming' ? 'bg-emerald-500/20 text-emerald-300'
-                              : 'bg-slate-700 text-slate-400'
-                          }`}>
-                            {dday.label}
-                          </span>
-                        )}
-                        {poll.game_time && (
-                          <span className="inline-flex items-center gap-1 bg-slate-700/60 text-slate-100 text-xs font-medium px-2 py-0.5 rounded-md">
-                            ⏰ {poll.game_time}
-                          </span>
-                        )}
-                        {poll.location && (
-                          <span className="inline-flex items-center gap-1 bg-slate-700/60 text-slate-100 text-xs font-medium px-2 py-0.5 rounded-md truncate max-w-full">
-                            📍 {poll.location}
-                          </span>
-                        )}
-                      </div>
+                  {/* 정보: D-day + 시간 + 장소 */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {dday && (
+                        <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${
+                          dday.tone === 'today' ? 'bg-yellow-400/20 text-yellow-300'
+                            : dday.tone === 'upcoming' ? 'bg-emerald-500/20 text-emerald-300'
+                            : 'bg-slate-700 text-slate-400'
+                        }`}>
+                          {dday.label}
+                        </span>
+                      )}
+                      {poll.game_time && (
+                        <span className="inline-flex items-center gap-1 bg-slate-700/60 text-slate-100 text-xs font-medium px-2 py-0.5 rounded-md">
+                          ⏰ {poll.game_time}
+                        </span>
+                      )}
+                      {poll.location && (
+                        <span className="inline-flex items-center gap-1 bg-slate-700/60 text-slate-100 text-xs font-medium px-2 py-0.5 rounded-md truncate">
+                          📍 {poll.location}
+                        </span>
+                      )}
                     </div>
                   </div>
 
-                  {/* 2줄: 액션 버튼 (전체 폭 정돈) */}
-                  <div className="flex items-center gap-2 mt-3 pt-3 border-t border-slate-700/50">
+                  {/* 액션 버튼 (장소 옆에 나란히) */}
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
                     <Link
                       to={`/polls/${poll.id}`}
                       title="투표하기"
-                      className="flex-1 text-center bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors shadow-md shadow-emerald-500/20"
+                      className="bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-2 rounded-lg text-sm font-semibold transition-colors whitespace-nowrap"
                     >
-                      🗳️ 투표하기
+                      🗳️ 투표
                     </Link>
                     <button
                       onClick={() => startEdit(poll)}
                       title="수정"
-                      className="bg-slate-700 hover:bg-slate-600 text-slate-200 px-3 py-2 rounded-lg text-sm font-medium transition-colors"
+                      className="bg-slate-700 hover:bg-slate-600 text-slate-200 px-3 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap"
                     >
                       ✏️ 수정
                     </button>
                     <button
                       onClick={() => deletePoll(poll.id)}
                       title="삭제"
-                      className="bg-red-500/10 hover:bg-red-500/20 text-red-400 px-3 py-2 rounded-lg text-sm transition-colors"
+                      className="bg-red-500/10 hover:bg-red-500/20 text-red-400 px-2.5 py-2 rounded-lg text-sm transition-colors"
                     >
                       🗑️
                     </button>

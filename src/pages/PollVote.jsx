@@ -68,7 +68,6 @@ function PollVote() {
     }
     setLoading(true)
 
-    // 기존 투표가 있으면 업데이트, 없으면 새로 추가
     const existing = responses.find(r => r.player_id === player.id)
 
     if (existing) {
@@ -187,8 +186,6 @@ function PollVote() {
   const modalCurrentResponse = modalPlayer ? getPlayerResponse(modalPlayer.id) : null
 
   // 🔽 선수 목록을 [참석예정(참석/조퇴/늦참) / 미투표·불참]으로 분리
-  //   - 위(coming): 참석 / 조퇴 / 늦참
-  //   - 아래(down): 불참 + 미투표
   function splitByAvailability(list) {
     const coming = list.filter(p => {
       const r = getPlayerResponse(p.id)
@@ -313,7 +310,6 @@ function PollVote() {
                   <p className="text-slate-500 text-sm px-2 py-2">배정된 선수 없음</p>
                 ) : (
                   <>
-                    {/* 참석 예정 (참석/조퇴/늦참) */}
                     <div>
                       <p className="text-[11px] font-bold text-emerald-300 mb-1.5 px-1">
                         ✅ 참석 예정 ({coming.length})
@@ -327,7 +323,6 @@ function PollVote() {
                       )}
                     </div>
 
-                    {/* 미투표 · 불참 */}
                     <div>
                       <p className="text-[11px] font-bold text-slate-400 mb-1.5 px-1 pt-1 border-t border-slate-700/40">
                         ⬜ 미투표 · 불참 ({down.length})
@@ -356,7 +351,6 @@ function PollVote() {
                 ⚪ 미배정 ({unassignedPlayers.length}명)
               </div>
 
-              {/* 미배정 통계 */}
               <div className="px-3 py-2 border-b border-slate-700/30 flex flex-wrap gap-2 text-xs">
                 <span className="text-emerald-400">✅ {unassignedPlayers.filter(p => getPlayerResponse(p.id) === '참석').length}</span>
                 <span className="text-red-400">❌ {unassignedPlayers.filter(p => getPlayerResponse(p.id) === '불참').length}</span>
@@ -369,7 +363,6 @@ function PollVote() {
                   <p className="text-slate-500 text-sm px-2 py-2">모든 선수가 배정됨 🎉</p>
                 ) : (
                   <>
-                    {/* 참석 예정 */}
                     <div>
                       <p className="text-[11px] font-bold text-emerald-300 mb-1.5 px-1">
                         ✅ 참석 예정 ({coming.length})
@@ -383,7 +376,6 @@ function PollVote() {
                       )}
                     </div>
 
-                    {/* 미투표 · 불참 */}
                     <div>
                       <p className="text-[11px] font-bold text-slate-400 mb-1.5 px-1 pt-1 border-t border-slate-700/40">
                         ⬜ 미투표 · 불참 ({down.length})
@@ -448,7 +440,6 @@ function PollVote() {
               참석 여부를 선택하세요
             </p>
 
-            {/* 상태 선택 버튼 (현재 선택은 강조) */}
             <div className="grid grid-cols-2 gap-3 mb-4">
               {voteOptions.map(opt => {
                 const isActive = modalCurrentResponse === opt.key
@@ -468,7 +459,6 @@ function PollVote() {
               })}
             </div>
 
-            {/* 투표 취소 (미투표로) */}
             {modalCurrentResponse && (
               <button
                 onClick={() => handleCancelVote(modalPlayer)}
