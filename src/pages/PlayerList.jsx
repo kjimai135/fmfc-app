@@ -319,6 +319,9 @@ function PlayerList() {
           </table>
         </div>
       )}
+
+      {/* ⬇️ 하단 여백 (맨 아래 줄이 안 잘리게) */}
+      <div style={{ height: '80px', width: '100%' }} aria-hidden="true"></div>
     </div>
   )
 }
