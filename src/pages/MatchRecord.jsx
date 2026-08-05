@@ -24,7 +24,7 @@ function MatchRecord() {
   // 📅 스케쥴(구장/시간) + 라운드 정보
   const [dayInfo, setDayInfo] = useState({ venue: '', time: '', rounds: null })
 
-  // 📅 숨겨진 날짜 입력 참조
+  // 📅 날짜 입력 참조
   const dateInputRef = useRef(null)
 
   useEffect(() => {
@@ -75,7 +75,6 @@ function MatchRecord() {
 
   // 📅 그 날의 장소/시간(스케쥴) + 라운드 계산
   async function fetchDayInfo(date) {
-    // 1) 장소/시간: reservations의 확정 예약 우선, 없으면 아무 예약
     const { data: resList } = await supabase
       .from('reservations')
       .select('*')
@@ -91,30 +90,25 @@ function MatchRecord() {
       time = confirmed.time || ''
     }
 
-    // 2) 라운드: 경기가 있는 모든 날짜를 모아 ANCHOR 기준으로 계산
     const rounds = await calcRounds(date)
-
     setDayInfo({ venue, time, rounds })
   }
 
   // 🔢 라운드 자동 계산 (경기일 1일 = 2라운드, ANCHOR_DATE = 13·14 고정)
   async function calcRounds(date) {
-    // 경기가 존재하는 모든 날짜 조회
     const { data } = await supabase
       .from('matches')
       .select('game_date')
 
     const dates = [...new Set((data || []).map(d => d.game_date))]
-    // 기준점이 목록에 없을 수도 있으니 함께 넣어 정렬 (offset 계산용)
     if (!dates.includes(ANCHOR_DATE)) dates.push(ANCHOR_DATE)
     if (!dates.includes(date)) dates.push(date)
-    dates.sort() // YYYY-MM-DD 문자열 정렬 = 날짜순
+    dates.sort()
 
     const anchorIdx = dates.indexOf(ANCHOR_DATE)
     const targetIdx = dates.indexOf(date)
     if (anchorIdx === -1 || targetIdx === -1) return null
 
-    // ANCHOR로부터 몇 번째 경기일 차이인지 → 라운드 offset(2씩)
     const offset = targetIdx - anchorIdx
     const first = ANCHOR_FIRST_ROUND + offset * 2
     const second = first + 1
@@ -257,7 +251,7 @@ function MatchRecord() {
     )
   }
 
-  // 🔄 골 개수로 matches 점수 컬럼 동기화 (합산·순위 계산이 score_a/b를 그대로 쓰도록 유지)
+  // 🔄 골 개수로 matches 점수 컬럼 동기화
   async function syncMatchScore(matchId) {
     const { data: gs } = await supabase
       .from('goals')
@@ -308,7 +302,7 @@ function MatchRecord() {
     fetchGoals(selectedDate)
   }
 
-  // 🥅🎯 특수 골(자책골/PK) 추가 - 득점자 없이 골만 기록 (점수는 골 개수로 자동 반영)
+  // 🥅🎯 특수 골(자책골/PK) 추가
   async function addSpecialGoal(match, field, goalType) {
     if (!canEdit) return
     const team = field === 'score_a' ? match.team_a : match.team_b
@@ -453,16 +447,20 @@ function MatchRecord() {
     return `${y}. ${m}. ${day}.`
   }
 
-  // 📅 달력 바로 열기 (숨겨진 date input의 네이티브 피커 호출)
+  // 📅 버튼 클릭 → 달력 열기 (사용자 제스처 안에서 showPicker 호출)
   function openDatePicker() {
     const el = dateInputRef.current
     if (!el) return
-    if (typeof el.showPicker === 'function') {
-      el.showPicker()
-    } else {
-      el.focus()
-      el.click()
+    try {
+      if (typeof el.showPicker === 'function') {
+        el.showPicker()
+        return
+      }
+    } catch (e) {
+      // 폴백
     }
+    el.focus()
+    el.click()
   }
 
   // 득점 영역 (한 팀) 렌더링 - 태그 + 통합 드롭다운
@@ -519,37 +517,46 @@ function MatchRecord() {
         </div>
       )}
 
-      {/* 날짜 선택 (달력 버튼) + 오늘 경기 생성 버튼 */}
+      {/* 날짜 선택 + 오늘 경기 생성 버튼 */}
       <div className="bg-slate-800/50 border border-slate-700 rounded-2xl p-4 mb-4">
         <div className="flex flex-wrap items-center gap-3">
-          {/* 날짜 선택 버튼 */}
-          <div className="relative">
-            <button
-              onClick={openDatePicker}
-              title="날짜 선택"
-              className="flex items-center gap-2 bg-slate-900 hover:bg-slate-700 border border-slate-600 text-white px-5 py-2 rounded-xl font-semibold transition-colors"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-                <line x1="16" y1="2" x2="16" y2="6"></line>
-                <line x1="8" y1="2" x2="8" y2="6"></line>
-                <line x1="3" y1="10" x2="21" y2="10"></line>
-              </svg>
-              <span className="text-emerald-400 font-bold leading-none">{formatDate(selectedDate)}</span>
-              <span className="text-slate-400 text-xs">▾</span>
-            </button>
+          {/* 📅 날짜 선택: 버튼 클릭 시 showPicker() 호출 (input은 겹치지 않고 숨김) */}
+          <button
+            type="button"
+            onClick={openDatePicker}
+            className="flex items-center gap-2 bg-slate-900 hover:bg-slate-700 border border-slate-600 text-white px-5 py-2 rounded-xl font-semibold transition-colors"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+              <line x1="16" y1="2" x2="16" y2="6"></line>
+              <line x1="8" y1="2" x2="8" y2="6"></line>
+              <line x1="3" y1="10" x2="21" y2="10"></line>
+            </svg>
+            <span className="text-emerald-400 font-bold leading-none">{formatDate(selectedDate)}</span>
+            <span className="text-slate-400 text-xs">▾</span>
+          </button>
 
-            <input
-              ref={dateInputRef}
-              type="date"
-              value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
-              className="absolute left-0 bottom-0 opacity-0 pointer-events-none w-0 h-0"
-              style={{ colorScheme: 'dark' }}
-              tabIndex={-1}
-              aria-hidden="true"
-            />
-          </div>
+          {/* 실제 날짜 입력 (버튼과 겹치지 않게 화면에서 숨김. showPicker 대상) */}
+          <input
+            ref={dateInputRef}
+            type="date"
+            value={selectedDate}
+            onChange={(e) => setSelectedDate(e.target.value)}
+            aria-hidden="true"
+            tabIndex={-1}
+            style={{
+              position: 'absolute',
+              width: '1px',
+              height: '1px',
+              padding: 0,
+              margin: '-1px',
+              overflow: 'hidden',
+              clip: 'rect(0 0 0 0)',
+              whiteSpace: 'nowrap',
+              border: 0,
+              colorScheme: 'dark',
+            }}
+          />
 
           {/* 오늘 경기 생성 버튼 */}
           {canEdit && matches.length === 0 && (

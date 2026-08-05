@@ -199,7 +199,7 @@ function PollList() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
         <div>
           <h1 className="text-3xl font-bold text-white flex items-center gap-2">
-            🗳️ 경기 참석 투표
+            🗳️ 투표
           </h1>
           <p className="text-slate-400 mt-1">
             총 <span className="text-emerald-400 font-semibold">{polls.length}</span>개의 경기
