@@ -6,6 +6,16 @@ import { useAuth } from '../contexts/AuthContext'
 const ANCHOR_DATE = '2026-08-08'
 const ANCHOR_FIRST_ROUND = 13 // 그 날의 첫 라운드 (두 번째는 +1)
 
+const WEEK_LABELS = ['일', '월', '화', '수', '목', '금', '토']
+
+// YYYY-MM-DD (로컬 기준)
+function toKey(d) {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
 function MatchRecord() {
   const { role } = useAuth()
   // ✅ 수정 권한: 관리자·임원·주장(부주장)만. 정회원(member)은 열람만 가능(읽기 전용)
@@ -24,8 +34,14 @@ function MatchRecord() {
   // 📅 스케쥴(구장/시간) + 라운드 정보
   const [dayInfo, setDayInfo] = useState({ venue: '', time: '', rounds: null })
 
-  // 📅 날짜 입력 참조
-  const dateInputRef = useRef(null)
+  // 📅 커스텀 달력 팝오버
+  const [pickerOpen, setPickerOpen] = useState(false)
+  const [pickerYM, setPickerYM] = useState(() => {
+    const [y, m] = new Date(new Date().getTime() + 9 * 60 * 60 * 1000)
+      .toISOString().split('T')[0].split('-').map(Number)
+    return { year: y, month: m } // month: 1~12
+  })
+  const pickerRef = useRef(null)
 
   useEffect(() => {
     fetchTeams()
@@ -39,6 +55,17 @@ function MatchRecord() {
       fetchDayInfo(selectedDate)
     }
   }, [selectedDate])
+
+  // 팝오버 바깥 클릭 시 닫기
+  useEffect(() => {
+    function onClickOutside(e) {
+      if (pickerRef.current && !pickerRef.current.contains(e.target)) {
+        setPickerOpen(false)
+      }
+    }
+    if (pickerOpen) document.addEventListener('mousedown', onClickOutside)
+    return () => document.removeEventListener('mousedown', onClickOutside)
+  }, [pickerOpen])
 
   async function fetchTeams() {
     const { data } = await supabase
@@ -447,20 +474,36 @@ function MatchRecord() {
     return `${y}. ${m}. ${day}.`
   }
 
-  // 📅 버튼 클릭 → 달력 열기 (사용자 제스처 안에서 showPicker 호출)
-  function openDatePicker() {
-    const el = dateInputRef.current
-    if (!el) return
-    try {
-      if (typeof el.showPicker === 'function') {
-        el.showPicker()
-        return
-      }
-    } catch (e) {
-      // 폴백
+  // 📅 커스텀 달력 열기 (현재 선택 날짜의 연/월로 맞춤)
+  function openPicker() {
+    const [y, m] = selectedDate.split('-').map(Number)
+    setPickerYM({ year: y, month: m })
+    setPickerOpen(v => !v)
+  }
+
+  // 📅 달력 그리드용 날짜 배열 (일요일 시작, 6주)
+  function buildCalendar(year, month) {
+    const first = new Date(year, month - 1, 1)
+    const startOffset = first.getDay() // 0(일)~6(토)
+    const start = new Date(year, month - 1, 1 - startOffset)
+    const cells = []
+    const cur = new Date(start)
+    for (let i = 0; i < 42; i++) {
+      cells.push(new Date(cur))
+      cur.setDate(cur.getDate() + 1)
     }
-    el.focus()
-    el.click()
+    return cells
+  }
+
+  function prevMonth() {
+    setPickerYM(({ year, month }) => month === 1 ? { year: year - 1, month: 12 } : { year, month: month - 1 })
+  }
+  function nextMonth() {
+    setPickerYM(({ year, month }) => month === 12 ? { year: year + 1, month: 1 } : { year, month: month + 1 })
+  }
+  function pickDate(d) {
+    setSelectedDate(toKey(d))
+    setPickerOpen(false)
   }
 
   // 득점 영역 (한 팀) 렌더링 - 태그 + 통합 드롭다운
@@ -504,6 +547,9 @@ function MatchRecord() {
     )
   }
 
+  const calendarCells = buildCalendar(pickerYM.year, pickerYM.month)
+  const todayKey = toKey(new Date(new Date().getTime() + 9 * 60 * 60 * 1000))
+
   return (
     <div className="max-w-4xl mx-auto">
       <div className="mb-6">
@@ -517,46 +563,102 @@ function MatchRecord() {
         </div>
       )}
 
-      {/* 날짜 선택 + 오늘 경기 생성 버튼 */}
+      {/* 날짜 선택(커스텀 달력) + 오늘 경기 생성 버튼 */}
       <div className="bg-slate-800/50 border border-slate-700 rounded-2xl p-4 mb-4">
         <div className="flex flex-wrap items-center gap-3">
-          {/* 📅 날짜 선택: 버튼 클릭 시 showPicker() 호출 (input은 겹치지 않고 숨김) */}
-          <button
-            type="button"
-            onClick={openDatePicker}
-            className="flex items-center gap-2 bg-slate-900 hover:bg-slate-700 border border-slate-600 text-white px-5 py-2 rounded-xl font-semibold transition-colors"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-              <line x1="16" y1="2" x2="16" y2="6"></line>
-              <line x1="8" y1="2" x2="8" y2="6"></line>
-              <line x1="3" y1="10" x2="21" y2="10"></line>
-            </svg>
-            <span className="text-emerald-400 font-bold leading-none">{formatDate(selectedDate)}</span>
-            <span className="text-slate-400 text-xs">▾</span>
-          </button>
+          {/* 📅 날짜 선택 버튼 + 커스텀 달력 팝오버 */}
+          <div className="relative" ref={pickerRef}>
+            <button
+              type="button"
+              onClick={openPicker}
+              className="flex items-center gap-2 bg-slate-900 hover:bg-slate-700 border border-slate-600 text-white px-5 py-2 rounded-xl font-semibold transition-colors"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                <line x1="16" y1="2" x2="16" y2="6"></line>
+                <line x1="8" y1="2" x2="8" y2="6"></line>
+                <line x1="3" y1="10" x2="21" y2="10"></line>
+              </svg>
+              <span className="text-emerald-400 font-bold leading-none">{formatDate(selectedDate)}</span>
+              <span className="text-slate-400 text-xs">▾</span>
+            </button>
 
-          {/* 실제 날짜 입력 (버튼과 겹치지 않게 화면에서 숨김. showPicker 대상) */}
-          <input
-            ref={dateInputRef}
-            type="date"
-            value={selectedDate}
-            onChange={(e) => setSelectedDate(e.target.value)}
-            aria-hidden="true"
-            tabIndex={-1}
-            style={{
-              position: 'absolute',
-              width: '1px',
-              height: '1px',
-              padding: 0,
-              margin: '-1px',
-              overflow: 'hidden',
-              clip: 'rect(0 0 0 0)',
-              whiteSpace: 'nowrap',
-              border: 0,
-              colorScheme: 'dark',
-            }}
-          />
+            {pickerOpen && (
+              <div
+                className="absolute left-0 mt-2 bg-slate-800 border border-slate-600 rounded-xl shadow-2xl p-3"
+                style={{ zIndex: 60, width: '300px' }}
+              >
+                {/* 연/월 이동 */}
+                <div className="flex items-center justify-between mb-2">
+                  <button
+                    type="button"
+                    onClick={prevMonth}
+                    className="text-slate-300 hover:text-white px-3 py-1.5 rounded-lg hover:bg-slate-700"
+                  >◀</button>
+                  <span className="text-white font-bold">
+                    {pickerYM.year}년 {pickerYM.month}월
+                  </span>
+                  <button
+                    type="button"
+                    onClick={nextMonth}
+                    className="text-slate-300 hover:text-white px-3 py-1.5 rounded-lg hover:bg-slate-700"
+                  >▶</button>
+                </div>
+
+                {/* 요일 헤더 */}
+                <div className="grid grid-cols-7 mb-1">
+                  {WEEK_LABELS.map((w, i) => (
+                    <div
+                      key={w}
+                      className="text-center text-[11px] font-bold py-1"
+                      style={{ color: i === 0 ? '#f87171' : i === 6 ? '#60a5fa' : '#94a3b8' }}
+                    >
+                      {w}
+                    </div>
+                  ))}
+                </div>
+
+                {/* 날짜 그리드 */}
+                <div className="grid grid-cols-7 gap-1">
+                  {calendarCells.map((d, idx) => {
+                    const key = toKey(d)
+                    const inMonth = d.getMonth() === pickerYM.month - 1
+                    const isSelected = key === selectedDate
+                    const isToday = key === todayKey
+                    const dow = d.getDay()
+                    let color = '#e2e8f0'
+                    if (dow === 0) color = '#f87171'
+                    else if (dow === 6) color = '#60a5fa'
+                    return (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => pickDate(d)}
+                        className="aspect-square rounded-lg text-sm font-medium flex items-center justify-center transition-colors"
+                        style={{
+                          background: isSelected ? '#10b981' : isToday ? 'rgba(16,185,129,0.18)' : 'transparent',
+                          color: isSelected ? '#ffffff' : color,
+                          opacity: inMonth ? 1 : 0.35,
+                          fontWeight: isToday || isSelected ? 800 : 500,
+                        }}
+                      >
+                        {d.getDate()}
+                      </button>
+                    )
+                  })}
+                </div>
+
+                {/* 오늘로 이동 */}
+                <button
+                  type="button"
+                  onClick={() => pickDate(new Date(new Date().getTime() + 9 * 60 * 60 * 1000))}
+                  className="w-full mt-2 bg-slate-700 hover:bg-slate-600 text-emerald-300 text-sm font-semibold py-2 rounded-lg"
+                >
+                  📍 오늘로 이동
+                </button>
+              </div>
+            )}
+          </div>
 
           {/* 오늘 경기 생성 버튼 */}
           {canEdit && matches.length === 0 && (
