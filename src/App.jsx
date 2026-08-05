@@ -9,7 +9,6 @@ import AttendanceCheck from './pages/AttendanceCheck'
 import AttendanceHistory from './pages/AttendanceHistory'
 import AttendanceStats from './pages/AttendanceStats'
 import TeamRoster from './pages/TeamRoster'
-import SeasonRosters from './pages/SeasonRosters'
 import PollList from './pages/PollList'
 import PollCreate from './pages/PollCreate'
 import PollVote from './pages/PollVote'
@@ -19,6 +18,7 @@ import TopScorers from './pages/TopScorers'
 import SeasonRanking from './pages/SeasonRanking'
 import ScorerRanking from './pages/ScorerRanking'
 import SeasonArchive from './pages/SeasonArchive'
+import MyProfile from './pages/MyProfile'
 import MemberRoles from './pages/MemberRoles'
 import MemberRegister from './pages/MemberRegister'
 import PendingApproval from './pages/PendingApproval'
@@ -39,29 +39,31 @@ const ROLE_LABELS = {
   associate: '준회원',
 }
 
-// ✅ 메뉴별 접근 가능한 권한 정의
+// ✅ 메뉴별 접근 권한 + 그룹(group) 정의
+// group: 'general'(일반) | 'game'(경기) | 'manage'(관리) | 'associate'(준회원)
 const allMenu = [
-  { to: '/roster', label: '📋 팀명단', roles: ['admin', 'executive', 'captain', 'member'] },
-  { to: '/attendance', label: '✅ 출석체크', roles: ['admin', 'executive', 'captain', 'member'] },
-  { to: '/attendance/history', label: '📋 출석현황', roles: ['admin', 'executive', 'captain', 'member'] },
-  // ⚽ 경기순서&결과: 정회원 메뉴에서 숨김 (결과는 '경기 스케쥴'에서 열람 가능)
-  { to: '/matches', label: '⚽ 경기순서&결과', roles: ['admin', 'executive', 'captain'] },
-  // 📅 경기 스케쥴: 전 회원 열람(정회원은 확정 일정만), 수정은 관리자·임원 (컴포넌트 내부 처리)
-  { to: '/calendar', label: '📅 경기 스케쥴', roles: ['admin', 'executive', 'captain', 'member'] },
-  { to: '/season-ranking', label: '📸 순위표', roles: ['admin', 'executive', 'captain', 'member'] },
-  { to: '/scorer-ranking', label: '📸 득점순위표', roles: ['admin', 'executive', 'captain', 'member'] },
-  // 🏆 팀 아카이브: 전 회원 열람, 저장/삭제는 관리자·임원(컴포넌트 내부 처리)
-  { to: '/archive', label: '🏆 팀 아카이브', roles: ['admin', 'executive', 'captain', 'member'] },
-  { to: '/players', label: '👤 선수 관리', roles: ['admin', 'executive'] },
-  { to: '/attendance/stats', label: '📊 출석률 통계', roles: ['admin', 'executive', 'captain', 'member'] },
-  { to: '/polls', label: '🗳️ 투표', roles: ['admin', 'executive', 'captain', 'member'] },
-  { to: '/notices', label: '📢 공지사항', roles: ['admin', 'executive', 'captain', 'member'] },
-  // 💌 마음의 편지 (익명 게시판): 준회원 제외 전 회원 (답글은 회장만)
-  { to: '/letter', label: '💌 마음의 편지', roles: ['admin', 'executive', 'captain', 'member'] },
-  { to: '/seasons', label: '📚 시즌별명단', roles: ['admin', 'executive'] },
-  { to: '/member-roles', label: '🔑 회원 권한 관리', roles: ['admin', 'executive'] },
-  // 준회원 전용 메뉴
-  { to: '/register', label: '📝 회원 등록/정회원 요청', roles: ['associate'] },
+  // ⚽ 경기
+  { to: '/attendance', label: '✅ 출석체크', roles: ['admin', 'executive', 'captain', 'member'], group: 'game' },
+  { to: '/attendance/history', label: '🗓️ 출석현황', roles: ['admin', 'executive', 'captain', 'member'], group: 'game' },
+  { to: '/polls', label: '🗳️ 투표', roles: ['admin', 'executive', 'captain', 'member'], group: 'game' },
+  { to: '/calendar', label: '📅 일정', roles: ['admin', 'executive', 'captain', 'member'], group: 'game' },
+
+  // 📋 일반
+  { to: '/roster', label: '📋 팀명단', roles: ['admin', 'executive', 'captain', 'member'], group: 'general' },
+  { to: '/season-ranking', label: '🏆 팀순위', roles: ['admin', 'executive', 'captain', 'member'], group: 'general' },
+  { to: '/scorer-ranking', label: '👟 득점순위', roles: ['admin', 'executive', 'captain', 'member'], group: 'general' },
+  { to: '/attendance/stats', label: '📊 출석율', roles: ['admin', 'executive', 'captain', 'member'], group: 'general' },
+  { to: '/notices', label: '📢 공지', roles: ['admin', 'executive', 'captain', 'member'], group: 'general' },
+  { to: '/letter', label: '💌 마음의 편지', roles: ['admin', 'executive', 'captain', 'member'], group: 'general' },
+
+  // 🔧 관리
+  { to: '/matches', label: '⚽ 경기 생성 및 기록', roles: ['admin', 'executive', 'captain'], group: 'manage' },
+  { to: '/archive', label: '🗂️ 아카이브', roles: ['admin', 'executive'], group: 'manage' },
+  { to: '/players', label: '🧑 회원관리', roles: ['admin', 'executive'], group: 'manage' },
+  { to: '/member-roles', label: '🔑 권한관리', roles: ['admin', 'executive'], group: 'manage' },
+
+  // 📝 준회원 전용
+  { to: '/register', label: '📝 회원 등록/정회원 요청', roles: ['associate'], group: 'associate' },
 ]
 
 // ✅ 권한 없을 때 보여줄 화면
@@ -112,12 +114,10 @@ function HomeRedirect() {
     )
   }
 
-  // 준회원: 기존대로 등록/검토 페이지
   if (role === 'associate') {
     return <AssociateHome />
   }
 
-  // 그 외 회원: 홈 대시보드
   return <Home />
 }
 
@@ -128,6 +128,16 @@ function AppContent() {
 
   const visibleMenu = allMenu.filter((item) => item.roles.includes(role))
 
+  // 그룹별 분류 (순서: 경기 → 일반 → 관리 → 준회원)
+  const menuSections = [
+    { key: 'game', title: '⚽ 경기 메뉴', color: 'text-sky-400', sub: '' },
+    { key: 'general', title: '📋 일반 메뉴', color: 'text-emerald-400', sub: '' },
+    { key: 'manage', title: '🔧 관리 메뉴', color: 'text-amber-400', sub: '관리자·임원 전용' },
+    { key: 'associate', title: '📝 회원 등록', color: 'text-purple-400', sub: '' },
+  ]
+    .map((sec) => ({ ...sec, items: visibleMenu.filter((m) => m.group === sec.key) }))
+    .filter((sec) => sec.items.length > 0)
+
   return (
     <div className="min-h-screen bg-slate-900 relative">
       {/* 배경 로고 */}
@@ -135,7 +145,7 @@ function AppContent() {
         <img src={logoImg} alt="" className="w-96 h-96 object-contain opacity-[0.07]" />
       </div>
 
-      {/* 상단 네비게이션 (sticky) - 메뉴바 + 티커가 한 덩어리로 고정 */}
+      {/* 상단 네비게이션 (sticky) */}
       <nav className="bg-slate-800 border-b border-slate-700 sticky top-0 z-30">
         <div className="w-full max-w-6xl mx-auto flex items-center justify-between gap-3 px-4 py-6">
           {/* 🍔 메뉴 (햄버거 아이콘만) */}
@@ -159,12 +169,22 @@ function AppContent() {
             )}
           </button>
 
-          {/* 오른쪽: 내 정보 + 로그아웃 + 로고 */}
+          {/* 오른쪽: 내 정보(아이콘+이름) + 로그아웃 + 로고 */}
           <div className="flex items-center gap-4 flex-shrink-0">
             {profile && (
-              <span className="text-white text-sm sm:text-lg font-medium whitespace-nowrap">
-                {profile.name}({isPresident ? '회장' : (ROLE_LABELS[role] || role)})
-              </span>
+              <Link
+                to="/my-profile"
+                title="내 정보"
+                className="flex items-center gap-1.5 text-white hover:text-emerald-400 transition-colors whitespace-nowrap"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="8" r="4"></circle>
+                  <path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"></path>
+                </svg>
+                <span className="text-sm sm:text-lg font-medium">
+                  {profile.name}({isPresident ? '회장' : (ROLE_LABELS[role] || role)})
+                </span>
+              </Link>
             )}
             <button
               onClick={signOut}
@@ -184,31 +204,42 @@ function AppContent() {
           </div>
         </div>
 
-        {/* ⬇️ 위에서 아래로 펼쳐지는 드롭다운 패널 */}
+        {/* ⬇️ 드롭다운 패널 (그룹별) */}
         <div
           className={`overflow-hidden transition-all duration-300 ease-out border-t border-slate-700/50 ${
-            menuOpen ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0'
+            menuOpen ? 'max-h-[800px] opacity-100' : 'max-h-0 opacity-0'
           }`}
         >
-          <div className="w-full max-w-6xl mx-auto px-4 py-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-            {visibleMenu.map((item) => (
-              <Link
-                key={item.to}
-                to={item.to}
-                onClick={() => setMenuOpen(false)}
-                className="text-slate-300 hover:text-white px-4 py-3 rounded-lg hover:bg-slate-700 bg-slate-700/40 text-center font-medium transition-colors"
-              >
-                {item.label}
-              </Link>
+          <div className="w-full max-w-6xl mx-auto px-4 py-4 space-y-4">
+            {menuSections.map((sec) => (
+              <div key={sec.key}>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className={`text-sm font-bold ${sec.color}`}>{sec.title}</span>
+                  {sec.sub && <span className="text-slate-500 text-xs">{sec.sub}</span>}
+                  <div className="flex-1 h-px bg-slate-700/60"></div>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                  {sec.items.map((item) => (
+                    <Link
+                      key={item.to}
+                      to={item.to}
+                      onClick={() => setMenuOpen(false)}
+                      className="text-slate-300 hover:text-white px-4 py-3 rounded-lg hover:bg-slate-700 bg-slate-700/40 text-center font-medium transition-colors"
+                    >
+                      {item.label}
+                    </Link>
+                  ))}
+                </div>
+              </div>
             ))}
           </div>
         </div>
 
-        {/* 📢 공지 티커 (nav 안쪽 = 메뉴바에 딱 붙어서 함께 고정) */}
+        {/* 📢 공지 티커 */}
         <NoticeTicker />
       </nav>
 
-      {/* 🌑 배경 오버레이 (열렸을 때만) */}
+      {/* 🌑 배경 오버레이 */}
       {menuOpen && (
         <div
           onClick={() => setMenuOpen(false)}
@@ -219,60 +250,47 @@ function AppContent() {
       {/* 페이지 내용 */}
       <main className="w-full max-w-6xl mx-auto p-4 sm:p-6 relative z-0">
         <Routes>
-          {/* 홈 - 권한별 분기 (대시보드 또는 준회원 페이지) */}
           <Route path="/" element={<HomeRedirect />} />
 
-          {/* 선수 관리 (관리자·임원 전용) */}
           <Route path="/players" element={<Protected allowed={['admin', 'executive']}><PlayerList /></Protected>} />
           <Route path="/players/new" element={<Protected allowed={['admin', 'executive']}><PlayerForm /></Protected>} />
           <Route path="/players/:id/edit" element={<Protected allowed={['admin', 'executive']}><PlayerForm /></Protected>} />
 
-          {/* 준회원: 회원 등록/정회원 요청 */}
+          <Route path="/my-profile" element={<Protected allowed={['admin', 'executive', 'captain', 'member']}><MyProfile /></Protected>} />
+
           <Route path="/register" element={<Protected allowed={['associate', 'admin', 'executive']}><MemberRegister /></Protected>} />
 
-          {/* 출석 */}
           <Route path="/attendance" element={<Protected allowed={['admin', 'executive', 'captain', 'member']}><AttendanceCheck /></Protected>} />
           <Route path="/attendance/history" element={<Protected allowed={['admin', 'executive', 'captain', 'member']}><AttendanceHistory /></Protected>} />
           <Route path="/attendance/stats" element={<Protected allowed={['admin', 'executive', 'captain', 'member']}><AttendanceStats /></Protected>} />
 
-          {/* 팀명단 / 시즌별명단 */}
           <Route path="/roster" element={<Protected allowed={['admin', 'executive', 'captain', 'member']}><TeamRoster /></Protected>} />
-          <Route path="/seasons" element={<Protected allowed={['admin', 'executive']}><SeasonRosters /></Protected>} />
 
-          {/* 투표 */}
           <Route path="/polls" element={<Protected allowed={['admin', 'executive', 'captain', 'member']}><PollList /></Protected>} />
           <Route path="/polls/new" element={<Protected allowed={['admin', 'executive', 'captain', 'member']}><PollCreate /></Protected>} />
           <Route path="/polls/:id" element={<Protected allowed={['admin', 'executive', 'captain', 'member']}><PollVote /></Protected>} />
 
-          {/* 경기 - 정회원은 메뉴에서 숨겼지만, 직접 접근 시 읽기 전용으로 열람 가능(컴포넌트 내부 처리) */}
           <Route path="/matches" element={<Protected allowed={['admin', 'executive', 'captain', 'member']}><MatchRecord /></Protected>} />
 
-          {/* 📅 경기 스케쥴 - 전 회원 열람(정회원은 확정 일정만 + 결과 열람), 수정은 관리자·임원(컴포넌트 내부 처리) */}
           <Route path="/calendar" element={<Protected allowed={['admin', 'executive', 'captain', 'member']}><CalendarPage /></Protected>} />
 
-          {/* 순위표 / 득점순위표 */}
           <Route path="/season-ranking" element={<Protected allowed={['admin', 'executive', 'captain', 'member']}><SeasonRanking /></Protected>} />
           <Route path="/scorer-ranking" element={<Protected allowed={['admin', 'executive', 'captain', 'member']}><ScorerRanking /></Protected>} />
 
-          {/* 🏆 팀 아카이브 - 전 회원 열람, 저장/삭제는 관리자·임원(컴포넌트 내부 처리) */}
-          <Route path="/archive" element={<Protected allowed={['admin', 'executive', 'captain', 'member']}><SeasonArchive /></Protected>} />
+          {/* 🏆 팀 아카이브 - 관리자·임원만 */}
+          <Route path="/archive" element={<Protected allowed={['admin', 'executive']}><SeasonArchive /></Protected>} />
 
-          {/* 공지사항 (모든 회원 열람) - 상세/작성/수정은 컴포넌트 내부에서 권한 처리 */}
           <Route path="/notices" element={<Protected allowed={['admin', 'executive', 'captain', 'member']}><NoticeBoard /></Protected>} />
           <Route path="/notices/new" element={<Protected allowed={['admin', 'executive']}><NoticeDetail /></Protected>} />
           <Route path="/notices/:id" element={<Protected allowed={['admin', 'executive', 'captain', 'member']}><NoticeDetail /></Protected>} />
 
-          {/* 💌 마음의 편지 (익명 게시판) - 준회원 제외 전 회원, 답글은 회장만(컴포넌트 내부 처리) */}
           <Route path="/letter" element={<Protected allowed={['admin', 'executive', 'captain', 'member']}><LetterBoard /></Protected>} />
 
-          {/* 회원 권한 관리 (관리자·임원) */}
           <Route path="/member-roles" element={<Protected allowed={['admin', 'executive']}><MemberRoles /></Protected>} />
 
-          {/* 숨김 메뉴 (직접 접근만) - 관리자/임원만 */}
           <Route path="/standings" element={<Protected allowed={['admin', 'executive']}><TeamStandings /></Protected>} />
           <Route path="/scorers" element={<Protected allowed={['admin', 'executive']}><TopScorers /></Protected>} />
 
-          {/* 잘못된 경로는 홈으로 */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>

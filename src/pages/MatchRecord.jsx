@@ -575,7 +575,7 @@ function MatchRecord() {
   return (
     <div className="max-w-4xl mx-auto">
       <div className="mb-6">
-        <h1 className="text-3xl font-bold text-white">⚽ 경기순서 & 결과</h1>
+        <h1 className="text-3xl font-bold text-white">⚽ 경기생성 및 기록</h1>
         {currentSeason && (
           <p className="text-slate-400 text-sm mt-1">🗓️ 현재 시즌: <span className="text-emerald-400 font-semibold">{currentSeason}</span></p>
         )}

@@ -233,7 +233,7 @@ function MemberRoles() {
 
   return (
     <div className="max-w-5xl mx-auto">
-      <h1 className="text-2xl font-bold text-white mb-1">🔑 회원 권한 관리</h1>
+      <h1 className="text-2xl font-bold text-white mb-1">🔑 권한관리</h1>
       <p className="text-slate-400 text-sm mb-4">
         {canEdit
           ? '회원의 권한을 변경하고, 선수 정보를 연결할 수 있습니다.'

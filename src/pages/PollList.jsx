@@ -196,7 +196,7 @@ function PollList() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
         <div>
           <h1 className="text-3xl font-bold text-white flex items-center gap-2">
-            🗳️ 경기 참석 투표
+            🗳️ 투표
           </h1>
           <p className="text-slate-400 mt-1">
             총 <span className="text-emerald-400 font-semibold">{polls.length}</span>개의 경기
@@ -209,13 +209,13 @@ function PollList() {
             title="오늘부터 2주 이내에 확정(노란색)된 경기 스케쥴로 투표를 자동 생성합니다"
             className="flex items-center gap-1.5 bg-yellow-500 hover:bg-yellow-400 text-slate-900 px-5 py-3 rounded-xl font-bold transition-colors disabled:opacity-50 shadow-lg shadow-yellow-500/20"
           >
-            {generating ? '⏳ 생성 중...' : '📅 2주 이내 자동 생성'}
+            {generating ? '⏳ 생성 중...' : '📅 자동투표생성'}
           </button>
           <Link
             to="/polls/new"
             className="flex items-center gap-1.5 bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-3 rounded-xl font-semibold transition-colors shadow-lg shadow-emerald-500/20"
           >
-            + 경기 만들기
+            📅수동투표생성
           </Link>
         </div>
       </div>

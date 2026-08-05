@@ -474,7 +474,7 @@ function SeasonArchive() {
   return (
     <div className="max-w-3xl mx-auto">
       <div className="mb-6">
-        <h1 className="text-3xl font-bold text-white flex items-center gap-2">🏆 팀 아카이브</h1>
+        <h1 className="text-3xl font-bold text-white flex items-center gap-2">🏆 아카이브</h1>
         <p className="text-slate-400 mt-1">시즌별 우승팀 · 득점왕 · 팀 명단 · 챔스 기록</p>
       </div>
 

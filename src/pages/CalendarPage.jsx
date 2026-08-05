@@ -566,7 +566,7 @@ function CalendarPage() {
     <div className="max-w-full mx-auto">
       {/* 헤더 */}
       <div className="flex flex-wrap items-center gap-3 mb-3">
-        <h1 className="text-2xl font-bold text-white">📅 경기 스케쥴</h1>
+        <h1 className="text-2xl font-bold text-white">📅 일정</h1>
 
         {/* 📆 연/월 선택 버튼 + 팝오버 */}
         <div className="relative" ref={pickerRef}>

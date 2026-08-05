@@ -30,7 +30,7 @@ function NoticeBoard() {
     <div className="max-w-3xl mx-auto">
       <div className="flex justify-between items-center mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-white">📢 공지사항</h1>
+          <h1 className="text-2xl font-bold text-white">📢 공지</h1>
           <p className="text-slate-400 text-sm mt-1">총 {notices.length}개</p>
         </div>
         {canManage && (

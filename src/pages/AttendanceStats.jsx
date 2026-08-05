@@ -194,7 +194,7 @@ function AttendanceStats() {
 
   return (
     <div>
-      <h1 className="text-3xl font-bold text-white mb-2">📊 출석률 통계</h1>
+      <h1 className="text-3xl font-bold text-white mb-2">📊 출석율</h1>
       <p className="text-slate-400 mb-6">총 {totalGames}회 경기 기준</p>
 
       {/* 기간 필터 */}

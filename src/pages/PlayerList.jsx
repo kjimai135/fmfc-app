@@ -147,7 +147,7 @@ function PlayerList() {
       {/* 헤더 */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
         <div>
-          <h1 className="text-3xl font-bold text-white">👤 선수 관리</h1>
+          <h1 className="text-3xl font-bold text-white">👤 회원관리</h1>
           <p className="text-slate-400 mt-1">총 {filtered.length}명</p>
         </div>
         <Link
