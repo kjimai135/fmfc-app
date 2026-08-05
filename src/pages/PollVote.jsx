@@ -1,9 +1,17 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { useAuth } from '../contexts/AuthContext'
 
 function PollVote() {
   const { id } = useParams()
+  const { role, profile } = useAuth()
+
+  // ✅ 전체 수정 권한: 관리자·임원·주장(부주장)
+  const canEditAll = role === 'admin' || role === 'executive' || role === 'captain'
+  // 🙋 로그인한 사용자와 연결된 선수 id (본인 판별용)
+  const myPlayerId = profile?.player_id || null
+
   const [poll, setPoll] = useState(null)
   const [responses, setResponses] = useState([])
   const [players, setPlayers] = useState([])
@@ -44,9 +52,20 @@ function PollVote() {
     setTeams(data || [])
   }
 
+  // 🔐 이 선수의 투표를 내가 수정할 수 있는가?
+  function canEditPlayer(player) {
+    if (canEditAll) return true
+    if (myPlayerId && player.id === myPlayerId) return true
+    return false
+  }
+
   // 🗳️ 투표하기 (모달에서 상태 선택 → 즉시 저장)
   async function handleVote(player, response) {
     if (!player) return
+    if (!canEditPlayer(player)) {
+      alert('본인의 참석 여부만 변경할 수 있습니다.')
+      return
+    }
     setLoading(true)
 
     // 기존 투표가 있으면 업데이트, 없으면 새로 추가
@@ -75,6 +94,10 @@ function PollVote() {
   // 🗑️ 투표 취소 (미투표로)
   async function handleCancelVote(player) {
     if (!player) return
+    if (!canEditPlayer(player)) {
+      alert('본인의 참석 여부만 변경할 수 있습니다.')
+      return
+    }
     const existing = responses.find(r => r.player_id === player.id)
     if (!existing) {
       setModalPlayer(null)
@@ -85,6 +108,15 @@ function PollVote() {
     setLoading(false)
     setModalPlayer(null)
     fetchResponses()
+  }
+
+  // 이름 클릭 → 권한 있으면 모달, 없으면 안내
+  function onClickPlayer(player) {
+    if (!canEditPlayer(player)) {
+      alert('본인의 참석 여부만 변경할 수 있습니다.\n(전체 수정은 관리자·임원·주장만 가능)')
+      return
+    }
+    setModalPlayer(player)
   }
 
   // 🎨 선수 이름 색상 (남색 → 밝은 파랑)
@@ -154,6 +186,44 @@ function PollVote() {
   // 모달 대상 선수의 현재 투표 상태
   const modalCurrentResponse = modalPlayer ? getPlayerResponse(modalPlayer.id) : null
 
+  // 🔽 선수 목록을 [투표함 / 미투표]로 분리
+  function splitVoted(list) {
+    const voted = list.filter(p => getPlayerResponse(p.id))
+    const notVoted = list.filter(p => !getPlayerResponse(p.id))
+    return { voted, notVoted }
+  }
+
+  // 선수 한 줄(행) 렌더링
+  function renderPlayerRow(player, nameColor) {
+    const resp = getPlayerResponse(player.id)
+    const badge = resp ? responseBadge[resp] : null
+    const editable = canEditPlayer(player)
+    const isMe = myPlayerId && player.id === myPlayerId
+
+    return (
+      <button
+        key={player.id}
+        onClick={() => onClickPlayer(player)}
+        className={`w-full flex items-center justify-between rounded-lg px-3 py-2 transition-colors ${
+          editable ? 'bg-slate-800/50 hover:bg-slate-700 cursor-pointer' : 'bg-slate-800/30 cursor-default'
+        }`}
+        title={editable ? '클릭하여 참석 여부 선택' : '본인 것만 변경 가능'}
+      >
+        <span className="text-sm font-medium flex items-center gap-1" style={{ color: nameColor }}>
+          {player.name}
+          {isMe && <span className="text-[10px] bg-emerald-500/25 text-emerald-300 px-1.5 py-0.5 rounded-full">나</span>}
+        </span>
+        {badge ? (
+          <span className={`${badge.bg} ${badge.text} px-2 py-1 rounded-lg text-xs font-medium`}>
+            {badge.emoji} {resp}
+          </span>
+        ) : (
+          <span className="text-slate-500 text-xs">⬜ 미투표</span>
+        )}
+      </button>
+    )
+  }
+
   return (
     <div className="max-w-full mx-auto">
       {/* 헤더 */}
@@ -170,7 +240,11 @@ function PollVote() {
 
       {/* 안내 문구 */}
       <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl px-4 py-3 mb-6 text-emerald-200 text-sm">
-        👇 아래 <b>팀별 현황</b>에서 <b>본인 이름을 클릭</b>하면 참석 여부를 선택할 수 있습니다.
+        {canEditAll ? (
+          <>👑 관리자·임원·주장은 <b>모든 선수</b>의 참석 여부를 변경할 수 있습니다.</>
+        ) : (
+          <>👇 <b>본인 이름</b>을 클릭하면 참석 여부를 선택할 수 있습니다. (본인 것만 변경 가능)</>
+        )}
       </div>
 
       {/* 📊 전체 요약 */}
@@ -201,6 +275,7 @@ function PollVote() {
           const playerNameColor = getPlayerNameColor(teamColor)
           const teamPlayers = players.filter(p => p.current_team === team.name)
           const stats = getTeamStats(team.name)
+          const { voted, notVoted } = splitVoted(teamPlayers)
 
           return (
             <div
@@ -224,34 +299,40 @@ function PollVote() {
                 <span className="text-yellow-400">⏰ {stats.늦참}</span>
               </div>
 
-              {/* 선수 목록 + 상태 뱃지 (행 클릭 → 모달) */}
-              <div className="p-3">
+              {/* 선수 목록: 투표함 / 미투표 분리 */}
+              <div className="p-3 space-y-3">
                 {teamPlayers.length === 0 ? (
                   <p className="text-slate-500 text-sm px-2 py-2">배정된 선수 없음</p>
                 ) : (
-                  <div className="space-y-2">
-                    {teamPlayers.map(player => {
-                      const resp = getPlayerResponse(player.id)
-                      const badge = resp ? responseBadge[resp] : null
-                      return (
-                        <button
-                          key={player.id}
-                          onClick={() => setModalPlayer(player)}
-                          className="w-full flex items-center justify-between bg-slate-800/50 hover:bg-slate-700 rounded-lg px-3 py-2 transition-colors"
-                          title="클릭하여 참석 여부 선택"
-                        >
-                          <span className="text-sm font-medium" style={{ color: playerNameColor }}>{player.name}</span>
-                          {badge ? (
-                            <span className={`${badge.bg} ${badge.text} px-2 py-1 rounded-lg text-xs font-medium`}>
-                              {badge.emoji} {resp}
-                            </span>
-                          ) : (
-                            <span className="text-slate-500 text-xs">⬜ 미투표</span>
-                          )}
-                        </button>
-                      )
-                    })}
-                  </div>
+                  <>
+                    {/* 투표 완료 */}
+                    <div>
+                      <p className="text-[11px] font-bold text-emerald-300 mb-1.5 px-1">
+                        🗳️ 투표 완료 ({voted.length})
+                      </p>
+                      {voted.length === 0 ? (
+                        <p className="text-slate-600 text-xs px-2 py-1">아직 없음</p>
+                      ) : (
+                        <div className="space-y-2">
+                          {voted.map(player => renderPlayerRow(player, playerNameColor))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* 미투표 */}
+                    <div>
+                      <p className="text-[11px] font-bold text-slate-400 mb-1.5 px-1 pt-1 border-t border-slate-700/40">
+                        ⬜ 미투표 ({notVoted.length})
+                      </p>
+                      {notVoted.length === 0 ? (
+                        <p className="text-slate-600 text-xs px-2 py-1">전원 투표 완료 🎉</p>
+                      ) : (
+                        <div className="space-y-2">
+                          {notVoted.map(player => renderPlayerRow(player, playerNameColor))}
+                        </div>
+                      )}
+                    </div>
+                  </>
                 )}
               </div>
             </div>
@@ -259,49 +340,60 @@ function PollVote() {
         })}
 
         {/* 미배정 선수 카드 */}
-        <div className="rounded-xl border border-slate-500/30 bg-slate-500/10 overflow-hidden">
-          <div className="px-4 py-3 font-bold text-slate-400 text-lg border-b border-slate-700/50">
-            ⚪ 미배정 ({unassignedPlayers.length}명)
-          </div>
-
-          {/* 미배정 통계 */}
-          <div className="px-3 py-2 border-b border-slate-700/30 flex flex-wrap gap-2 text-xs">
-            <span className="text-emerald-400">✅ {unassignedPlayers.filter(p => getPlayerResponse(p.id) === '참석').length}</span>
-            <span className="text-red-400">❌ {unassignedPlayers.filter(p => getPlayerResponse(p.id) === '불참').length}</span>
-            <span className="text-orange-400">🏃 {unassignedPlayers.filter(p => getPlayerResponse(p.id) === '조퇴').length}</span>
-            <span className="text-yellow-400">⏰ {unassignedPlayers.filter(p => getPlayerResponse(p.id) === '늦참').length}</span>
-          </div>
-
-          <div className="p-3">
-            {unassignedPlayers.length === 0 ? (
-              <p className="text-slate-500 text-sm px-2 py-2">모든 선수가 배정됨 🎉</p>
-            ) : (
-              <div className="space-y-2">
-                {unassignedPlayers.map(player => {
-                  const resp = getPlayerResponse(player.id)
-                  const badge = resp ? responseBadge[resp] : null
-                  return (
-                    <button
-                      key={player.id}
-                      onClick={() => setModalPlayer(player)}
-                      className="w-full flex items-center justify-between bg-slate-800/50 hover:bg-slate-700 rounded-lg px-3 py-2 transition-colors"
-                      title="클릭하여 참석 여부 선택"
-                    >
-                      <span className="text-slate-300 text-sm font-medium">{player.name}</span>
-                      {badge ? (
-                        <span className={`${badge.bg} ${badge.text} px-2 py-1 rounded-lg text-xs font-medium`}>
-                          {badge.emoji} {resp}
-                        </span>
-                      ) : (
-                        <span className="text-slate-500 text-xs">⬜ 미투표</span>
-                      )}
-                    </button>
-                  )
-                })}
+        {(() => {
+          const { voted, notVoted } = splitVoted(unassignedPlayers)
+          return (
+            <div className="rounded-xl border border-slate-500/30 bg-slate-500/10 overflow-hidden">
+              <div className="px-4 py-3 font-bold text-slate-400 text-lg border-b border-slate-700/50">
+                ⚪ 미배정 ({unassignedPlayers.length}명)
               </div>
-            )}
-          </div>
-        </div>
+
+              {/* 미배정 통계 */}
+              <div className="px-3 py-2 border-b border-slate-700/30 flex flex-wrap gap-2 text-xs">
+                <span className="text-emerald-400">✅ {unassignedPlayers.filter(p => getPlayerResponse(p.id) === '참석').length}</span>
+                <span className="text-red-400">❌ {unassignedPlayers.filter(p => getPlayerResponse(p.id) === '불참').length}</span>
+                <span className="text-orange-400">🏃 {unassignedPlayers.filter(p => getPlayerResponse(p.id) === '조퇴').length}</span>
+                <span className="text-yellow-400">⏰ {unassignedPlayers.filter(p => getPlayerResponse(p.id) === '늦참').length}</span>
+              </div>
+
+              <div className="p-3 space-y-3">
+                {unassignedPlayers.length === 0 ? (
+                  <p className="text-slate-500 text-sm px-2 py-2">모든 선수가 배정됨 🎉</p>
+                ) : (
+                  <>
+                    {/* 투표 완료 */}
+                    <div>
+                      <p className="text-[11px] font-bold text-emerald-300 mb-1.5 px-1">
+                        🗳️ 투표 완료 ({voted.length})
+                      </p>
+                      {voted.length === 0 ? (
+                        <p className="text-slate-600 text-xs px-2 py-1">아직 없음</p>
+                      ) : (
+                        <div className="space-y-2">
+                          {voted.map(player => renderPlayerRow(player, '#cbd5e1'))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* 미투표 */}
+                    <div>
+                      <p className="text-[11px] font-bold text-slate-400 mb-1.5 px-1 pt-1 border-t border-slate-700/40">
+                        ⬜ 미투표 ({notVoted.length})
+                      </p>
+                      {notVoted.length === 0 ? (
+                        <p className="text-slate-600 text-xs px-2 py-1">전원 투표 완료 🎉</p>
+                      ) : (
+                        <div className="space-y-2">
+                          {notVoted.map(player => renderPlayerRow(player, '#cbd5e1'))}
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          )
+        })()}
       </div>
 
       {/* 🗳️ 투표 선택 모달 */}
