@@ -6,7 +6,8 @@ import { useAuth } from '../contexts/AuthContext'
 const ANCHOR_DATE = '2026-08-08'
 const ANCHOR_FIRST_ROUND = 13 // 그 날의 첫 라운드 (두 번째는 +1)
 
-const WEEK_LABELS = ['일', '월', '화', '수', '목', '금', '토']
+// ✅ 월요일 시작 요일 라벨
+const WEEK_LABELS = ['월', '화', '수', '목', '금', '토', '일']
 
 // YYYY-MM-DD (로컬 기준)
 function toKey(d) {
@@ -71,7 +72,6 @@ function MatchRecord() {
     return () => document.removeEventListener('mousedown', onClickOutside)
   }, [pickerOpen])
 
-  // 🗓️ 현재 시즌 로드
   async function fetchCurrentSeason() {
     const { data } = await supabase
       .from('app_settings')
@@ -277,7 +277,7 @@ function MatchRecord() {
         game_date: selectedDate,
         score_a: 0,
         score_b: 0,
-        season: currentSeason || null, // 🗓️ 현재 시즌 기록
+        season: currentSeason || null,
         ...m,
       })
     }
@@ -332,7 +332,6 @@ function MatchRecord() {
 
   async function addGoal(matchId, playerId, playerName, team) {
     if (!canEdit) return
-    // 이 경기의 시즌 값(없으면 현재 시즌)
     const match = matches.find(m => m.id === matchId)
     const seasonVal = match?.season || currentSeason || null
 
@@ -342,7 +341,7 @@ function MatchRecord() {
       player_id: playerId,
       player_name: playerName,
       team: team,
-      season: seasonVal, // 🗓️ 시즌 기록
+      season: seasonVal,
     })
     await syncMatchScore(matchId)
     fetchMatches(selectedDate)
@@ -361,7 +360,7 @@ function MatchRecord() {
       player_id: null,
       player_name: goalType,
       team: team,
-      season: seasonVal, // 🗓️ 시즌 기록
+      season: seasonVal,
     })
 
     await syncMatchScore(match.id)
@@ -503,10 +502,11 @@ function MatchRecord() {
     setPickerOpen(v => !v)
   }
 
-  // 📅 달력 그리드용 날짜 배열 (일요일 시작, 6주)
+  // 📅 달력 그리드용 날짜 배열 (✅ 월요일 시작, 6주)
   function buildCalendar(year, month) {
     const first = new Date(year, month - 1, 1)
-    const startOffset = first.getDay() // 0(일)~6(토)
+    // 월요일 시작 보정: (getDay()+6)%7 → 월=0, ..., 일=6
+    const startOffset = (first.getDay() + 6) % 7
     const start = new Date(year, month - 1, 1 - startOffset)
     const cells = []
     const cur = new Date(start)
@@ -630,13 +630,13 @@ function MatchRecord() {
                   >▶</button>
                 </div>
 
-                {/* 요일 헤더 */}
+                {/* 요일 헤더 (월~일) */}
                 <div className="grid grid-cols-7 mb-1">
                   {WEEK_LABELS.map((w, i) => (
                     <div
                       key={w}
                       className="text-center text-[11px] font-bold py-1"
-                      style={{ color: i === 0 ? '#f87171' : i === 6 ? '#60a5fa' : '#94a3b8' }}
+                      style={{ color: i === 6 ? '#f87171' : i === 5 ? '#60a5fa' : '#94a3b8' }}
                     >
                       {w}
                     </div>
@@ -652,8 +652,8 @@ function MatchRecord() {
                     const isToday = key === todayKey
                     const dow = d.getDay()
                     let color = '#e2e8f0'
-                    if (dow === 0) color = '#f87171'
-                    else if (dow === 6) color = '#60a5fa'
+                    if (dow === 0) color = '#f87171'      // 일요일 빨강
+                    else if (dow === 6) color = '#60a5fa' // 토요일 파랑
                     return (
                       <button
                         key={idx}
