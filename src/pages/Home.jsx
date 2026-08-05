@@ -22,7 +22,7 @@ const dashboardMenu = [
   { to: '/scorer-ranking', icon: '👟', label: '득점순위표', desc: '득점왕 순위 확인', roles: ['admin', 'executive', 'captain', 'member'] },
   { to: '/players', icon: '👤', label: '선수 관리', desc: '선수 등록·수정·삭제', roles: ['admin', 'executive'] },
   { to: '/attendance/stats', icon: '📊', label: '출석률 통계', desc: '선수별 출석률 분석', roles: ['admin', 'executive', 'captain', 'member'] },
-  { to: '/polls', icon: '🗳️', label: '경기 참석 투표', desc: '경기 참석 여부 투표', roles: ['admin', 'executive', 'captain', 'member'] },
+  { to: '/polls', icon: '🗳️', label: '투표', desc: '경기 참석 여부 투표', roles: ['admin', 'executive', 'captain', 'member'] },
   { to: '/notices', icon: '📢', label: '공지사항', desc: '팀 공지 확인·작성', roles: ['admin', 'executive', 'captain', 'member'] },
   { to: '/letter', icon: '💌', label: '마음의 편지', desc: '회장님께 익명으로 전하기', roles: ['admin', 'executive', 'captain', 'member'] },
   { to: '/seasons', icon: '📚', label: '시즌별명단', desc: '시즌별 선수 명단', roles: ['admin', 'executive'] },

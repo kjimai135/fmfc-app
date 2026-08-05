@@ -51,7 +51,7 @@ const allMenu = [
   { to: '/scorer-ranking', label: '📸 득점순위표', roles: ['admin', 'executive', 'captain', 'member'] },
   { to: '/players', label: '👤 선수 관리', roles: ['admin', 'executive'] },
   { to: '/attendance/stats', label: '📊 출석률 통계', roles: ['admin', 'executive', 'captain', 'member'] },
-  { to: '/polls', label: '🗳️ 경기 참석 투표', roles: ['admin', 'executive', 'captain', 'member'] },
+  { to: '/polls', label: '🗳️ 투표', roles: ['admin', 'executive', 'captain', 'member'] },
   { to: '/notices', label: '📢 공지사항', roles: ['admin', 'executive', 'captain', 'member'] },
   // 💌 마음의 편지 (익명 게시판): 준회원 제외 전 회원 (답글은 회장만)
   { to: '/letter', label: '💌 마음의 편지', roles: ['admin', 'executive', 'captain', 'member'] },
