@@ -138,7 +138,12 @@ function PlayerList() {
     }
   }
 
-  const currentYear = new Date().getFullYear()
+  // 출생연도 → "86년생" (뒤 2자리)
+  const birthLabel = (birthYear) => {
+    if (!birthYear) return '-'
+    const yy = String(birthYear).slice(-2).padStart(2, '0')
+    return `${yy}년생`
+  }
 
   return (
     <div>
@@ -198,7 +203,7 @@ function PlayerList() {
         </label>
       </div>
 
-      {/* 선수 목록 - 테이블 (이름/나이/주소/연락처/포지션/등급 + 관리) */}
+      {/* 선수 목록 - 테이블 (이름/연생/주소/연락처/포지션/등급 + 관리) */}
       {loading ? (
         <div className="text-center py-20 text-slate-400">
           <p className="text-xl">⏳ 로딩 중...</p>
@@ -215,7 +220,7 @@ function PlayerList() {
             <thead>
               <tr className="border-b border-slate-700 bg-slate-800/80">
                 <th className="px-4 py-3 text-slate-400 text-sm font-medium whitespace-nowrap">이름</th>
-                <th className="px-4 py-3 text-slate-400 text-sm font-medium whitespace-nowrap">나이</th>
+                <th className="px-4 py-3 text-slate-400 text-sm font-medium whitespace-nowrap">출생</th>
                 <th className="px-4 py-3 text-slate-400 text-sm font-medium whitespace-nowrap">주소</th>
                 <th className="px-4 py-3 text-slate-400 text-sm font-medium whitespace-nowrap">연락처</th>
                 <th className="px-4 py-3 text-slate-400 text-sm font-medium whitespace-nowrap">포지션</th>
@@ -240,9 +245,9 @@ function PlayerList() {
                       )}
                     </td>
 
-                    {/* 나이 (xx세) */}
+                    {/* 출생 (연생) */}
                     <td className="px-4 py-3 text-slate-300 text-sm whitespace-nowrap">
-                      {player.birth_year ? `${currentYear - player.birth_year}세` : '-'}
+                      {birthLabel(player.birth_year)}
                     </td>
 
                     {/* 주소 */}
