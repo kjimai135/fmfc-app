@@ -85,9 +85,20 @@ function ScorerRanking() {
     return player?.current_team || fallbackTeam || '미배정'
   }
 
+  // ✅ 득점왕 순위 집계에서 제외할 골인지 판별 (PK/자책골 등 특수골)
+  function isSpecialGoal(g) {
+    if (!g.player_id) return true // player_id 없는 골(PK·자책골)은 제외
+    const name = g.player_name
+    if (name === 'PK(핸디캡)' || name === 'PK' || name === '자책골') return true
+    return false
+  }
+
   function getScorers() {
     const scorers = {}
     for (const g of goals) {
+      // 🚫 PK(핸디캡)·자책골 등 특수골은 득점순위 집계에서 제외
+      if (isSpecialGoal(g)) continue
+
       if (!scorers[g.player_id]) {
         scorers[g.player_id] = {
           player_id: g.player_id,
