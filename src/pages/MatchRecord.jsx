@@ -199,16 +199,30 @@ function MatchRecord() {
     )
   }
 
-  // ➕➖ 점수 증감 (현재 값 기준)
-  async function bumpScore(match, field, delta) {
-    if (!canEdit) return
-    const cur = field === 'score_a' ? match.score_a : match.score_b
-    const next = Math.max(0, (cur || 0) + delta)
+  // 🔄 골 개수로 matches 점수 컬럼 동기화 (합산·순위 계산이 score_a/b를 그대로 쓰도록 유지)
+  async function syncMatchScore(matchId) {
+    const { data: gs } = await supabase
+      .from('goals')
+      .select('*')
+      .eq('match_id', matchId)
+
+    const { data: mArr } = await supabase
+      .from('matches')
+      .select('*')
+      .eq('id', matchId)
+      .limit(1)
+
+    const match = mArr && mArr[0]
+    if (!match) return
+
+    const list = gs || []
+    const scoreA = list.filter(g => g.team === match.team_a).length
+    const scoreB = list.filter(g => g.team === match.team_b).length
+
     await supabase
       .from('matches')
-      .update({ [field]: next })
-      .eq('id', match.id)
-    fetchMatches(selectedDate)
+      .update({ score_a: scoreA, score_b: scoreB })
+      .eq('id', matchId)
   }
 
   async function updateTeamName(matchId, field, value) {
@@ -217,7 +231,10 @@ function MatchRecord() {
       .from('matches')
       .update({ [field]: value })
       .eq('id', matchId)
+    // 팀 이름이 바뀌면 골의 team 값과 매칭이 달라질 수 있으므로 점수 재동기화
+    await syncMatchScore(matchId)
     fetchMatches(selectedDate)
+    fetchGoals(selectedDate)
   }
 
   async function addGoal(matchId, playerId, playerName, team) {
@@ -229,19 +246,15 @@ function MatchRecord() {
       player_name: playerName,
       team: team,
     })
+    await syncMatchScore(matchId)
+    fetchMatches(selectedDate)
     fetchGoals(selectedDate)
   }
 
-  // 🥅🎯 특수 골(자책골/PK) 추가 - 득점자 없이 점수만 반영
+  // 🥅🎯 특수 골(자책골/PK) 추가 - 득점자 없이 골만 기록 (점수는 골 개수로 자동 반영)
   async function addSpecialGoal(match, field, goalType) {
     if (!canEdit) return
     const team = field === 'score_a' ? match.team_a : match.team_b
-
-    const cur = field === 'score_a' ? match.score_a : match.score_b
-    await supabase
-      .from('matches')
-      .update({ [field]: (cur || 0) + 1 })
-      .eq('id', match.id)
 
     await supabase.from('goals').insert({
       match_id: match.id,
@@ -251,6 +264,7 @@ function MatchRecord() {
       team: team,
     })
 
+    await syncMatchScore(match.id)
     fetchMatches(selectedDate)
     fetchGoals(selectedDate)
   }
@@ -274,19 +288,11 @@ function MatchRecord() {
     const g = goals.find(x => x.id === goalId)
     await supabase.from('goals').delete().eq('id', goalId)
 
-    if (g && !g.player_id) {
-      const match = matches.find(m => m.id === g.match_id)
-      if (match) {
-        const field = g.team === match.team_a ? 'score_a' : 'score_b'
-        const cur = field === 'score_a' ? match.score_a : match.score_b
-        await supabase
-          .from('matches')
-          .update({ [field]: Math.max(0, (cur || 0) - 1) })
-          .eq('id', match.id)
-        fetchMatches(selectedDate)
-      }
+    if (g) {
+      await syncMatchScore(g.match_id)
     }
 
+    fetchMatches(selectedDate)
     fetchGoals(selectedDate)
   }
 
@@ -550,10 +556,13 @@ function MatchRecord() {
               const matchGoals = goals.filter(g => g.match_id === match.id)
               const goalsA = matchGoals.filter(g => g.team === match.team_a)
               const goalsB = matchGoals.filter(g => g.team === match.team_b)
+              // ✅ 점수 = 득점(골) 개수
+              const scoreA = goalsA.length
+              const scoreB = goalsB.length
               const colorA = getTeamColor(match.team_a)
               const colorB = getTeamColor(match.team_b)
-              const aWin = match.score_a > match.score_b
-              const bWin = match.score_b > match.score_a
+              const aWin = scoreA > scoreB
+              const bWin = scoreB > scoreA
 
               return (
                 <div
@@ -593,53 +602,21 @@ function MatchRecord() {
                         )}
                       </div>
 
-                      {/* 스코어 */}
-                      <div className="flex items-center gap-2">
-                        {/* A 점수 */}
-                        <div className="flex items-center gap-1">
-                          {canEdit && (
-                            <button
-                              onClick={() => bumpScore(match, 'score_a', -1)}
-                              className="w-6 h-6 rounded-full bg-slate-700 hover:bg-slate-600 text-slate-300 text-sm leading-none flex items-center justify-center"
-                            >−</button>
-                          )}
-                          <span
-                            className="text-3xl font-black tabular-nums leading-none w-7 text-center"
-                            style={{ color: aWin ? '#fef08a' : '#ffffff' }}
-                          >
-                            {match.score_a}
-                          </span>
-                          {canEdit && (
-                            <button
-                              onClick={() => bumpScore(match, 'score_a', 1)}
-                              className="w-6 h-6 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white text-sm leading-none flex items-center justify-center"
-                            >+</button>
-                          )}
-                        </div>
-
+                      {/* 스코어 (골 개수 자동 반영, +/- 버튼 없음) */}
+                      <div className="flex items-center gap-3">
+                        <span
+                          className="text-3xl font-black tabular-nums leading-none w-7 text-center"
+                          style={{ color: aWin ? '#fef08a' : '#ffffff' }}
+                        >
+                          {scoreA}
+                        </span>
                         <span className="text-slate-500 text-xl font-bold">:</span>
-
-                        {/* B 점수 */}
-                        <div className="flex items-center gap-1">
-                          {canEdit && (
-                            <button
-                              onClick={() => bumpScore(match, 'score_b', -1)}
-                              className="w-6 h-6 rounded-full bg-slate-700 hover:bg-slate-600 text-slate-300 text-sm leading-none flex items-center justify-center"
-                            >−</button>
-                          )}
-                          <span
-                            className="text-3xl font-black tabular-nums leading-none w-7 text-center"
-                            style={{ color: bWin ? '#fef08a' : '#ffffff' }}
-                          >
-                            {match.score_b}
-                          </span>
-                          {canEdit && (
-                            <button
-                              onClick={() => bumpScore(match, 'score_b', 1)}
-                              className="w-6 h-6 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white text-sm leading-none flex items-center justify-center"
-                            >+</button>
-                          )}
-                        </div>
+                        <span
+                          className="text-3xl font-black tabular-nums leading-none w-7 text-center"
+                          style={{ color: bWin ? '#fef08a' : '#ffffff' }}
+                        >
+                          {scoreB}
+                        </span>
                       </div>
 
                       {/* 팀 B */}

@@ -8,9 +8,10 @@ function PollVote() {
   const [responses, setResponses] = useState([])
   const [players, setPlayers] = useState([])
   const [teams, setTeams] = useState([])
-  const [search, setSearch] = useState('')
-  const [selectedPlayer, setSelectedPlayer] = useState(null)
   const [loading, setLoading] = useState(false)
+
+  // 🗳️ 투표 모달 대상 선수
+  const [modalPlayer, setModalPlayer] = useState(null)
 
   useEffect(() => {
     fetchPoll()
@@ -43,17 +44,13 @@ function PollVote() {
     setTeams(data || [])
   }
 
-  // 🗳️ 투표하기 (이름 선택 후 상태 버튼 클릭)
-  async function handleVote(response) {
-    if (!selectedPlayer) {
-      alert('먼저 이름을 선택해주세요!')
-      return
-    }
-
+  // 🗳️ 투표하기 (모달에서 상태 선택 → 즉시 저장)
+  async function handleVote(player, response) {
+    if (!player) return
     setLoading(true)
 
     // 기존 투표가 있으면 업데이트, 없으면 새로 추가
-    const existing = responses.find(r => r.player_id === selectedPlayer.id)
+    const existing = responses.find(r => r.player_id === player.id)
 
     if (existing) {
       await supabase
@@ -63,22 +60,30 @@ function PollVote() {
     } else {
       await supabase.from('poll_responses').insert([{
         poll_id: id,
-        player_id: selectedPlayer.id,
-        player_name: selectedPlayer.name,
-        team: selectedPlayer.current_team || null,
+        player_id: player.id,
+        player_name: player.name,
+        team: player.current_team || null,
         response,
       }])
     }
 
-    setSelectedPlayer(null)
-    setSearch('')
     setLoading(false)
+    setModalPlayer(null)
     fetchResponses()
   }
 
-  async function handleDelete(responseId) {
-    if (!window.confirm('투표를 취소하시겠습니까?')) return
-    await supabase.from('poll_responses').delete().eq('id', responseId)
+  // 🗑️ 투표 취소 (미투표로)
+  async function handleCancelVote(player) {
+    if (!player) return
+    const existing = responses.find(r => r.player_id === player.id)
+    if (!existing) {
+      setModalPlayer(null)
+      return
+    }
+    setLoading(true)
+    await supabase.from('poll_responses').delete().eq('id', existing.id)
+    setLoading(false)
+    setModalPlayer(null)
     fetchResponses()
   }
 
@@ -105,14 +110,17 @@ function PollVote() {
     '늦참': { emoji: '⏰', bg: 'bg-yellow-500/20', text: 'text-yellow-400' },
   }
 
+  // 모달 상태 선택 버튼 정의
+  const voteOptions = [
+    { key: '참석', emoji: '✅', base: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30', active: 'bg-emerald-500 text-white border-emerald-400' },
+    { key: '불참', emoji: '❌', base: 'bg-red-500/15 text-red-300 border-red-500/30', active: 'bg-red-500 text-white border-red-400' },
+    { key: '조퇴', emoji: '🏃', base: 'bg-orange-500/15 text-orange-300 border-orange-500/30', active: 'bg-orange-500 text-white border-orange-400' },
+    { key: '늦참', emoji: '⏰', base: 'bg-yellow-500/15 text-yellow-300 border-yellow-500/30', active: 'bg-yellow-500 text-slate-900 border-yellow-400' },
+  ]
+
   if (!poll) {
     return <div className="text-center py-20 text-slate-400">⏳ 로딩 중...</div>
   }
-
-  // 이름 검색 결과
-  const filteredPlayers = search
-    ? players.filter(p => p.name?.includes(search))
-    : []
 
   // ✅ 현재 실제로 존재하는 선수 id 집합
   const validPlayerIds = new Set(players.map(p => p.id))
@@ -143,6 +151,9 @@ function PollVote() {
   const teamNamesList = teams.map(t => t.name)
   const unassignedPlayers = players.filter(p => !p.current_team || !teamNamesList.includes(p.current_team))
 
+  // 모달 대상 선수의 현재 투표 상태
+  const modalCurrentResponse = modalPlayer ? getPlayerResponse(modalPlayer.id) : null
+
   return (
     <div className="max-w-full mx-auto">
       {/* 헤더 */}
@@ -157,63 +168,9 @@ function PollVote() {
         </div>
       </div>
 
-      {/* 🗳️ 투표 폼 */}
-      <div className="bg-slate-800 rounded-xl p-6 border border-slate-700 mb-6">
-        <h2 className="text-lg font-bold text-white mb-4">🗳️ 투표하기</h2>
-
-        {/* 이름 검색 */}
-        <div className="mb-4">
-          <label className="block text-slate-300 text-sm font-medium mb-2">1️⃣ 이름 검색</label>
-          <input
-            type="text"
-            placeholder="🔍 이름을 입력하세요..."
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value)
-              setSelectedPlayer(null)
-            }}
-            className="w-full bg-slate-700 border border-slate-600 rounded-xl px-4 py-3 text-white placeholder-slate-400 focus:outline-none focus:border-emerald-500"
-          />
-          {search && !selectedPlayer && (
-            <div className="bg-slate-700 rounded-xl border border-slate-600 max-h-48 overflow-y-auto mt-2">
-              {filteredPlayers.length === 0 ? (
-                <p className="px-4 py-3 text-slate-400 text-sm">검색 결과가 없습니다</p>
-              ) : (
-                filteredPlayers.map(player => {
-                  const voted = getPlayerResponse(player.id)
-                  return (
-                    <button
-                      key={player.id}
-                      onClick={() => {
-                        setSelectedPlayer(player)
-                        setSearch(player.name)
-                      }}
-                      className="w-full text-left px-4 py-2 hover:bg-slate-600 transition-colors text-white flex justify-between items-center"
-                    >
-                      <span>{player.name} <span className="text-slate-400 text-xs">{player.current_team ? `(${player.current_team})` : '(미배정)'}</span></span>
-                      {voted && <span className="text-xs text-slate-400">{responseBadge[voted]?.emoji} {voted}</span>}
-                    </button>
-                  )
-                })
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* 선택된 선수 + 상태 버튼 */}
-        {selectedPlayer && (
-          <div>
-            <label className="block text-slate-300 text-sm font-medium mb-2">
-              2️⃣ <span className="text-emerald-400 font-bold">{selectedPlayer.name}</span> 님의 참석 여부를 선택하세요
-            </label>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <button onClick={() => handleVote('참석')} disabled={loading} className="bg-emerald-500/20 hover:bg-emerald-500/40 text-emerald-400 border border-emerald-500/30 py-4 rounded-xl font-bold transition-colors">✅ 참석</button>
-              <button onClick={() => handleVote('불참')} disabled={loading} className="bg-red-500/20 hover:bg-red-500/40 text-red-400 border border-red-500/30 py-4 rounded-xl font-bold transition-colors">❌ 불참</button>
-              <button onClick={() => handleVote('조퇴')} disabled={loading} className="bg-orange-500/20 hover:bg-orange-500/40 text-orange-400 border border-orange-500/30 py-4 rounded-xl font-bold transition-colors">🏃 조퇴</button>
-              <button onClick={() => handleVote('늦참')} disabled={loading} className="bg-yellow-500/20 hover:bg-yellow-500/40 text-yellow-400 border border-yellow-500/30 py-4 rounded-xl font-bold transition-colors">⏰ 늦참</button>
-            </div>
-          </div>
-        )}
+      {/* 안내 문구 */}
+      <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl px-4 py-3 mb-6 text-emerald-200 text-sm">
+        👇 아래 <b>팀별 현황</b>에서 <b>본인 이름을 클릭</b>하면 참석 여부를 선택할 수 있습니다.
       </div>
 
       {/* 📊 전체 요약 */}
@@ -267,7 +224,7 @@ function PollVote() {
                 <span className="text-yellow-400">⏰ {stats.늦참}</span>
               </div>
 
-              {/* 선수 목록 + 상태 뱃지 */}
+              {/* 선수 목록 + 상태 뱃지 (행 클릭 → 모달) */}
               <div className="p-3">
                 {teamPlayers.length === 0 ? (
                   <p className="text-slate-500 text-sm px-2 py-2">배정된 선수 없음</p>
@@ -276,22 +233,22 @@ function PollVote() {
                     {teamPlayers.map(player => {
                       const resp = getPlayerResponse(player.id)
                       const badge = resp ? responseBadge[resp] : null
-                      const respObj = responses.find(r => r.player_id === player.id)
                       return (
-                        <div key={player.id} className="flex items-center justify-between bg-slate-800/50 rounded-lg px-3 py-2">
+                        <button
+                          key={player.id}
+                          onClick={() => setModalPlayer(player)}
+                          className="w-full flex items-center justify-between bg-slate-800/50 hover:bg-slate-700 rounded-lg px-3 py-2 transition-colors"
+                          title="클릭하여 참석 여부 선택"
+                        >
                           <span className="text-sm font-medium" style={{ color: playerNameColor }}>{player.name}</span>
                           {badge ? (
-                            <button
-                              onClick={() => respObj && handleDelete(respObj.id)}
-                              className={`${badge.bg} ${badge.text} px-2 py-1 rounded-lg text-xs font-medium`}
-                              title="클릭하면 투표 취소"
-                            >
+                            <span className={`${badge.bg} ${badge.text} px-2 py-1 rounded-lg text-xs font-medium`}>
                               {badge.emoji} {resp}
-                            </button>
+                            </span>
                           ) : (
                             <span className="text-slate-500 text-xs">⬜ 미투표</span>
                           )}
-                        </div>
+                        </button>
                       )
                     })}
                   </div>
@@ -323,22 +280,22 @@ function PollVote() {
                 {unassignedPlayers.map(player => {
                   const resp = getPlayerResponse(player.id)
                   const badge = resp ? responseBadge[resp] : null
-                  const respObj = responses.find(r => r.player_id === player.id)
                   return (
-                    <div key={player.id} className="flex items-center justify-between bg-slate-800/50 rounded-lg px-3 py-2">
-                      <span className="text-slate-400 text-sm font-medium">{player.name}</span>
+                    <button
+                      key={player.id}
+                      onClick={() => setModalPlayer(player)}
+                      className="w-full flex items-center justify-between bg-slate-800/50 hover:bg-slate-700 rounded-lg px-3 py-2 transition-colors"
+                      title="클릭하여 참석 여부 선택"
+                    >
+                      <span className="text-slate-300 text-sm font-medium">{player.name}</span>
                       {badge ? (
-                        <button
-                          onClick={() => respObj && handleDelete(respObj.id)}
-                          className={`${badge.bg} ${badge.text} px-2 py-1 rounded-lg text-xs font-medium`}
-                          title="클릭하면 투표 취소"
-                        >
+                        <span className={`${badge.bg} ${badge.text} px-2 py-1 rounded-lg text-xs font-medium`}>
                           {badge.emoji} {resp}
-                        </button>
+                        </span>
                       ) : (
                         <span className="text-slate-500 text-xs">⬜ 미투표</span>
                       )}
-                    </div>
+                    </button>
                   )
                 })}
               </div>
@@ -346,6 +303,87 @@ function PollVote() {
           </div>
         </div>
       </div>
+
+      {/* 🗳️ 투표 선택 모달 */}
+      {modalPlayer && (
+        <div
+          onClick={() => !loading && setModalPlayer(null)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.7)',
+            zIndex: 100,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '20px',
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: '#1e293b',
+              border: '1px solid #475569',
+              borderRadius: '16px',
+              width: '100%',
+              maxWidth: '380px',
+              padding: '22px',
+              boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
+            }}
+          >
+            <div className="flex items-center justify-between mb-1">
+              <h2 className="text-white text-xl font-bold">
+                {modalPlayer.name}
+              </h2>
+              <button
+                onClick={() => setModalPlayer(null)}
+                className="text-slate-400 hover:text-white text-xl leading-none px-2"
+                title="닫기"
+              >
+                ✕
+              </button>
+            </div>
+            <p className="text-slate-400 text-sm mb-4">
+              {modalPlayer.current_team ? `${modalPlayer.current_team} · ` : '미배정 · '}
+              참석 여부를 선택하세요
+            </p>
+
+            {/* 상태 선택 버튼 (현재 선택은 강조) */}
+            <div className="grid grid-cols-2 gap-3 mb-4">
+              {voteOptions.map(opt => {
+                const isActive = modalCurrentResponse === opt.key
+                return (
+                  <button
+                    key={opt.key}
+                    onClick={() => handleVote(modalPlayer, opt.key)}
+                    disabled={loading}
+                    className={`py-5 rounded-xl font-bold text-base border transition-colors disabled:opacity-50 ${
+                      isActive ? opt.active : opt.base
+                    }`}
+                  >
+                    {opt.emoji} {opt.key}
+                    {isActive && <span className="block text-[11px] font-medium mt-0.5">현재 선택</span>}
+                  </button>
+                )
+              })}
+            </div>
+
+            {/* 투표 취소 (미투표로) */}
+            {modalCurrentResponse && (
+              <button
+                onClick={() => handleCancelVote(modalPlayer)}
+                disabled={loading}
+                className="w-full bg-slate-700 hover:bg-slate-600 text-slate-200 py-3 rounded-xl text-sm font-medium transition-colors disabled:opacity-50"
+              >
+                ⬜ 투표 취소 (미투표로)
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ⬇️ 하단 여백 */}
+      <div style={{ height: '40px', width: '100%' }} aria-hidden="true"></div>
     </div>
   )
 }
