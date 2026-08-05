@@ -20,6 +20,8 @@ const dashboardMenu = [
   { to: '/calendar', icon: '📅', label: '경기 스케쥴', desc: '월별 경기·구장 일정', roles: ['admin', 'executive', 'captain', 'member'] },
   { to: '/season-ranking', icon: '🏆', label: '순위표', desc: '시즌 순위 확인', roles: ['admin', 'executive', 'captain', 'member'] },
   { to: '/scorer-ranking', icon: '👟', label: '득점순위표', desc: '득점왕 순위 확인', roles: ['admin', 'executive', 'captain', 'member'] },
+  // 🏆 팀 아카이브: 전 회원 열람, 저장/삭제는 관리자·임원(컴포넌트 내부 처리)
+  { to: '/archive', icon: '🗂️', label: '팀 아카이브', desc: '시즌별 우승·기록 보관', roles: ['admin', 'executive', 'captain', 'member'] },
   { to: '/players', icon: '👤', label: '선수 관리', desc: '선수 등록·수정·삭제', roles: ['admin', 'executive'] },
   { to: '/attendance/stats', icon: '📊', label: '출석률 통계', desc: '선수별 출석률 분석', roles: ['admin', 'executive', 'captain', 'member'] },
   { to: '/polls', icon: '🗳️', label: '투표', desc: '경기 참석 여부 투표', roles: ['admin', 'executive', 'captain', 'member'] },

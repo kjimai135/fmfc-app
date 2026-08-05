@@ -6,15 +6,52 @@ function TeamRoster() {
   const { role } = useAuth()
   // ✅ 수정 권한: 관리자·임원·주장(부주장)만
   const canEdit = role === 'admin' || role === 'executive' || role === 'captain'
+  // 🗓️ 시즌 수정 권한: 관리자·임원만
+  const canEditSeason = role === 'admin' || role === 'executive'
 
   const [teams, setTeams] = useState([])
   const [players, setPlayers] = useState([])
   const [loading, setLoading] = useState(true)
 
+  // 🗓️ 현재 시즌 (app_settings.season_label) — 앱 전체가 이 값을 사용
+  const [season, setSeason] = useState('')
+  const [savingSeason, setSavingSeason] = useState(false)
+
   useEffect(() => {
     fetchTeams()
     fetchPlayers()
+    fetchSeason()
   }, [])
+
+  async function fetchSeason() {
+    const { data } = await supabase
+      .from('app_settings')
+      .select('value')
+      .eq('key', 'season_label')
+      .single()
+    if (data?.value) setSeason(data.value)
+  }
+
+  // 🗓️ 시즌 저장 (관리자·임원만)
+  async function saveSeason() {
+    if (!canEditSeason) return
+    const val = season.trim()
+    if (!val) {
+      alert('시즌을 입력해주세요! (예: 2026-05)')
+      return
+    }
+    setSavingSeason(true)
+    const { error } = await supabase
+      .from('app_settings')
+      .update({ value: val })
+      .eq('key', 'season_label')
+    setSavingSeason(false)
+    if (error) {
+      alert('시즌 저장에 실패했습니다: ' + error.message)
+    } else {
+      alert(`현재 시즌이 "${val}" 로 저장되었습니다.`)
+    }
+  }
 
   async function fetchTeams() {
     setLoading(true)
@@ -80,7 +117,40 @@ function TeamRoster() {
 
   return (
     <div className="max-w-full mx-auto">
-      <h1 className="text-3xl font-bold text-white mb-6">📋 팀 명단</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+        <h1 className="text-3xl font-bold text-white">📋 팀 명단</h1>
+
+        {/* 🗓️ 현재 시즌 관리 (이 값을 앱 전체가 사용) */}
+        <div className="flex items-center gap-2 bg-slate-800/60 border border-slate-700 rounded-xl px-3 py-2">
+          <label className="text-slate-300 text-sm font-bold whitespace-nowrap">🗓️ 리그 시즌</label>
+          {canEditSeason ? (
+            <>
+              <input
+                type="text"
+                value={season}
+                onChange={(e) => setSeason(e.target.value)}
+                placeholder="예: 2026-05"
+                className="bg-slate-700 border border-slate-600 rounded-lg px-3 py-1 text-white w-28 text-center focus:outline-none focus:border-emerald-500"
+              />
+              <button
+                onClick={saveSeason}
+                disabled={savingSeason}
+                className="bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-1 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50"
+              >
+                {savingSeason ? '저장중…' : '저장'}
+              </button>
+            </>
+          ) : (
+            <span className="text-emerald-400 font-bold">{season || '-'}</span>
+          )}
+        </div>
+      </div>
+
+      {canEditSeason && (
+        <p className="text-slate-500 text-xs mb-4">
+          💡 여기서 설정한 시즌이 순위표·득점순위·경기 기록 전체에 적용됩니다.
+        </p>
+      )}
 
       {loading ? (
         <div className="text-center py-20 text-slate-400">

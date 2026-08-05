@@ -2,11 +2,21 @@ import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import rankingBg from '../assets/시즌-순위표.png'
 
+// "7시", "20시-22시" 등에서 시작 시각(시)만 추출
+function parseStartHour(timeStr) {
+  if (!timeStr) return null
+  const m = String(timeStr).match(/\d{1,2}/)
+  if (!m) return null
+  let h = parseInt(m[0], 10)
+  if (isNaN(h) || h < 0 || h > 23) return null
+  return h
+}
+
 function SeasonRanking() {
   const [matches, setMatches] = useState([])
   const [teams, setTeams] = useState([])
   const [loading, setLoading] = useState(true)
-  const [seasonLabel, setSeasonLabel] = useState('26-1')
+  const [seasonLabel, setSeasonLabel] = useState('') // 🗓️ 팀명단에서 설정한 시즌 번호
   const headerBoxRef = useRef(null)
   const [imgHeight, setImgHeight] = useState(0)
 
@@ -24,27 +34,20 @@ function SeasonRanking() {
 
   useEffect(() => {
     fetchTeams()
-    fetchMatches()
-    fetchSeasonLabel()
+    init()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // ✅ Supabase에서 시즌 번호 불러오기
-  async function fetchSeasonLabel() {
+  // 🗓️ 현재 시즌을 먼저 읽고, 그 시즌 경기만 로드
+  async function init() {
     const { data } = await supabase
       .from('app_settings')
       .select('value')
       .eq('key', 'season_label')
       .single()
-    if (data?.value) setSeasonLabel(data.value)
-  }
-
-  // ✅ 시즌 번호를 Supabase에 저장하기
-  async function saveSeasonLabel(newLabel) {
-    setSeasonLabel(newLabel)
-    await supabase
-      .from('app_settings')
-      .update({ value: newLabel })
-      .eq('key', 'season_label')
+    const season = data?.value || ''
+    setSeasonLabel(season)
+    fetchMatches(season)
   }
 
   async function fetchTeams() {
@@ -52,10 +55,43 @@ function SeasonRanking() {
     setTeams(data || [])
   }
 
-  async function fetchMatches() {
+  // ✅ 현재 시즌 + 조회 시각 기준 "이미 시작한 경기"만 반영
+  async function fetchMatches(season) {
     setLoading(true)
-    const { data } = await supabase.from('matches').select('*').order('game_date', { ascending: false })
-    setMatches(data || [])
+
+    const now = new Date()
+    const pad = (n) => String(n).padStart(2, '0')
+    const todayKey = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
+
+    // 1) 현재 시즌 경기만 조회
+    let query = supabase.from('matches').select('*').order('game_date', { ascending: false })
+    if (season) query = query.eq('season', season)
+    const { data: matchData } = await query
+
+    // 2) 예약(시작 시각) 조회 → 날짜별 시작 시각 맵
+    const { data: resvData } = await supabase
+      .from('reservations')
+      .select('date, time, is_confirmed, sort_order')
+
+    const startHourByDate = {}
+    for (const r of (resvData || [])) {
+      if (startHourByDate[r.date] === undefined || r.is_confirmed) {
+        const h = parseStartHour(r.time)
+        if (h !== null) startHourByDate[r.date] = h
+      }
+    }
+
+    // 3) 미래 경기(아직 시작 안 한 날짜) 제외
+    const past = (matchData || []).filter((m) => {
+      const d = m.game_date
+      if (d < todayKey) return true
+      if (d > todayKey) return false
+      const startHour = startHourByDate[d]
+      if (startHour === undefined || startHour === null) return true
+      return now.getHours() >= startHour
+    })
+
+    setMatches(past)
     setLoading(false)
   }
 
@@ -126,17 +162,6 @@ function SeasonRanking() {
 
   return (
     <div className="max-w-md mx-auto p-4">
-      {/* 시즌 라벨 입력 */}
-      <div className="flex items-center gap-3 mb-4">
-        <label className="text-slate-300 text-sm font-bold">시즌 번호:</label>
-        <input
-          type="text"
-          value={seasonLabel}
-          onChange={(e) => saveSeasonLabel(e.target.value)}
-          className="bg-slate-700 border border-slate-600 rounded-lg px-3 py-1 text-white w-24 text-center focus:outline-none focus:border-emerald-500"
-        />
-      </div>
-
       {/* 표시 영역 */}
       <div
         style={{
@@ -145,7 +170,7 @@ function SeasonRanking() {
           background: '#000',
         }}
       >
-        {/* 배경 이미지 컨테이너 + SEASON 겹치기 */}
+        {/* 배경 이미지 컨테이너 + 시즌 번호 겹치기 (번호는 팀명단 값에서 가져옴) */}
         <div
           ref={headerBoxRef}
           style={{

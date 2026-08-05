@@ -68,6 +68,9 @@ function CalendarPage() {
   // ⚽ 경기 생성 중인 날짜 (버튼 로딩 표시)
   const [creatingKey, setCreatingKey] = useState(null)
 
+  // 🗓️ 현재 시즌
+  const [currentSeason, setCurrentSeason] = useState('')
+
   // 📅 연/월 선택 팝오버
   const [pickerOpen, setPickerOpen] = useState(false)
   const [pickerYear, setPickerYear] = useState(today.getFullYear())
@@ -95,6 +98,7 @@ function CalendarPage() {
   useEffect(() => {
     if (canEdit) fetchPlayers()
     fetchTeams()
+    fetchCurrentSeason()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canEdit])
 
@@ -108,6 +112,16 @@ function CalendarPage() {
     if (pickerOpen) document.addEventListener('mousedown', onClickOutside)
     return () => document.removeEventListener('mousedown', onClickOutside)
   }, [pickerOpen])
+
+  // 🗓️ 현재 시즌 로드
+  async function fetchCurrentSeason() {
+    const { data } = await supabase
+      .from('app_settings')
+      .select('value')
+      .eq('key', 'season_label')
+      .single()
+    if (data?.value) setCurrentSeason(data.value)
+  }
 
   async function fetchPlayers() {
     const { data } = await supabase
@@ -388,6 +402,7 @@ function CalendarPage() {
         game_date: key,
         score_a: 0,
         score_b: 0,
+        season: currentSeason || null, // 🗓️ 현재 시즌 기록
         ...m,
       })
     }

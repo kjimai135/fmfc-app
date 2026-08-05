@@ -31,6 +31,9 @@ function MatchRecord() {
   const [loading, setLoading] = useState(false)
   const [showCreate, setShowCreate] = useState(false)
 
+  // 🗓️ 현재 시즌 (app_settings.season_label)
+  const [currentSeason, setCurrentSeason] = useState('')
+
   // 📅 스케쥴(구장/시간) + 라운드 정보
   const [dayInfo, setDayInfo] = useState({ venue: '', time: '', rounds: null })
 
@@ -46,6 +49,7 @@ function MatchRecord() {
   useEffect(() => {
     fetchTeams()
     fetchPlayers()
+    fetchCurrentSeason()
   }, [])
 
   useEffect(() => {
@@ -66,6 +70,16 @@ function MatchRecord() {
     if (pickerOpen) document.addEventListener('mousedown', onClickOutside)
     return () => document.removeEventListener('mousedown', onClickOutside)
   }, [pickerOpen])
+
+  // 🗓️ 현재 시즌 로드
+  async function fetchCurrentSeason() {
+    const { data } = await supabase
+      .from('app_settings')
+      .select('value')
+      .eq('key', 'season_label')
+      .single()
+    if (data?.value) setCurrentSeason(data.value)
+  }
 
   async function fetchTeams() {
     const { data } = await supabase
@@ -263,6 +277,7 @@ function MatchRecord() {
         game_date: selectedDate,
         score_a: 0,
         score_b: 0,
+        season: currentSeason || null, // 🗓️ 현재 시즌 기록
         ...m,
       })
     }
@@ -317,12 +332,17 @@ function MatchRecord() {
 
   async function addGoal(matchId, playerId, playerName, team) {
     if (!canEdit) return
+    // 이 경기의 시즌 값(없으면 현재 시즌)
+    const match = matches.find(m => m.id === matchId)
+    const seasonVal = match?.season || currentSeason || null
+
     await supabase.from('goals').insert({
       match_id: matchId,
       game_date: selectedDate,
       player_id: playerId,
       player_name: playerName,
       team: team,
+      season: seasonVal, // 🗓️ 시즌 기록
     })
     await syncMatchScore(matchId)
     fetchMatches(selectedDate)
@@ -333,6 +353,7 @@ function MatchRecord() {
   async function addSpecialGoal(match, field, goalType) {
     if (!canEdit) return
     const team = field === 'score_a' ? match.team_a : match.team_b
+    const seasonVal = match?.season || currentSeason || null
 
     await supabase.from('goals').insert({
       match_id: match.id,
@@ -340,6 +361,7 @@ function MatchRecord() {
       player_id: null,
       player_name: goalType,
       team: team,
+      season: seasonVal, // 🗓️ 시즌 기록
     })
 
     await syncMatchScore(match.id)
@@ -554,6 +576,9 @@ function MatchRecord() {
     <div className="max-w-4xl mx-auto">
       <div className="mb-6">
         <h1 className="text-3xl font-bold text-white">⚽ 경기순서 & 결과</h1>
+        {currentSeason && (
+          <p className="text-slate-400 text-sm mt-1">🗓️ 현재 시즌: <span className="text-emerald-400 font-semibold">{currentSeason}</span></p>
+        )}
       </div>
 
       {/* 🔒 읽기 전용 안내 (정회원) */}
@@ -698,9 +723,12 @@ function MatchRecord() {
         <div className="bg-slate-800 rounded-2xl p-6 border border-slate-700 mb-6">
           <h2 className="text-lg font-bold text-white mb-3">📅 {selectedDate} 경기 생성</h2>
           <p className="text-slate-400 text-sm mb-2">6경기 (1Q ~ 6Q)가 자동 생성됩니다.</p>
-          <p className="text-slate-500 text-xs mb-4">
+          <p className="text-slate-500 text-xs mb-1">
             📊 이전 순위표를 기반으로 팀이 자동 배정됩니다.
           </p>
+          {currentSeason && (
+            <p className="text-slate-500 text-xs mb-4">🗓️ 시즌: {currentSeason} 로 기록됩니다.</p>
+          )}
 
           <div className="bg-slate-700/50 rounded-lg p-3 mb-4 text-sm text-slate-300 space-y-1">
             <p>🥇 1위: 2,3,5,6쿼터</p>

@@ -18,6 +18,7 @@ import TeamStandings from './pages/TeamStandings'
 import TopScorers from './pages/TopScorers'
 import SeasonRanking from './pages/SeasonRanking'
 import ScorerRanking from './pages/ScorerRanking'
+import SeasonArchive from './pages/SeasonArchive'
 import MemberRoles from './pages/MemberRoles'
 import MemberRegister from './pages/MemberRegister'
 import PendingApproval from './pages/PendingApproval'
@@ -49,6 +50,8 @@ const allMenu = [
   { to: '/calendar', label: '📅 경기 스케쥴', roles: ['admin', 'executive', 'captain', 'member'] },
   { to: '/season-ranking', label: '📸 순위표', roles: ['admin', 'executive', 'captain', 'member'] },
   { to: '/scorer-ranking', label: '📸 득점순위표', roles: ['admin', 'executive', 'captain', 'member'] },
+  // 🏆 팀 아카이브: 전 회원 열람, 저장/삭제는 관리자·임원(컴포넌트 내부 처리)
+  { to: '/archive', label: '🏆 팀 아카이브', roles: ['admin', 'executive', 'captain', 'member'] },
   { to: '/players', label: '👤 선수 관리', roles: ['admin', 'executive'] },
   { to: '/attendance/stats', label: '📊 출석률 통계', roles: ['admin', 'executive', 'captain', 'member'] },
   { to: '/polls', label: '🗳️ 투표', roles: ['admin', 'executive', 'captain', 'member'] },
@@ -250,6 +253,9 @@ function AppContent() {
           {/* 순위표 / 득점순위표 */}
           <Route path="/season-ranking" element={<Protected allowed={['admin', 'executive', 'captain', 'member']}><SeasonRanking /></Protected>} />
           <Route path="/scorer-ranking" element={<Protected allowed={['admin', 'executive', 'captain', 'member']}><ScorerRanking /></Protected>} />
+
+          {/* 🏆 팀 아카이브 - 전 회원 열람, 저장/삭제는 관리자·임원(컴포넌트 내부 처리) */}
+          <Route path="/archive" element={<Protected allowed={['admin', 'executive', 'captain', 'member']}><SeasonArchive /></Protected>} />
 
           {/* 공지사항 (모든 회원 열람) - 상세/작성/수정은 컴포넌트 내부에서 권한 처리 */}
           <Route path="/notices" element={<Protected allowed={['admin', 'executive', 'captain', 'member']}><NoticeBoard /></Protected>} />

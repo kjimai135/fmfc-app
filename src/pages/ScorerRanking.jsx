@@ -2,12 +2,22 @@ import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import scorerBg from '../assets/시즌-득점.png'
 
+// "7시", "20시-22시" 등에서 시작 시각(시)만 추출
+function parseStartHour(timeStr) {
+  if (!timeStr) return null
+  const m = String(timeStr).match(/\d{1,2}/)
+  if (!m) return null
+  let h = parseInt(m[0], 10)
+  if (isNaN(h) || h < 0 || h > 23) return null
+  return h
+}
+
 function ScorerRanking() {
   const [goals, setGoals] = useState([])
   const [teams, setTeams] = useState([])
   const [players, setPlayers] = useState([])
   const [loading, setLoading] = useState(true)
-  const [seasonLabel, setSeasonLabel] = useState('26-1')
+  const [seasonLabel, setSeasonLabel] = useState('')
   const wrapperRef = useRef(null)
   const [scale, setScale] = useState(1)
 
@@ -27,8 +37,8 @@ function ScorerRanking() {
   useEffect(() => {
     fetchTeams()
     fetchPlayers()
-    fetchGoals()
-    fetchSeasonLabel()
+    init()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // 화면 너비에 맞춰 영역을 축소해서 "보여주기"만 함 (실제 크기는 고정)
@@ -44,13 +54,16 @@ function ScorerRanking() {
     return () => window.removeEventListener('resize', updateScale)
   }, [])
 
-  async function fetchSeasonLabel() {
+  // 🗓️ 현재 시즌을 먼저 읽고, 그 시즌 골만 로드
+  async function init() {
     const { data } = await supabase
       .from('app_settings')
       .select('value')
       .eq('key', 'season_label')
       .single()
-    if (data?.value) setSeasonLabel(data.value)
+    const season = data?.value || ''
+    setSeasonLabel(season)
+    fetchGoals(season)
   }
 
   async function fetchTeams() {
@@ -63,10 +76,43 @@ function ScorerRanking() {
     setPlayers(data || [])
   }
 
-  async function fetchGoals() {
+  // ✅ 현재 시즌 + 조회 시각 기준 "이미 시작한 경기"의 골만 반영
+  async function fetchGoals(season) {
     setLoading(true)
-    const { data } = await supabase.from('goals').select('*').order('game_date', { ascending: false })
-    setGoals(data || [])
+
+    const now = new Date()
+    const pad = (n) => String(n).padStart(2, '0')
+    const todayKey = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
+
+    // 1) 현재 시즌 골만 조회
+    let query = supabase.from('goals').select('*').order('game_date', { ascending: false })
+    if (season) query = query.eq('season', season)
+    const { data: goalData } = await query
+
+    // 2) 예약(시작 시각) 조회 → 날짜별 시작 시각 맵
+    const { data: resvData } = await supabase
+      .from('reservations')
+      .select('date, time, is_confirmed, sort_order')
+
+    const startHourByDate = {}
+    for (const r of (resvData || [])) {
+      if (startHourByDate[r.date] === undefined || r.is_confirmed) {
+        const h = parseStartHour(r.time)
+        if (h !== null) startHourByDate[r.date] = h
+      }
+    }
+
+    // 3) 미래 경기(아직 시작 안 한 날짜) 제외
+    const past = (goalData || []).filter((g) => {
+      const d = g.game_date
+      if (d < todayKey) return true
+      if (d > todayKey) return false
+      const startHour = startHourByDate[d]
+      if (startHour === undefined || startHour === null) return true
+      return now.getHours() >= startHour
+    })
+
+    setGoals(past)
     setLoading(false)
   }
 
