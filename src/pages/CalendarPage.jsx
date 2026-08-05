@@ -4,6 +4,10 @@ import { useAuth } from '../contexts/AuthContext'
 
 const WEEK_LABELS = ['월', '화', '수', '목', '금', '토', '일']
 
+// 🎯 라운드 기준점: 이 날짜가 (13, 14)라운드
+const ANCHOR_DATE = '2026-08-08'
+const ANCHOR_FIRST_ROUND = 13
+
 // 요일 헤더 색상 (월~금 하늘 / 토 주황 / 일 빨강) — 투명 톤
 function headerStyle(idx) {
   if (idx === 6) return { background: 'rgba(220,38,38,0.35)', color: '#fecaca' }
@@ -80,6 +84,8 @@ function CalendarPage() {
   const [resultMatches, setResultMatches] = useState([])
   const [resultGoals, setResultGoals] = useState([])
   const [resultLoading, setResultLoading] = useState(false)
+  // ⚽ 결과 모달 헤더 정보 (장소/시간/라운드)
+  const [resultInfo, setResultInfo] = useState({ venue: '', time: '', rounds: null })
 
   useEffect(() => {
     fetchData()
@@ -203,19 +209,61 @@ function CalendarPage() {
     setEditKey(key)
   }
 
+  // 🔢 라운드 자동 계산 (경기일 1일 = 2라운드, ANCHOR_DATE = 13·14 고정)
+  async function calcRounds(date) {
+    const { data } = await supabase
+      .from('matches')
+      .select('game_date')
+
+    const dates = [...new Set((data || []).map((d) => d.game_date))]
+    if (!dates.includes(ANCHOR_DATE)) dates.push(ANCHOR_DATE)
+    if (!dates.includes(date)) dates.push(date)
+    dates.sort()
+
+    const anchorIdx = dates.indexOf(ANCHOR_DATE)
+    const targetIdx = dates.indexOf(date)
+    if (anchorIdx === -1 || targetIdx === -1) return null
+
+    const offset = targetIdx - anchorIdx
+    const first = ANCHOR_FIRST_ROUND + offset * 2
+    const second = first + 1
+    if (first <= 0) return null
+    return { first, second }
+  }
+
   // ⚽ 경기 결과 모달 열기
   async function openResult(key, e) {
     if (e) e.stopPropagation() // 셀 클릭(편집) 전파 방지
     setResultKey(key)
     setResultLoading(true)
+    setResultInfo({ venue: '', time: '', rounds: null })
 
-    const [mRes, gRes] = await Promise.all([
+    const [mRes, gRes, resvRes, rounds] = await Promise.all([
       supabase.from('matches').select('*').eq('game_date', key).order('match_number'),
       supabase.from('goals').select('*').eq('game_date', key),
+      supabase
+        .from('reservations')
+        .select('*')
+        .eq('date', key)
+        .order('is_confirmed', { ascending: false })
+        .order('sort_order', { ascending: true }),
+      calcRounds(key),
     ])
 
     setResultMatches(mRes.data || [])
     setResultGoals(gRes.data || [])
+
+    // 장소/시간: 확정 예약 우선, 없으면 첫 예약
+    let venue = ''
+    let time = ''
+    const resvList = resvRes.data || []
+    if (resvList.length > 0) {
+      const confirmed = resvList.find((r) => r.is_confirmed) || resvList[0]
+      venue = confirmed.venue || ''
+      time = confirmed.time || ''
+    }
+    setResultInfo({ venue, time, rounds })
+
     setResultLoading(false)
   }
 
@@ -952,13 +1000,31 @@ function CalendarPage() {
               boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
             }}
           >
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-white text-lg font-bold">
-                ⚽ {resultKey.replace(/-/g, '. ')} 경기 결과
-              </h2>
+            {/* 헤더: 날짜 · 라운드 · 시간 · 장소 (한 줄) + 닫기 */}
+            <div className="flex items-start justify-between gap-2 mb-4">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 min-w-0">
+                <span className="text-white text-base font-bold whitespace-nowrap">
+                  ⚽ {resultKey.replace(/-/g, '. ')}
+                </span>
+                {resultInfo.rounds && (
+                  <span className="text-emerald-300 text-sm font-bold whitespace-nowrap">
+                    🏆 {resultInfo.rounds.first}·{resultInfo.rounds.second}R
+                  </span>
+                )}
+                {resultInfo.time && (
+                  <span className="text-slate-200 text-sm font-medium whitespace-nowrap">
+                    ⏰ {resultInfo.time}
+                  </span>
+                )}
+                {resultInfo.venue && (
+                  <span className="text-slate-200 text-sm font-medium whitespace-nowrap">
+                    📍 {resultInfo.venue}
+                  </span>
+                )}
+              </div>
               <button
                 onClick={() => setResultKey(null)}
-                className="text-slate-400 hover:text-white text-xl leading-none px-2"
+                className="text-slate-400 hover:text-white text-xl leading-none px-2 flex-shrink-0"
                 title="닫기"
               >
                 ✕
