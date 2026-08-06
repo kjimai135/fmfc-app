@@ -76,7 +76,7 @@ function ScorerRanking() {
     setPlayers(data || [])
   }
 
-  // ✅ 현재 시즌 + 조회 시각 기준 "이미 시작한 경기"의 골만 반영
+  // ✅ 현재 시즌 + 조회 시각 기준 "이미 시작한 경기"의 골만 반영 (🏆 챔스 골 제외)
   async function fetchGoals(season) {
     setLoading(true)
 
@@ -88,6 +88,14 @@ function ScorerRanking() {
     let query = supabase.from('goals').select('*').order('game_date', { ascending: false })
     if (season) query = query.eq('season', season)
     const { data: goalData } = await query
+
+    // 1-2) 🏆 챔스 경기 목록 조회 → 챔스 경기의 골은 득점왕에서 제외
+    let matchQuery = supabase.from('matches').select('id, is_champions')
+    if (season) matchQuery = matchQuery.eq('season', season)
+    const { data: matchData } = await matchQuery
+    const champsMatchIds = new Set(
+      (matchData || []).filter((m) => m.is_champions).map((m) => m.id)
+    )
 
     // 2) 예약(시작 시각) 조회 → 날짜별 시작 시각 맵
     const { data: resvData } = await supabase
@@ -102,8 +110,11 @@ function ScorerRanking() {
       }
     }
 
-    // 3) 미래 경기(아직 시작 안 한 날짜) 제외
+    // 3) 미래 경기(아직 시작 안 한 날짜) 제외 + 🏆 챔스 경기 골 제외
     const past = (goalData || []).filter((g) => {
+      // 🏆 챔스 경기의 골은 득점왕 순위에서 제외
+      if (g.match_id && champsMatchIds.has(g.match_id)) return false
+
       const d = g.game_date
       if (d < todayKey) return true
       if (d > todayKey) return false

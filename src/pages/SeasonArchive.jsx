@@ -23,6 +23,8 @@ function SeasonArchive() {
   const [computed, setComputed] = useState({
     leagueChampion: '',
     scorerRecords: [], // [{name, team, goals}] (골 내림차순)
+    champsChampionAuto: '', // 🏆 자동 감지된 챔스 우승팀
+    champsMvpAuto: '',      // ⭐ 자동 감지된 챔스 MVP
   })
 
   const [topScorerIdx, setTopScorerIdx] = useState(0)
@@ -117,14 +119,31 @@ function SeasonArchive() {
       return now.getHours() >= sh
     }
 
-    const matches = (mRes.data || []).filter((m) => isPast(m.game_date))
-    const goals = (gRes.data || []).filter((g) => isPast(g.game_date))
+    const allMatchesRaw = mRes.data || []
+    const allGoalsRaw = gRes.data || []
 
-    const leagueChampion = computeChampion(matches, teamList)
-    const scorerRecords = computeScorers(goals, playerList)
+    // 리그 우승/득점왕: isPast 필터 적용 (이미 치른 경기만)
+    const pastMatches = allMatchesRaw.filter((m) => isPast(m.game_date))
+    const pastGoals = allGoalsRaw.filter((g) => isPast(g.game_date))
 
-    setComputed({ leagueChampion, scorerRecords })
+    const leagueMatches = pastMatches.filter((m) => !m.is_champions)
+    const champsMatchIdsPast = new Set(pastMatches.filter((m) => m.is_champions).map((m) => m.id))
+    const leagueGoals = pastGoals.filter((g) => !(g.match_id && champsMatchIdsPast.has(g.match_id)))
+
+    const leagueChampion = computeChampion(leagueMatches, teamList)
+    const scorerRecords = computeScorers(leagueGoals, playerList)
+
+    // 🏆 챔스 우승/MVP: isPast 필터 없이 전체 챔스 경기 기준 (입력된 값이면 반영)
+    const champsMatches = allMatchesRaw.filter((m) => m.is_champions)
+    const champsChampionAuto = computeChampsChampion(champsMatches, teamList)
+    const champsMvpAuto = champsMatches.find((m) => m.champs_mvp)?.champs_mvp || ''
+
+    setComputed({ leagueChampion, scorerRecords, champsChampionAuto, champsMvpAuto })
     setTopScorerIdx(0)
+
+    // 자동 감지값을 폼 초기값으로 채움 (관리자가 수정 가능)
+    setChampsChampion(champsChampionAuto || '')
+    setChampsMvp(champsMvpAuto || '')
   }
 
   function computeChampion(matches, teamList) {
@@ -177,6 +196,41 @@ function SeasonArchive() {
       return b.goalsFor - a.goalsFor
     })
 
+    const hasData = sorted.some((s) => s.points > 0 || s.goalsFor > 0)
+    return hasData && sorted.length > 0 ? sorted[0].name : ''
+  }
+
+  // 🏆 챔스 우승팀 (개별 6경기 각각 승무패, 승점 최다)
+  function computeChampsChampion(matches, teamList) {
+    if (!matches || matches.length === 0) return ''
+    const standings = {}
+    function ensure(name) {
+      if (!standings[name]) {
+        standings[name] = { name, points: 0, goalsFor: 0, goalsAgainst: 0 }
+      }
+    }
+    for (const m of matches) {
+      const a = m.team_a
+      const b = m.team_b
+      if (!a || !b) continue
+      ensure(a)
+      ensure(b)
+      const sa = m.score_a || 0
+      const sb = m.score_b || 0
+      standings[a].goalsFor += sa
+      standings[a].goalsAgainst += sb
+      standings[b].goalsFor += sb
+      standings[b].goalsAgainst += sa
+      if (sa > sb) standings[a].points += 3
+      else if (sa < sb) standings[b].points += 3
+      else { standings[a].points += 1; standings[b].points += 1 }
+    }
+    const sorted = Object.values(standings).sort((x, y) => {
+      if (y.points !== x.points) return y.points - x.points
+      const gdX = x.goalsFor - x.goalsAgainst, gdY = y.goalsFor - y.goalsAgainst
+      if (gdY !== gdX) return gdY - gdX
+      return y.goalsFor - x.goalsFor
+    })
     const hasData = sorted.some((s) => s.points > 0 || s.goalsFor > 0)
     return hasData && sorted.length > 0 ? sorted[0].name : ''
   }
@@ -271,8 +325,6 @@ function SeasonArchive() {
       alert('저장에 실패했습니다: ' + error.message)
     } else {
       alert(`✅ "${seasonLabel}" 시즌 아카이브가 저장되었습니다!`)
-      setChampsChampion('')
-      setChampsMvp('')
       setNote('')
       setShowSaveForm(false)
       fetchArchives()
@@ -505,7 +557,6 @@ function SeasonArchive() {
                       <span className="font-bold" style={{ color: getTeamColor(computed.leagueChampion) }}>
                         {computed.leagueChampion || '-'}
                       </span>
-                      <span className="text-slate-500 text-xs ml-2">(자동)</span>
                     </FormRow>
 
                     <FormRow icon="👟" label="득점왕">

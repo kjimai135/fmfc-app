@@ -32,8 +32,9 @@ function TeamStandings() {
       .from('matches')
       .select('*')
       .order('game_date', { ascending: false })
-    
-    let filtered = data || []
+
+    // 🏆 챔스 경기는 리그 순위(팀 전적)에서 제외
+    let filtered = (data || []).filter((m) => !m.is_champions)
 
     if (filterMode === 'range' && startDate && endDate) {
       filtered = filtered.filter(m => m.game_date >= startDate && m.game_date <= endDate)
@@ -172,7 +173,7 @@ function TeamStandings() {
   return (
     <div className="max-w-4xl mx-auto">
       <h1 className="text-3xl font-bold text-white mb-2">🏆 팀 전적</h1>
-      <p className="text-slate-400 mb-6">총 {totalGames}일 경기 기준</p>
+      <p className="text-slate-400 mb-6">총 {totalGames}일 경기 기준 <span className="text-slate-500 text-sm">(챔스 경기 제외)</span></p>
 
       {/* 기간 필터 */}
       <div className="bg-slate-800 rounded-xl p-4 border border-slate-700 mb-6">

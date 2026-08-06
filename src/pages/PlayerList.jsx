@@ -203,7 +203,7 @@ function PlayerList() {
         </label>
       </div>
 
-      {/* 선수 목록 - 테이블 (이름/연생/주소/연락처/포지션/등급 + 관리) */}
+      {/* 선수 목록 - 테이블 (이름/출생/주소/연락처/포지션/등급 + 관리) */}
       {loading ? (
         <div className="text-center py-20 text-slate-400">
           <p className="text-xl">⏳ 로딩 중...</p>
@@ -216,16 +216,16 @@ function PlayerList() {
         </div>
       ) : (
         <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-x-auto">
-          <table className="w-full text-left">
+          <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-slate-700 bg-slate-800/80">
-                <th className="px-4 py-3 text-slate-400 text-sm font-medium whitespace-nowrap">이름</th>
-                <th className="px-4 py-3 text-slate-400 text-sm font-medium whitespace-nowrap">출생</th>
-                <th className="px-4 py-3 text-slate-400 text-sm font-medium whitespace-nowrap">주소</th>
-                <th className="px-4 py-3 text-slate-400 text-sm font-medium whitespace-nowrap">연락처</th>
-                <th className="px-4 py-3 text-slate-400 text-sm font-medium whitespace-nowrap">포지션</th>
-                <th className="px-4 py-3 text-slate-400 text-sm font-medium whitespace-nowrap">등급</th>
-                <th className="px-4 py-3 text-slate-400 text-sm font-medium text-center whitespace-nowrap">관리</th>
+                <th className="px-5 py-4 text-slate-400 text-sm font-semibold whitespace-nowrap">이름</th>
+                <th className="px-5 py-4 text-slate-400 text-sm font-semibold whitespace-nowrap">출생</th>
+                <th className="px-5 py-4 text-slate-400 text-sm font-semibold whitespace-nowrap">주소</th>
+                <th className="px-5 py-4 text-slate-400 text-sm font-semibold whitespace-nowrap">연락처</th>
+                <th className="px-5 py-4 text-slate-400 text-sm font-semibold whitespace-nowrap">포지션</th>
+                <th className="px-5 py-4 text-slate-400 text-sm font-semibold whitespace-nowrap">등급</th>
+                <th className="px-5 py-4 text-slate-400 text-sm font-semibold text-center whitespace-nowrap">관리</th>
               </tr>
             </thead>
             <tbody>
@@ -238,7 +238,7 @@ function PlayerList() {
                     className={`border-b border-slate-700/50 hover:bg-slate-700/30 transition-colors ${inactive ? 'opacity-50' : ''}`}
                   >
                     {/* 이름 (+ 탈퇴 배지) */}
-                    <td className="px-4 py-3 text-white font-medium whitespace-nowrap">
+                    <td className="px-5 py-4 text-white font-medium text-[15px] whitespace-nowrap">
                       {player.name}
                       {inactive && (
                         <span className="ml-2 px-2 py-0.5 rounded-full text-xs font-medium bg-slate-600/40 text-slate-300">탈퇴</span>
@@ -246,44 +246,44 @@ function PlayerList() {
                     </td>
 
                     {/* 출생 (연생) */}
-                    <td className="px-4 py-3 text-slate-300 text-sm whitespace-nowrap">
+                    <td className="px-5 py-4 text-slate-300 text-sm whitespace-nowrap">
                       {birthLabel(player.birth_year)}
                     </td>
 
                     {/* 주소 */}
-                    <td className="px-4 py-3 text-slate-300 text-sm whitespace-nowrap">{player.address || '-'}</td>
+                    <td className="px-5 py-4 text-slate-300 text-sm whitespace-nowrap">{player.address || '-'}</td>
 
                     {/* 연락처 */}
-                    <td className="px-4 py-3 text-slate-300 text-sm whitespace-nowrap">{player.phone || '-'}</td>
+                    <td className="px-5 py-4 text-slate-300 text-sm whitespace-nowrap">{player.phone || '-'}</td>
 
                     {/* 포지션 */}
-                    <td className="px-4 py-3 whitespace-nowrap">
+                    <td className="px-5 py-4 whitespace-nowrap">
                       {player.main_position ? (
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${positionColor(player.main_position)}`}>
+                        <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${positionColor(player.main_position)}`}>
                           {player.main_position}
                         </span>
                       ) : '-'}
                     </td>
 
                     {/* 등급 */}
-                    <td className="px-4 py-3 whitespace-nowrap">
+                    <td className="px-5 py-4 whitespace-nowrap">
                       {role ? (
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${ROLE_COLORS[role] || 'bg-slate-500/20 text-slate-400'}`}>
+                        <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${ROLE_COLORS[role] || 'bg-slate-500/20 text-slate-400'}`}>
                           {ROLE_LABELS[role] || role}
                         </span>
                       ) : (
-                        <span className="px-2 py-1 rounded-full text-xs font-medium bg-slate-600/30 text-slate-500" title="구글 계정과 연결되지 않음">
+                        <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-slate-600/30 text-slate-500" title="구글 계정과 연결되지 않음">
                           미연결
                         </span>
                       )}
                     </td>
 
                     {/* 관리 */}
-                    <td className="px-4 py-3 whitespace-nowrap">
+                    <td className="px-5 py-4 whitespace-nowrap">
                       <div className="flex gap-2 justify-center">
                         <Link
                           to={`/players/${player.id}/edit`}
-                          className="bg-slate-700 hover:bg-slate-600 text-white px-3 py-1 rounded-lg text-xs transition-colors"
+                          className="bg-slate-700 hover:bg-slate-600 text-white px-3 py-1.5 rounded-lg text-xs transition-colors"
                           title="수정"
                         >
                           ✏️
@@ -293,14 +293,14 @@ function PlayerList() {
                           <>
                             <button
                               onClick={() => restorePlayer(player.id)}
-                              className="bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 px-3 py-1 rounded-lg text-xs transition-colors"
+                              className="bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 px-3 py-1.5 rounded-lg text-xs transition-colors"
                               title="복구(재가입)"
                             >
                               ↩️
                             </button>
                             <button
                               onClick={() => deletePlayerForever(player.id, player.name)}
-                              className="bg-red-500/10 hover:bg-red-500/20 text-red-400 px-3 py-1 rounded-lg text-xs transition-colors"
+                              className="bg-red-500/10 hover:bg-red-500/20 text-red-400 px-3 py-1.5 rounded-lg text-xs transition-colors"
                               title="완전 삭제"
                             >
                               🗑️
@@ -309,7 +309,7 @@ function PlayerList() {
                         ) : (
                           <button
                             onClick={() => withdrawPlayer(player.id, player.name)}
-                            className="bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 px-3 py-1 rounded-lg text-xs transition-colors"
+                            className="bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 px-3 py-1.5 rounded-lg text-xs transition-colors"
                             title="탈퇴 처리"
                           >
                             🚪

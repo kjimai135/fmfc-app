@@ -18,6 +18,7 @@ import TopScorers from './pages/TopScorers'
 import SeasonRanking from './pages/SeasonRanking'
 import ScorerRanking from './pages/ScorerRanking'
 import SeasonArchive from './pages/SeasonArchive'
+import SeasonTransition from './pages/SeasonTransition'
 import MyProfile from './pages/MyProfile'
 import MemberRoles from './pages/MemberRoles'
 import MemberRegister from './pages/MemberRegister'
@@ -61,6 +62,8 @@ const allMenu = [
   { to: '/archive', label: '🗂️ 아카이브', roles: ['admin', 'executive'], group: 'manage' },
   { to: '/players', label: '🧑 회원관리', roles: ['admin', 'executive'], group: 'manage' },
   { to: '/member-roles', label: '🔑 권한관리', roles: ['admin', 'executive'], group: 'manage' },
+  // 🔄 시즌 전환: 관리자·회장만 (executive에게도 메뉴는 보이되, 페이지 내부에서 admin/회장만 실행 가능)
+  { to: '/season-transition', label: '🔄 시즌 전환', roles: ['admin', 'executive'], group: 'manage' },
 
   // 📝 준회원 전용
   { to: '/register', label: '📝 회원 등록/정회원 요청', roles: ['associate'], group: 'associate' },
@@ -279,6 +282,9 @@ function AppContent() {
 
           {/* 🏆 팀 아카이브 - 관리자·임원만 */}
           <Route path="/archive" element={<Protected allowed={['admin', 'executive']}><SeasonArchive /></Protected>} />
+
+          {/* 🔄 시즌 전환 - 라우트는 admin/executive 통과, 실제 실행은 페이지에서 admin/회장만 */}
+          <Route path="/season-transition" element={<Protected allowed={['admin', 'executive']}><SeasonTransition /></Protected>} />
 
           <Route path="/notices" element={<Protected allowed={['admin', 'executive', 'captain', 'member']}><NoticeBoard /></Protected>} />
           <Route path="/notices/new" element={<Protected allowed={['admin', 'executive']}><NoticeDetail /></Protected>} />

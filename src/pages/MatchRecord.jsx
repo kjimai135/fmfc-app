@@ -9,6 +9,9 @@ const ANCHOR_FIRST_ROUND = 13 // 그 날의 첫 라운드 (두 번째는 +1)
 // ✅ 월요일 시작 요일 라벨
 const WEEK_LABELS = ['월', '화', '수', '목', '금', '토', '일']
 
+// 🏆 챔스 강조색 (진한 황금색)
+const CHAMPS_COLOR = '#f59e0b'
+
 // YYYY-MM-DD (로컬 기준)
 function toKey(d) {
   const y = d.getFullYear()
@@ -31,6 +34,12 @@ function MatchRecord() {
   )
   const [loading, setLoading] = useState(false)
   const [showCreate, setShowCreate] = useState(false)
+
+  // 🏆 경기 생성 시 챔스 경기 여부
+  const [createAsChamps, setCreateAsChamps] = useState(false)
+
+  // ⭐ 챔스 MVP 저장 중 표시
+  const [savingMvp, setSavingMvp] = useState(false)
 
   // 🗓️ 현재 시즌 (app_settings.season_label)
   const [currentSeason, setCurrentSeason] = useState('')
@@ -157,7 +166,7 @@ function MatchRecord() {
     return { first, second }
   }
 
-  // 🏆 이전까지의 누적 순위 계산 (오늘 날짜 제외)
+  // 🏆 이전까지의 누적 순위 계산 (오늘 날짜 제외, 챔스 경기 제외)
   async function getPreviousStandings() {
     const { data: allMatches } = await supabase
       .from('matches')
@@ -165,7 +174,8 @@ function MatchRecord() {
       .neq('game_date', selectedDate)
       .order('game_date', { ascending: false })
 
-    const pastMatches = allMatches || []
+    // 챔스 경기는 리그 순위에서 제외
+    const pastMatches = (allMatches || []).filter(m => !m.is_champions)
     const dates = [...new Set(pastMatches.map(m => m.game_date))]
 
     const allMatchups = []
@@ -278,18 +288,21 @@ function MatchRecord() {
         score_a: 0,
         score_b: 0,
         season: currentSeason || null,
+        is_champions: createAsChamps, // 🏆 챔스 여부
         ...m,
       })
     }
 
     setShowCreate(false)
+    setCreateAsChamps(false)
     setLoading(false)
     fetchMatches(selectedDate)
     fetchDayInfo(selectedDate)
     alert(
-      hasHistory
+      (createAsChamps ? '🏆 챔스 경기로 생성되었습니다!\n' : '') +
+      (hasHistory
         ? `순위 기반으로 6경기가 생성되었습니다!\n🥇${first} 🥈${second} 🥉${third}`
-        : '6경기가 생성되었습니다! (과거 기록이 없어 기본 순서로 배정)'
+        : '6경기가 생성되었습니다! (과거 기록이 없어 기본 순서로 배정)')
     )
   }
 
@@ -395,6 +408,18 @@ function MatchRecord() {
     fetchGoals(selectedDate)
   }
 
+  // ⭐ 챔스 MVP 저장 (그 날의 모든 matches row에 동일하게 기록)
+  async function saveChampsMvp(mvpName) {
+    if (!canEdit) return
+    setSavingMvp(true)
+    await supabase
+      .from('matches')
+      .update({ champs_mvp: mvpName || null })
+      .eq('game_date', selectedDate)
+    await fetchMatches(selectedDate)
+    setSavingMvp(false)
+  }
+
   async function deleteDay() {
     if (!canEdit) return
     if (!window.confirm(`${selectedDate} 경기 기록을 전부 삭제하시겠습니까?`)) return
@@ -427,6 +452,7 @@ function MatchRecord() {
     return `⚽ ${g.player_name}`
   }
 
+  // 합산 결과 계산 (리그용 — 전+후반 합산 3매치업)
   function getMatchupResults() {
     if (matches.length < 6) return []
 
@@ -480,7 +506,72 @@ function MatchRecord() {
     return pairs
   }
 
+  // 🏆 챔스 순위 테이블 (개별 6경기 각각 승무패로 집계)
+  function getChampsStandings() {
+    const standings = {}
+    function ensure(name) {
+      if (!standings[name]) {
+        standings[name] = {
+          name,
+          played: 0, wins: 0, draws: 0, losses: 0,
+          goalsFor: 0, goalsAgainst: 0, points: 0,
+        }
+      }
+    }
+
+    for (const m of matches) {
+      const a = m.team_a
+      const b = m.team_b
+      if (!a || !b) continue
+      ensure(a)
+      ensure(b)
+      const sa = m.score_a || 0
+      const sb = m.score_b || 0
+      standings[a].played++
+      standings[b].played++
+      standings[a].goalsFor += sa
+      standings[a].goalsAgainst += sb
+      standings[b].goalsFor += sb
+      standings[b].goalsAgainst += sa
+      if (sa > sb) {
+        standings[a].wins++
+        standings[a].points += 3
+        standings[b].losses++
+      } else if (sa < sb) {
+        standings[b].wins++
+        standings[b].points += 3
+        standings[a].losses++
+      } else {
+        standings[a].draws++
+        standings[b].draws++
+        standings[a].points += 1
+        standings[b].points += 1
+      }
+    }
+
+    return Object.values(standings).sort((x, y) => {
+      if (y.points !== x.points) return y.points - x.points
+      const gdX = x.goalsFor - x.goalsAgainst
+      const gdY = y.goalsFor - y.goalsAgainst
+      if (gdY !== gdX) return gdY - gdX
+      return y.goalsFor - x.goalsFor
+    })
+  }
+
   const matchupResults = getMatchupResults()
+
+  // 🏆 이 날이 챔스 경기인지
+  const isChampsDay = matches.length > 0 && matches.some(m => m.is_champions)
+
+  // 🏆 챔스 순위 & 우승팀 (개별 6경기 기준)
+  const champsStandings = isChampsDay ? getChampsStandings() : []
+  const champsWinner =
+    isChampsDay && champsStandings.length > 0 && champsStandings[0].played > 0
+      ? champsStandings[0]
+      : null
+
+  // ⭐ 현재 저장된 챔스 MVP
+  const currentMvp = matches.find(m => m.champs_mvp)?.champs_mvp || ''
 
   const allTeamNames = [...new Set([
     ...teams.map(t => t.name),
@@ -505,7 +596,6 @@ function MatchRecord() {
   // 📅 달력 그리드용 날짜 배열 (✅ 월요일 시작, 6주)
   function buildCalendar(year, month) {
     const first = new Date(year, month - 1, 1)
-    // 월요일 시작 보정: (getDay()+6)%7 → 월=0, ..., 일=6
     const startOffset = (first.getDay() + 6) % 7
     const start = new Date(year, month - 1, 1 - startOffset)
     const cells = []
@@ -571,6 +661,7 @@ function MatchRecord() {
 
   const calendarCells = buildCalendar(pickerYM.year, pickerYM.month)
   const todayKey = toKey(new Date(new Date().getTime() + 9 * 60 * 60 * 1000))
+  const activePlayers = players.filter(p => p.is_active !== false)
 
   return (
     <div className="max-w-4xl mx-auto">
@@ -652,8 +743,8 @@ function MatchRecord() {
                     const isToday = key === todayKey
                     const dow = d.getDay()
                     let color = '#e2e8f0'
-                    if (dow === 0) color = '#f87171'      // 일요일 빨강
-                    else if (dow === 6) color = '#60a5fa' // 토요일 파랑
+                    if (dow === 0) color = '#f87171'
+                    else if (dow === 6) color = '#60a5fa'
                     return (
                       <button
                         key={idx}
@@ -697,10 +788,18 @@ function MatchRecord() {
         </div>
       </div>
 
-      {/* 📍 경기 정보 (장소 / 시간 / 라운드) — 경기가 있는 날만 표시 */}
+      {/* 📍 경기 정보 (장소 / 시간 / 라운드 / 챔스 배지) — 경기가 있는 날만 표시 */}
       {matches.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 mb-6">
-          {dayInfo.rounds && (
+          {isChampsDay && (
+            <span
+              className="inline-flex items-center gap-1 text-sm font-bold px-3 py-1.5 rounded-lg border"
+              style={{ background: `${CHAMPS_COLOR}22`, color: CHAMPS_COLOR, borderColor: `${CHAMPS_COLOR}66` }}
+            >
+              🏆 챔피언스 (챔스)
+            </span>
+          )}
+          {dayInfo.rounds && !isChampsDay && (
             <span className="inline-flex items-center gap-1 bg-emerald-500/15 text-emerald-300 text-sm font-bold px-3 py-1.5 rounded-lg border border-emerald-500/30">
               🏆 {dayInfo.rounds.first}·{dayInfo.rounds.second} 라운드
             </span>
@@ -736,16 +835,40 @@ function MatchRecord() {
             <p>🥉 3위: 1,3,4,6쿼터</p>
           </div>
 
+          {/* 🏆 챔스 경기 체크박스 */}
+          <label
+            className="flex items-start gap-3 rounded-xl border p-3 mb-4 cursor-pointer transition-colors"
+            style={{
+              background: createAsChamps ? `${CHAMPS_COLOR}1a` : 'rgba(51,65,85,0.4)',
+              borderColor: createAsChamps ? `${CHAMPS_COLOR}66` : '#475569',
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={createAsChamps}
+              onChange={(e) => setCreateAsChamps(e.target.checked)}
+              className="mt-0.5 w-5 h-5 flex-shrink-0"
+              style={{ accentColor: CHAMPS_COLOR }}
+            />
+            <div>
+              <p className="text-white font-bold text-sm">🏆 챔피언스(챔스) 경기로 생성</p>
+              <p className="text-slate-400 text-xs mt-0.5">
+                체크 시 이 날의 6경기는 챔스로 기록됩니다. (리그 순위·득점왕 집계에서 제외 / 경기 후 MVP 선택 가능)
+              </p>
+            </div>
+          </label>
+
           <div className="flex gap-4">
             <button
               onClick={createDayMatches}
               disabled={loading}
-              className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white py-3 rounded-xl font-semibold transition-colors disabled:opacity-50"
+              className="flex-1 text-white py-3 rounded-xl font-semibold transition-colors disabled:opacity-50"
+              style={{ background: createAsChamps ? CHAMPS_COLOR : '#10b981' }}
             >
-              {loading ? '생성 중...' : '✅ 경기 생성'}
+              {loading ? '생성 중...' : createAsChamps ? '🏆 챔스 경기 생성' : '✅ 경기 생성'}
             </button>
             <button
-              onClick={() => setShowCreate(false)}
+              onClick={() => { setShowCreate(false); setCreateAsChamps(false) }}
               className="flex-1 bg-slate-700 hover:bg-slate-600 text-white py-3 rounded-xl font-semibold transition-colors"
             >
               취소
@@ -763,6 +886,62 @@ function MatchRecord() {
         </div>
       ) : (
         <>
+          {/* 🏆 챔스 우승팀 + ⭐ MVP (챔스인 날 — 맨 위로) */}
+          {isChampsDay && (
+            <div
+              className="rounded-2xl border p-6 mb-6"
+              style={{ borderColor: `${CHAMPS_COLOR}66`, background: `${CHAMPS_COLOR}14` }}
+            >
+              <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2">🏆 챔피언스 결과</h2>
+
+              {/* 챔스 우승팀 */}
+              <div
+                className="rounded-xl p-4 mb-4 text-center border"
+                style={{
+                  borderColor: `${CHAMPS_COLOR}33`,
+                  background: `linear-gradient(135deg, ${CHAMPS_COLOR}20 0%, rgba(15,23,42,0.6) 100%)`,
+                }}
+              >
+                <p className="text-slate-300 text-xs mb-1">👑 챔스 우승팀 (승점 최다)</p>
+                {champsWinner ? (
+                  <p className="text-2xl font-extrabold" style={{ color: getTeamColor(champsWinner.name) }}>
+                    {champsWinner.name}
+                    <span className="text-slate-400 text-sm font-normal ml-2">({champsWinner.points}점)</span>
+                  </p>
+                ) : (
+                  <p className="text-slate-500 text-sm">경기 결과 입력 후 표시됩니다</p>
+                )}
+              </div>
+
+              {/* MVP 선택 */}
+              <div>
+                <label className="block text-slate-300 text-sm font-medium mb-2">⭐ 챔스 MVP (경기 후 주장 협의로 선택)</label>
+                {canEdit ? (
+                  <select
+                    value={currentMvp}
+                    onChange={(e) => saveChampsMvp(e.target.value)}
+                    disabled={savingMvp}
+                    className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none disabled:opacity-50"
+                    style={{ borderColor: currentMvp ? CHAMPS_COLOR : '#475569' }}
+                  >
+                    <option value="">MVP 선택 안 함</option>
+                    {activePlayers.map(p => (
+                      <option key={p.id} value={p.name}>
+                        {p.name}{p.current_team ? ` (${p.current_team})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <p className="text-white font-bold">{currentMvp || '-'}</p>
+                )}
+                {currentMvp && (
+                  <p className="text-sm mt-2 font-semibold" style={{ color: CHAMPS_COLOR }}>⭐ MVP: {currentMvp}</p>
+                )}
+                {savingMvp && <p className="text-slate-500 text-xs mt-1">저장 중...</p>}
+              </div>
+            </div>
+          )}
+
           {/* 개별 경기 스코어 */}
           <div className="space-y-3 mb-8">
             {matches.map(match => {
@@ -863,50 +1042,103 @@ function MatchRecord() {
             })}
           </div>
 
-          {/* 합산 결과 */}
-          {matchupResults.length > 0 && (
-            <div className="bg-slate-800 rounded-2xl border border-slate-700 p-6 mb-6">
-              <h2 className="text-lg font-bold text-white mb-4">📊 합산 결과</h2>
-              <div className="space-y-3">
-                {matchupResults.map((r, idx) => {
-                  const colorA = getTeamColor(r.teamA)
-                  const colorB = getTeamColor(r.teamB)
-                  const isDraw = r.result === '무'
-                  return (
-                    <div
-                      key={idx}
-                      className="rounded-xl p-4 border border-slate-700/50"
-                      style={{
-                        background: `linear-gradient(135deg, ${colorA}15 0%, rgba(15,23,42,0.5) 45%, rgba(15,23,42,0.5) 55%, ${colorB}15 100%)`,
-                      }}
-                    >
-                      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4">
-                        <div className="text-center">
-                          <p className="font-extrabold text-lg" style={{ color: colorA, opacity: r.result === r.teamB ? 0.45 : 1 }}>
-                            {r.teamA}
-                          </p>
-                        </div>
-                        <div className="text-center">
-                          <p className="text-white text-2xl font-black tabular-nums">{r.total}</p>
-                        </div>
-                        <div className="text-center">
-                          <p className="font-extrabold text-lg" style={{ color: colorB, opacity: r.result === r.teamA ? 0.45 : 1 }}>
-                            {r.teamB}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="text-center mt-2">
-                        {isDraw ? (
-                          <span className="bg-yellow-500/20 text-yellow-400 px-3 py-1 rounded-full text-xs font-semibold">무승부</span>
-                        ) : (
-                          <span className="bg-emerald-500/20 text-emerald-400 px-3 py-1 rounded-full text-xs font-semibold">🏆 {r.result} 승!</span>
-                        )}
-                      </div>
-                    </div>
-                  )
-                })}
+          {/* 📊 결과: 챔스면 순위 테이블, 리그면 합산 결과 */}
+          {isChampsDay ? (
+            champsStandings.length > 0 && (
+              <div className="bg-slate-800 rounded-2xl border overflow-hidden mb-6" style={{ borderColor: `${CHAMPS_COLOR}55` }}>
+                <div className="px-5 py-3 border-b border-slate-700 flex items-center gap-2">
+                  <span className="text-lg font-bold text-white">🏆 챔스 순위</span>
+                  <span className="text-slate-400 text-xs">(6경기 각각 승·무·패)</span>
+                </div>
+                <table className="w-full text-center text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-700 text-slate-400 text-xs">
+                      <th className="px-3 py-2.5 text-left">팀</th>
+                      <th className="px-1 py-2.5">승</th>
+                      <th className="px-1 py-2.5">무</th>
+                      <th className="px-1 py-2.5">패</th>
+                      <th className="px-1 py-2.5">득</th>
+                      <th className="px-1 py-2.5">실</th>
+                      <th className="px-1 py-2.5">득실</th>
+                      <th className="px-3 py-2.5">승점</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {champsStandings.map((t, idx) => {
+                      const color = getTeamColor(t.name)
+                      const gd = t.goalsFor - t.goalsAgainst
+                      return (
+                        <tr
+                          key={t.name}
+                          className="border-b border-slate-700/40"
+                          style={{ background: idx === 0 && t.played > 0 ? `${CHAMPS_COLOR}12` : 'transparent' }}
+                        >
+                          <td className="px-3 py-2.5 text-left font-bold" style={{ color }}>
+                            <span className="inline-flex items-center gap-1.5">
+                              <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ background: color, border: '1px solid rgba(255,255,255,0.3)' }}></span>
+                              {t.name}
+                              {idx === 0 && t.played > 0 && <span className="text-xs">👑</span>}
+                            </span>
+                          </td>
+                          <td className="px-1 py-2.5 text-emerald-400 font-bold">{t.wins}</td>
+                          <td className="px-1 py-2.5 text-yellow-400">{t.draws}</td>
+                          <td className="px-1 py-2.5 text-red-400">{t.losses}</td>
+                          <td className="px-1 py-2.5 text-slate-300">{t.goalsFor}</td>
+                          <td className="px-1 py-2.5 text-slate-300">{t.goalsAgainst}</td>
+                          <td className="px-1 py-2.5 text-slate-300">{gd > 0 ? '+' : ''}{gd}</td>
+                          <td className="px-3 py-2.5 text-white font-black text-base">{t.points}</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
               </div>
-            </div>
+            )
+          ) : (
+            matchupResults.length > 0 && (
+              <div className="bg-slate-800 rounded-2xl border border-slate-700 p-6 mb-6">
+                <h2 className="text-lg font-bold text-white mb-4">📊 합산 결과</h2>
+                <div className="space-y-3">
+                  {matchupResults.map((r, idx) => {
+                    const colorA = getTeamColor(r.teamA)
+                    const colorB = getTeamColor(r.teamB)
+                    const isDraw = r.result === '무'
+                    return (
+                      <div
+                        key={idx}
+                        className="rounded-xl p-4 border border-slate-700/50"
+                        style={{
+                          background: `linear-gradient(135deg, ${colorA}15 0%, rgba(15,23,42,0.5) 45%, rgba(15,23,42,0.5) 55%, ${colorB}15 100%)`,
+                        }}
+                      >
+                        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4">
+                          <div className="text-center">
+                            <p className="font-extrabold text-lg" style={{ color: colorA, opacity: r.result === r.teamB ? 0.45 : 1 }}>
+                              {r.teamA}
+                            </p>
+                          </div>
+                          <div className="text-center">
+                            <p className="text-white text-2xl font-black tabular-nums">{r.total}</p>
+                          </div>
+                          <div className="text-center">
+                            <p className="font-extrabold text-lg" style={{ color: colorB, opacity: r.result === r.teamA ? 0.45 : 1 }}>
+                              {r.teamB}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="text-center mt-2">
+                          {isDraw ? (
+                            <span className="bg-yellow-500/20 text-yellow-400 px-3 py-1 rounded-full text-xs font-semibold">무승부</span>
+                          ) : (
+                            <span className="bg-emerald-500/20 text-emerald-400 px-3 py-1 rounded-full text-xs font-semibold">🏆 {r.result} 승!</span>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )
           )}
 
           {/* 🔒 삭제 버튼 */}
