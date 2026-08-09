@@ -161,7 +161,7 @@ function SeasonRanking() {
   const columns = '0.5fr 2fr 0.9fr 0.7fr 0.7fr 0.7fr 0.9fr 0.9fr 0.9fr'
 
   return (
-    <div className="max-w-md mx-auto p-4">
+    <div className="w-full">
       {/* 표시 영역 */}
       <div
         style={{

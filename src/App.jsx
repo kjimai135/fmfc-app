@@ -17,6 +17,7 @@ import TeamStandings from './pages/TeamStandings'
 import TopScorers from './pages/TopScorers'
 import SeasonRanking from './pages/SeasonRanking'
 import ScorerRanking from './pages/ScorerRanking'
+import Rankings from './pages/Rankings'
 import SeasonArchive from './pages/SeasonArchive'
 import SeasonTransition from './pages/SeasonTransition'
 import MyProfile from './pages/MyProfile'
@@ -51,8 +52,7 @@ const allMenu = [
 
   // 📋 일반
   { to: '/roster', label: '📋 팀명단', roles: ['admin', 'executive', 'captain', 'member'], group: 'general' },
-  { to: '/season-ranking', label: '🏆 팀순위', roles: ['admin', 'executive', 'captain', 'member'], group: 'general' },
-  { to: '/scorer-ranking', label: '👟 득점순위', roles: ['admin', 'executive', 'captain', 'member'], group: 'general' },
+  { to: '/rankings', label: '🏆 순위 (팀·득점)', roles: ['admin', 'executive', 'captain', 'member'], group: 'general' },
   { to: '/attendance/stats', label: '📊 출석율', roles: ['admin', 'executive', 'captain', 'member'], group: 'general' },
   { to: '/notices', label: '📢 공지', roles: ['admin', 'executive', 'captain', 'member'], group: 'general' },
   { to: '/letter', label: '💌 마음의 편지', roles: ['admin', 'executive', 'captain', 'member'], group: 'general' },
@@ -277,6 +277,9 @@ function AppContent() {
 
           <Route path="/calendar" element={<Protected allowed={['admin', 'executive', 'captain', 'member']}><CalendarPage /></Protected>} />
 
+          {/* 🏆 순위 통합 (팀순위 + 득점순위 스와이프) */}
+          <Route path="/rankings" element={<Protected allowed={['admin', 'executive', 'captain', 'member']}><Rankings /></Protected>} />
+          {/* 개별 직접 접근용 (기존 유지) */}
           <Route path="/season-ranking" element={<Protected allowed={['admin', 'executive', 'captain', 'member']}><SeasonRanking /></Protected>} />
           <Route path="/scorer-ranking" element={<Protected allowed={['admin', 'executive', 'captain', 'member']}><ScorerRanking /></Protected>} />
 

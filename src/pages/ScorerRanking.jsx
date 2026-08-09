@@ -217,7 +217,7 @@ function ScorerRanking() {
   }
 
   return (
-    <div className="max-w-md mx-auto p-4">
+    <div className="w-full">
       {/* 화면 표시용 래퍼 (축소해서 보여주기) */}
       <div ref={wrapperRef} style={{ width: '100%' }}>
         <div style={{

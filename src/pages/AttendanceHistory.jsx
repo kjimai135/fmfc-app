@@ -99,10 +99,15 @@ function AttendanceHistory() {
     fetchAttendance(selectedDate)
   }
 
-  // ✅ 선택한 날짜 전체 삭제 (관리자·임원·주장/부주장)
+  // ✅ 선택한 날짜 전체 삭제 (관리자·임원·주장/부주장) — 2단계 재확인
   async function deleteAllForDate() {
     if (!canEdit) return
-    if (!window.confirm(`${selectedDate} 날짜의 출석 기록을 전부 삭제할까요?\n(복구할 수 없습니다!)`)) return
+    const count = attendance.length
+    // 1차 확인
+    if (!window.confirm(`⚠️ ${selectedDate} 날짜의 출석 기록 ${count}건을 전부 삭제할까요?\n(복구할 수 없습니다!)`)) return
+    // 2차 확인 (실수 방지)
+    if (!window.confirm(`정말 삭제하시겠습니까?\n${selectedDate} · 총 ${count}건이 영구 삭제됩니다.`)) return
+
     await supabase
       .from('attendance')
       .delete()
@@ -225,24 +230,15 @@ function AttendanceHistory() {
         </div>
       </div>
 
-      {/* 상단 버튼: 선수 추가 / 전체 삭제 (수정 권한자만) */}
+      {/* 상단 버튼: 선수 추가만 (전체 삭제는 맨 아래로 이동) */}
       {canEdit && (
-        <div className="flex flex-wrap justify-between items-center gap-2 mb-4">
+        <div className="flex flex-wrap items-center gap-2 mb-4">
           <button
             onClick={() => setShowAddForm(!showAddForm)}
             className="bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
           >
             {showAddForm ? '✕ 닫기' : '+ 선수 수동 추가'}
           </button>
-
-          {attendance.length > 0 && (
-            <button
-              onClick={deleteAllForDate}
-              className="bg-red-600/80 hover:bg-red-600 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
-            >
-              🗑️ {selectedDate} 기록 전체 삭제
-            </button>
-          )}
         </div>
       )}
 
@@ -397,6 +393,26 @@ function AttendanceHistory() {
           )
         })
       )}
+
+      {/* ⬇️ 기록 전체 삭제 (맨 아래 · 명단과 넉넉히 띄움 · 빨간 버튼) */}
+      {canEdit && attendance.length > 0 && !loading && (
+        <div style={{ marginTop: '80px', paddingTop: '28px', borderTop: '1px solid rgba(71,85,105,0.4)' }}>
+          <div className="flex justify-center">
+            <button
+              onClick={deleteAllForDate}
+              className="bg-red-600 hover:bg-red-700 text-white text-sm font-bold px-6 py-3 rounded-xl shadow-lg shadow-red-600/20 transition-colors"
+            >
+              🗑️ {selectedDate} 기록 전체 삭제
+            </button>
+          </div>
+          <p className="text-slate-500 text-xs text-center mt-3">
+            ※ 이 날짜의 모든 출석 기록이 영구 삭제됩니다. (되돌릴 수 없음)
+          </p>
+        </div>
+      )}
+
+      {/* 하단 여백 */}
+      <div style={{ height: '60px', width: '100%' }} aria-hidden="true"></div>
     </div>
   )
 }

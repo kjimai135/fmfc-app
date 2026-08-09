@@ -19,8 +19,7 @@ const dashboardMenu = [
   { to: '/calendar', icon: '📅', label: '일정', desc: '월별 경기·구장 일정', roles: ['admin', 'executive', 'captain', 'member'], group: 'game' },
 
   { to: '/roster', icon: '📋', label: '팀명단', desc: '전체 선수 명단 확인', roles: ['admin', 'executive', 'captain', 'member'], group: 'general' },
-  { to: '/season-ranking', icon: '🏆', label: '팀순위', desc: '시즌 순위 확인', roles: ['admin', 'executive', 'captain', 'member'], group: 'general' },
-  { to: '/scorer-ranking', icon: '👟', label: '득점순위', desc: '득점왕 순위 확인', roles: ['admin', 'executive', 'captain', 'member'], group: 'general' },
+  { to: '/rankings', icon: '🏆', label: '순위', desc: '팀 순위 · 득점 순위', roles: ['admin', 'executive', 'captain', 'member'], group: 'general' },
   { to: '/attendance/stats', icon: '📊', label: '출석율', desc: '선수별 출석률 분석', roles: ['admin', 'executive', 'captain', 'member'], group: 'general' },
   { to: '/notices', icon: '📢', label: '공지', desc: '팀 공지 확인·작성', roles: ['admin', 'executive', 'captain', 'member'], group: 'general' },
   { to: '/letter', icon: '💌', label: '마음의 편지', desc: '회장님께 익명으로 전하기', roles: ['admin', 'executive', 'captain', 'member'], group: 'general' },

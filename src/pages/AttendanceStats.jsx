@@ -141,11 +141,9 @@ function AttendanceStats() {
     setPopupPlayer(player)
   }
 
+  // ✅ 참석률 색상: 50% 기준 2색 (50% 이상 초록 / 미만 빨강)
   const rateColor = (rate) => {
-    if (rate >= 80) return 'text-emerald-400'
-    if (rate >= 60) return 'text-yellow-400'
-    if (rate >= 40) return 'text-orange-400'
-    return 'text-red-400'
+    return rate >= 50 ? 'text-emerald-400' : 'text-red-400'
   }
 
   const statusIcon = (s) => {
@@ -424,6 +422,9 @@ function AttendanceStats() {
           )}
         </div>
       )}
+
+      {/* ⬇️ 하단 여백 (모바일 스크롤 여유) */}
+      <div style={{ height: '70px', width: '100%' }} aria-hidden="true"></div>
     </div>
   )
 }

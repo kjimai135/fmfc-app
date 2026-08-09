@@ -4,6 +4,9 @@ import { supabase } from '../lib/supabase'
 
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토']
 
+// 지난(종료) 투표를 몇 개까지 보관할지
+const PAST_KEEP = 4
+
 function PollList() {
   const [polls, setPolls] = useState([])
   const [loading, setLoading] = useState(true)
@@ -12,9 +15,18 @@ function PollList() {
   const [editDate, setEditDate] = useState('')
   const [editTime, setEditTime] = useState('')
   const [editLocation, setEditLocation] = useState('')
+  const [showPast, setShowPast] = useState(false) // 지난 투표 접기/펼치기
+
+  // 오늘 날짜 키 (YYYY-MM-DD)
+  const pad = (n) => String(n).padStart(2, '0')
+  const todayKey = (() => {
+    const d = new Date()
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+  })()
 
   useEffect(() => {
     fetchPolls()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   async function fetchPolls() {
@@ -25,7 +37,24 @@ function PollList() {
       .select('*')
       .order('game_date', { ascending: true })
 
-    setPolls(data || [])
+    let all = data || []
+
+    // 🗑️ 지난(종료) 투표가 PAST_KEEP개를 초과하면, 오래된 것 자동 삭제
+    const pastPolls = all
+      .filter((p) => p.game_date && p.game_date < todayKey)
+      .sort((a, b) => b.game_date.localeCompare(a.game_date)) // 최신 지난 것부터
+
+    if (pastPolls.length > PAST_KEEP) {
+      const toDelete = pastPolls.slice(PAST_KEEP) // 4개 이후(오래된 것)
+      const deleteIds = toDelete.map((p) => p.id)
+      if (deleteIds.length > 0) {
+        await supabase.from('polls').delete().in('id', deleteIds)
+        // 화면 목록에서도 제거
+        all = all.filter((p) => !deleteIds.includes(p.id))
+      }
+    }
+
+    setPolls(all)
     setLoading(false)
   }
 
@@ -35,7 +64,6 @@ function PollList() {
     setGenerating(true)
 
     try {
-      const pad = (n) => String(n).padStart(2, '0')
       const keyOf = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 
       // 오늘 ~ 오늘+14일 범위
@@ -190,6 +218,158 @@ function PollList() {
     return { label: '종료', tone: 'past' }
   }
 
+  // 예정(오늘 이후) / 지난(종료) 분리
+  const upcomingPolls = polls.filter((p) => p.game_date && p.game_date >= todayKey)
+  const pastPolls = polls
+    .filter((p) => p.game_date && p.game_date < todayKey)
+    .sort((a, b) => b.game_date.localeCompare(a.game_date)) // 최근 지난 것부터
+    .slice(0, PAST_KEEP)
+
+  // 개별 투표 카드 렌더링
+  function renderPollCard(poll) {
+    const { month, day, weekday, dObj } = parseDate(poll.game_date)
+    const dday = getDday(dObj)
+    const isSunday = weekday === '일'
+    const isSaturday = weekday === '토'
+
+    if (editingId === poll.id) {
+      /* ✏️ 수정 모드 */
+      return (
+        <div key={poll.id} className="bg-slate-800 rounded-2xl p-5 border border-emerald-500/40">
+          <div className="space-y-4">
+            <h2 className="text-lg font-bold text-white mb-2">✏️ 경기 정보 수정</h2>
+            <div>
+              <label className="block text-slate-300 text-sm font-medium mb-2">경기 날짜 *</label>
+              <input
+                type="date"
+                value={editDate}
+                onChange={(e) => setEditDate(e.target.value)}
+                className="w-full bg-slate-700 border border-slate-600 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-emerald-500"
+                style={{ colorScheme: 'dark' }}
+              />
+            </div>
+            <div>
+              <label className="block text-slate-300 text-sm font-medium mb-2">경기 시간</label>
+              <input
+                type="text"
+                value={editTime}
+                onChange={(e) => setEditTime(e.target.value)}
+                placeholder="예: 오후 2시 ~ 4시"
+                className="w-full bg-slate-700 border border-slate-600 rounded-xl px-4 py-3 text-white placeholder-slate-400 focus:outline-none focus:border-emerald-500"
+              />
+            </div>
+            <div>
+              <label className="block text-slate-300 text-sm font-medium mb-2">경기 장소</label>
+              <input
+                type="text"
+                value={editLocation}
+                onChange={(e) => setEditLocation(e.target.value)}
+                placeholder="예: 연수구 체육공원"
+                className="w-full bg-slate-700 border border-slate-600 rounded-xl px-4 py-3 text-white placeholder-slate-400 focus:outline-none focus:border-emerald-500"
+              />
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => saveEdit(poll.id)}
+                className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white py-3 rounded-xl font-semibold transition-colors"
+              >
+                💾 저장
+              </button>
+              <button
+                onClick={cancelEdit}
+                className="flex-1 bg-slate-700 hover:bg-slate-600 text-white py-3 rounded-xl font-semibold transition-colors"
+              >
+                ↩️ 취소
+              </button>
+            </div>
+          </div>
+        </div>
+      )
+    }
+
+    /* 📋 일반 보기 모드 (한 줄 컴팩트) */
+    return (
+      <div
+        key={poll.id}
+        className="group relative bg-slate-800/80 hover:bg-slate-800 rounded-2xl border border-slate-700 hover:border-emerald-500/50 transition-all duration-200 overflow-hidden"
+      >
+        {/* 왼쪽 강조 바 */}
+        <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${
+          dday?.tone === 'today' ? 'bg-yellow-400'
+            : dday?.tone === 'upcoming' ? 'bg-emerald-500'
+            : 'bg-slate-600'
+        }`} />
+
+        <div className="flex items-center gap-3 p-3 pl-5">
+          {/* 날짜 박스 */}
+          <div className="flex flex-col items-center justify-center bg-slate-900/70 rounded-xl px-2.5 py-1.5 min-w-[56px] border border-slate-700 flex-shrink-0">
+            <span className={`text-[10px] font-bold leading-none ${
+              isSunday ? 'text-red-400' : isSaturday ? 'text-sky-400' : 'text-slate-400'
+            }`}>
+              {month}월
+            </span>
+            <span className="text-xl font-black text-white leading-tight">{day}</span>
+            <span className={`text-[10px] font-bold leading-none ${
+              isSunday ? 'text-red-400' : isSaturday ? 'text-sky-400' : 'text-slate-300'
+            }`}>
+              {weekday}
+            </span>
+          </div>
+
+          {/* 정보: D-day + 시간 + 장소 */}
+          <div className="flex-1 min-w-0">
+            <div className="flex flex-wrap items-center gap-1.5">
+              {dday && (
+                <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${
+                  dday.tone === 'today' ? 'bg-yellow-400/20 text-yellow-300'
+                    : dday.tone === 'upcoming' ? 'bg-emerald-500/20 text-emerald-300'
+                    : 'bg-slate-700 text-slate-400'
+                }`}>
+                  {dday.label}
+                </span>
+              )}
+              {poll.game_time && (
+                <span className="inline-flex items-center gap-1 bg-slate-700/60 text-slate-100 text-xs font-medium px-2 py-0.5 rounded-md">
+                  ⏰ {poll.game_time}
+                </span>
+              )}
+              {poll.location && (
+                <span className="inline-flex items-center gap-1 bg-slate-700/60 text-slate-100 text-xs font-medium px-2 py-0.5 rounded-md truncate">
+                  📍 {poll.location}
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* 액션 버튼 (장소 옆에 나란히) */}
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            <Link
+              to={`/polls/${poll.id}`}
+              title="투표하기"
+              className="bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-2 rounded-lg text-sm font-semibold transition-colors whitespace-nowrap"
+            >
+              🗳️ 투표
+            </Link>
+            <button
+              onClick={() => startEdit(poll)}
+              title="수정"
+              className="bg-slate-700 hover:bg-slate-600 text-slate-200 px-3 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap"
+            >
+              ✏️ 수정
+            </button>
+            <button
+              onClick={() => deletePoll(poll.id)}
+              title="삭제"
+              className="bg-red-500/10 hover:bg-red-500/20 text-red-400 px-2.5 py-2 rounded-lg text-sm transition-colors"
+            >
+              🗑️
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div>
       {/* 헤더 */}
@@ -199,7 +379,7 @@ function PollList() {
             🗳️ 투표
           </h1>
           <p className="text-slate-400 mt-1">
-            총 <span className="text-emerald-400 font-semibold">{polls.length}</span>개의 경기
+            예정 <span className="text-emerald-400 font-semibold">{upcomingPolls.length}</span>개 · 지난 경기 <span className="text-slate-300 font-semibold">{pastPolls.length}</span>개
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -228,158 +408,50 @@ function PollList() {
         <div className="text-center py-20 text-slate-400 bg-slate-800/40 border border-dashed border-slate-700 rounded-2xl">
           <p className="text-5xl mb-4">🗳️</p>
           <p className="text-xl text-white font-semibold">등록된 경기가 없습니다</p>
-          <p className="mt-2 text-sm">"경기 만들기" 또는 "📅 2주 이내 자동 생성" 버튼을 눌러보세요!</p>
+          <p className="mt-2 text-sm">"수동투표생성" 또는 "📅 자동투표생성" 버튼을 눌러보세요!</p>
         </div>
       ) : (
-        <div className="space-y-3">
-          {polls.map(poll => {
-            const { month, day, weekday, dObj } = parseDate(poll.game_date)
-            const dday = getDday(dObj)
-            const isSunday = weekday === '일'
-            const isSaturday = weekday === '토'
+        <>
+          {/* 📅 예정 경기 */}
+          {upcomingPolls.length > 0 ? (
+            <div className="space-y-3">
+              {upcomingPolls.map((poll) => renderPollCard(poll))}
+            </div>
+          ) : (
+            <div className="text-center py-12 text-slate-400 bg-slate-800/40 border border-dashed border-slate-700 rounded-2xl">
+              <p className="text-4xl mb-3">📅</p>
+              <p>예정된 경기가 없습니다</p>
+            </div>
+          )}
 
-            if (editingId === poll.id) {
-              /* ✏️ 수정 모드 */
-              return (
-                <div key={poll.id} className="bg-slate-800 rounded-2xl p-5 border border-emerald-500/40">
-                  <div className="space-y-4">
-                    <h2 className="text-lg font-bold text-white mb-2">✏️ 경기 정보 수정</h2>
-                    <div>
-                      <label className="block text-slate-300 text-sm font-medium mb-2">경기 날짜 *</label>
-                      <input
-                        type="date"
-                        value={editDate}
-                        onChange={(e) => setEditDate(e.target.value)}
-                        className="w-full bg-slate-700 border border-slate-600 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-emerald-500"
-                        style={{ colorScheme: 'dark' }}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-slate-300 text-sm font-medium mb-2">경기 시간</label>
-                      <input
-                        type="text"
-                        value={editTime}
-                        onChange={(e) => setEditTime(e.target.value)}
-                        placeholder="예: 오후 2시 ~ 4시"
-                        className="w-full bg-slate-700 border border-slate-600 rounded-xl px-4 py-3 text-white placeholder-slate-400 focus:outline-none focus:border-emerald-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-slate-300 text-sm font-medium mb-2">경기 장소</label>
-                      <input
-                        type="text"
-                        value={editLocation}
-                        onChange={(e) => setEditLocation(e.target.value)}
-                        placeholder="예: 연수구 체육공원"
-                        className="w-full bg-slate-700 border border-slate-600 rounded-xl px-4 py-3 text-white placeholder-slate-400 focus:outline-none focus:border-emerald-500"
-                      />
-                    </div>
-                    <div className="flex gap-3">
-                      <button
-                        onClick={() => saveEdit(poll.id)}
-                        className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white py-3 rounded-xl font-semibold transition-colors"
-                      >
-                        💾 저장
-                      </button>
-                      <button
-                        onClick={cancelEdit}
-                        className="flex-1 bg-slate-700 hover:bg-slate-600 text-white py-3 rounded-xl font-semibold transition-colors"
-                      >
-                        ↩️ 취소
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )
-            }
-
-            /* 📋 일반 보기 모드 (한 줄 컴팩트) */
-            return (
-              <div
-                key={poll.id}
-                className="group relative bg-slate-800/80 hover:bg-slate-800 rounded-2xl border border-slate-700 hover:border-emerald-500/50 transition-all duration-200 overflow-hidden"
+          {/* 🕓 지난 경기 (접기/펼치기, 최근 4개) */}
+          {pastPolls.length > 0 && (
+            <div className="mt-6">
+              <button
+                onClick={() => setShowPast((v) => !v)}
+                className="w-full flex items-center justify-between bg-slate-800/60 hover:bg-slate-700/60 border border-slate-700 rounded-xl px-4 py-3 transition-colors"
               >
-                {/* 왼쪽 강조 바 */}
-                <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${
-                  dday?.tone === 'today' ? 'bg-yellow-400'
-                    : dday?.tone === 'upcoming' ? 'bg-emerald-500'
-                    : 'bg-slate-600'
-                }`} />
+                <span className="text-slate-300 font-semibold text-sm">
+                  🕓 지난 투표 ({pastPolls.length})
+                </span>
+                <span className="text-slate-400 text-sm">{showPast ? '▲ 접기' : '▼ 펼치기'}</span>
+              </button>
 
-                <div className="flex items-center gap-3 p-3 pl-5">
-                  {/* 날짜 박스 */}
-                  <div className="flex flex-col items-center justify-center bg-slate-900/70 rounded-xl px-2.5 py-1.5 min-w-[56px] border border-slate-700 flex-shrink-0">
-                    <span className={`text-[10px] font-bold leading-none ${
-                      isSunday ? 'text-red-400' : isSaturday ? 'text-sky-400' : 'text-slate-400'
-                    }`}>
-                      {month}월
-                    </span>
-                    <span className="text-xl font-black text-white leading-tight">{day}</span>
-                    <span className={`text-[10px] font-bold leading-none ${
-                      isSunday ? 'text-red-400' : isSaturday ? 'text-sky-400' : 'text-slate-300'
-                    }`}>
-                      {weekday}
-                    </span>
-                  </div>
-
-                  {/* 정보: D-day + 시간 + 장소 */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      {dday && (
-                        <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${
-                          dday.tone === 'today' ? 'bg-yellow-400/20 text-yellow-300'
-                            : dday.tone === 'upcoming' ? 'bg-emerald-500/20 text-emerald-300'
-                            : 'bg-slate-700 text-slate-400'
-                        }`}>
-                          {dday.label}
-                        </span>
-                      )}
-                      {poll.game_time && (
-                        <span className="inline-flex items-center gap-1 bg-slate-700/60 text-slate-100 text-xs font-medium px-2 py-0.5 rounded-md">
-                          ⏰ {poll.game_time}
-                        </span>
-                      )}
-                      {poll.location && (
-                        <span className="inline-flex items-center gap-1 bg-slate-700/60 text-slate-100 text-xs font-medium px-2 py-0.5 rounded-md truncate">
-                          📍 {poll.location}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* 액션 버튼 (장소 옆에 나란히) */}
-                  <div className="flex items-center gap-1.5 flex-shrink-0">
-                    <Link
-                      to={`/polls/${poll.id}`}
-                      title="투표하기"
-                      className="bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-2 rounded-lg text-sm font-semibold transition-colors whitespace-nowrap"
-                    >
-                      🗳️ 투표
-                    </Link>
-                    <button
-                      onClick={() => startEdit(poll)}
-                      title="수정"
-                      className="bg-slate-700 hover:bg-slate-600 text-slate-200 px-3 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap"
-                    >
-                      ✏️ 수정
-                    </button>
-                    <button
-                      onClick={() => deletePoll(poll.id)}
-                      title="삭제"
-                      className="bg-red-500/10 hover:bg-red-500/20 text-red-400 px-2.5 py-2 rounded-lg text-sm transition-colors"
-                    >
-                      🗑️
-                    </button>
-                  </div>
+              {showPast && (
+                <div className="space-y-3 mt-3">
+                  {pastPolls.map((poll) => renderPollCard(poll))}
+                  <p className="text-slate-600 text-xs text-center pt-1">
+                    ※ 지난 투표는 최근 {PAST_KEEP}개까지만 보관되며, 그 이전 기록은 자동 삭제됩니다.
+                  </p>
                 </div>
-              </div>
-            )
-          })}
-        </div>
+              )}
+            </div>
+          )}
+        </>
       )}
 
       {/* ⬇️ 하단 여백 */}
-      <div style={{ height: '40px', width: '100%' }} aria-hidden="true"></div>
+      <div style={{ height: '60px', width: '100%' }} aria-hidden="true"></div>
     </div>
   )
 }

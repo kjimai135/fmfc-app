@@ -420,9 +420,12 @@ function MatchRecord() {
     setSavingMvp(false)
   }
 
+  // 🗑️ 이 날 경기 전체 삭제 — 2단계 재확인
   async function deleteDay() {
     if (!canEdit) return
-    if (!window.confirm(`${selectedDate} 경기 기록을 전부 삭제하시겠습니까?`)) return
+    const count = matches.length
+    if (!window.confirm(`⚠️ ${selectedDate} 경기 기록 ${count}건을 전부 삭제하시겠습니까?\n(골 기록 포함 · 복구할 수 없습니다!)`)) return
+    if (!window.confirm(`정말 삭제하시겠습니까?\n${selectedDate} · 총 ${count}경기가 영구 삭제됩니다.`)) return
 
     for (const m of matches) {
       await supabase.from('matches').delete().eq('id', m.id)
@@ -506,6 +509,11 @@ function MatchRecord() {
     return pairs
   }
 
+  const matchupResults = getMatchupResults()
+
+  // 🏆 이 날이 챔스 경기인지
+  const isChampsDay = matches.length > 0 && matches.some(m => m.is_champions)
+
   // 🏆 챔스 순위 테이블 (개별 6경기 각각 승무패로 집계)
   function getChampsStandings() {
     const standings = {}
@@ -557,11 +565,6 @@ function MatchRecord() {
       return y.goalsFor - x.goalsFor
     })
   }
-
-  const matchupResults = getMatchupResults()
-
-  // 🏆 이 날이 챔스 경기인지
-  const isChampsDay = matches.length > 0 && matches.some(m => m.is_champions)
 
   // 🏆 챔스 순위 & 우승팀 (개별 6경기 기준)
   const champsStandings = isChampsDay ? getChampsStandings() : []
@@ -1141,22 +1144,27 @@ function MatchRecord() {
             )
           )}
 
-          {/* 🔒 삭제 버튼 */}
+          {/* 🗑️ 이 날 경기 전체 삭제 (맨 아래 · 넉넉히 띄움 · 빨간 버튼) */}
           {canEdit && (
-            <div className="text-right">
-              <button
-                onClick={deleteDay}
-                className="bg-red-500/10 hover:bg-red-500/20 text-red-400 px-4 py-2 rounded-lg text-sm transition-colors"
-              >
-                🗑️ 이 날 경기 전체 삭제
-              </button>
+            <div style={{ marginTop: '80px', paddingTop: '28px', borderTop: '1px solid rgba(71,85,105,0.4)' }}>
+              <div className="flex justify-center">
+                <button
+                  onClick={deleteDay}
+                  className="bg-red-600 hover:bg-red-700 text-white text-sm font-bold px-6 py-3 rounded-xl shadow-lg shadow-red-600/20 transition-colors"
+                >
+                  🗑️ 이 날 경기 전체 삭제
+                </button>
+              </div>
+              <p className="text-slate-500 text-xs text-center mt-3">
+                ※ {selectedDate}의 모든 경기·골 기록이 영구 삭제됩니다. (되돌릴 수 없음)
+              </p>
             </div>
           )}
         </>
       )}
 
       {/* ⬇️ 하단 여백 */}
-      <div style={{ height: '40px', width: '100%' }} aria-hidden="true"></div>
+      <div style={{ height: '60px', width: '100%' }} aria-hidden="true"></div>
     </div>
   )
 }
