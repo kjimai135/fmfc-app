@@ -3,11 +3,13 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 
 function TeamRoster() {
-  const { role } = useAuth()
+  const { role, profile } = useAuth()
   // ✅ 수정 권한: 관리자·임원·주장(부주장)만
   const canEdit = role === 'admin' || role === 'executive' || role === 'captain'
   // 🗓️ 시즌 수정 권한: 관리자·임원만
   const canEditSeason = role === 'admin' || role === 'executive'
+  // 🙋 본인 선수 id
+  const myPlayerId = profile?.player_id || null
 
   const [teams, setTeams] = useState([])
   const [players, setPlayers] = useState([])
@@ -87,7 +89,6 @@ function TeamRoster() {
       .order('name')
 
     // ✅ 탈퇴한 선수(is_active === false) 제외
-    //    (is_active가 null이거나 없는 예전 데이터는 활동중으로 취급)
     const activePlayers = (data || []).filter(p => p.is_active !== false)
     setPlayers(activePlayers)
   }
@@ -142,7 +143,7 @@ function TeamRoster() {
     // ── 상하 위치 (아래 공간 부족하면 위로) ──
     const spaceBelow = window.innerHeight - btnRect.bottom
     const spaceAbove = btnRect.top
-    const NEED = 230 // 팝업이 편히 들어갈 최소 높이
+    const NEED = 230
 
     let top
     let placement
@@ -158,20 +159,19 @@ function TeamRoster() {
     setPopupPlayer(player)
   }
 
-  // 🎨 선택 가능한 색상 팔레트 (흰색 / 남색 파랑 / 노랑 형광)
+  // 🎨 선택 가능한 색상 팔레트
   const colorPalette = [
     { name: '하양', value: '#ffffff' },
     { name: '파랑(남색)', value: '#1d4ed8' },
     { name: '노랑(형광)', value: '#eeff00' },
   ]
 
-  // 🎨 선수 이름용 색상 (파란색은 밝은 파랑으로 변환해서 가독성 확보)
+  // 🎨 선수 이름용 색상
   function getPlayerNameColor(teamColor) {
     if (!teamColor) return '#ffffff'
     const c = teamColor.toLowerCase()
-    // 남색 계열이면 밝은 파랑으로
     if (c === '#1d4ed8' || c === '#2563eb' || c === '#1e40af' || c === '#1e3a8a') {
-      return '#60a5fa' // 밝은 파랑
+      return '#60a5fa'
     }
     return teamColor
   }
@@ -179,8 +179,11 @@ function TeamRoster() {
   const teamNamesList = teams.map(t => t.name)
   const unassignedPlayers = players.filter(p => !p.current_team || !teamNamesList.includes(p.current_team))
 
-  // 선수 한 줄 렌더링 (이름 가운데 · 클릭 시 팝업)
+  // 선수 한 줄 렌더링 (이름 가운데 · 본인은 하늘색 테두리)
   function renderPlayerRow(player, nameColor) {
+    const isMe = myPlayerId && player.id === myPlayerId
+    const isOpen = popupPlayer?.id === player.id
+
     return (
       <button
         key={player.id}
@@ -191,7 +194,7 @@ function TeamRoster() {
           canEdit
             ? 'bg-slate-800/50 hover:bg-slate-700 cursor-pointer'
             : 'bg-slate-800/40 cursor-default'
-        } ${popupPlayer?.id === player.id ? 'ring-1 ring-emerald-500' : ''}`}
+        } ${isOpen ? 'ring-1 ring-emerald-500' : isMe ? 'ring-1 ring-sky-400/60' : ''}`}
       >
         <span className="text-sm font-medium" style={{ color: nameColor }}>
           {player.name}
@@ -205,7 +208,7 @@ function TeamRoster() {
       <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <h1 className="text-3xl font-bold text-white">📋 팀 명단</h1>
 
-        {/* 🗓️ 현재 시즌 관리 (이 값을 앱 전체가 사용) */}
+        {/* 🗓️ 현재 시즌 관리 */}
         <div className="flex items-center gap-2 bg-slate-800/60 border border-slate-700 rounded-xl px-3 py-2">
           <label className="text-slate-300 text-sm font-bold whitespace-nowrap">🗓️ 리그 시즌</label>
           {canEditSeason ? (
@@ -264,7 +267,7 @@ function TeamRoster() {
                     background: `${teamColor}14`,
                   }}
                 >
-                  {/* 팀 헤더 - 팀명에 색상 적용 (한 줄 유지) */}
+                  {/* 팀 헤더 */}
                   <div className="px-4 py-3 font-bold text-sm border-b border-slate-700/50">
                     <div className="flex items-center gap-2 min-w-0">
                       <span
@@ -281,7 +284,7 @@ function TeamRoster() {
                     </div>
                   </div>
 
-                  {/* 🎨 색상 선택 (권한 있을 때만) */}
+                  {/* 🎨 색상 선택 */}
                   {canEdit && (
                     <div className="px-3 pt-3 pb-2 border-b border-slate-700/30">
                       <p className="text-slate-400 text-xs mb-2">🎨 유니폼 색상</p>
@@ -303,7 +306,7 @@ function TeamRoster() {
                     </div>
                   )}
 
-                  {/* 선수 목록 (이름만, 가운데 정렬) */}
+                  {/* 선수 목록 */}
                   <div className="p-3">
                     {teamPlayers.length === 0 ? (
                       <p className="text-slate-500 text-sm px-2 py-2 text-center">배정된 선수 없음</p>
@@ -337,7 +340,7 @@ function TeamRoster() {
             </div>
           </div>
 
-          {/* 👤 팀 선택 팝업 (이름 근처 · 아래 공간 부족하면 위로) */}
+          {/* 👤 팀 선택 팝업 */}
           {popupPlayer && canEdit && (
             <div
               ref={popupRef}
@@ -350,7 +353,6 @@ function TeamRoster() {
                 transform: popupPosition.placement === 'above' ? 'translateY(-100%)' : 'none',
               }}
             >
-              {/* 헤더 */}
               <div className="flex justify-between items-center px-4 py-3 border-b border-slate-700">
                 <h3 className="font-bold text-white text-sm truncate">
                   👤 {popupPlayer.name}
@@ -364,7 +366,6 @@ function TeamRoster() {
                 </button>
               </div>
 
-              {/* 팀 선택 버튼 */}
               <div className="p-3 space-y-2">
                 <p className="text-slate-400 text-[11px] px-1">팀을 선택하세요</p>
                 {teams.map((t) => {
@@ -393,7 +394,6 @@ function TeamRoster() {
                   )
                 })}
 
-                {/* 미배정 */}
                 <button
                   onClick={() => assignTeam(popupPlayer.id, '')}
                   disabled={saving}

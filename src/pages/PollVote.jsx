@@ -239,7 +239,7 @@ function PollVote() {
     )
   }
 
-  // 선수 한 줄(행) 렌더링 — 이름 가운데, 램프 오른쪽
+  // 선수 한 줄(행) 렌더링 — 이름 가운데, 램프 오른쪽 (본인은 칸 강조)
   function renderPlayerRow(player, nameColor) {
     const resp = getPlayerResponse(player.id)
     const editable = canEditPlayer(player)
@@ -251,7 +251,7 @@ function PollVote() {
         onClick={() => onClickPlayer(player)}
         className={`w-full flex items-center gap-1.5 rounded-lg px-3 py-2 transition-colors ${
           editable ? 'bg-slate-800/50 hover:bg-slate-700 cursor-pointer' : 'bg-slate-800/30 cursor-default'
-        }`}
+        } ${isMe ? 'ring-1 ring-emerald-500/50' : ''}`}
         title={editable ? '클릭하여 참석 여부 선택' : '본인 것만 변경 가능'}
       >
         {/* 램프 폭만큼 왼쪽 여백 (이름이 정확히 가운데 오도록) */}
@@ -259,11 +259,10 @@ function PollVote() {
 
         {/* 이름 (가운데) */}
         <span
-          className="flex-1 min-w-0 text-sm font-medium flex items-center justify-center gap-1"
+          className="flex-1 min-w-0 text-sm font-medium flex items-center justify-center"
           style={{ color: nameColor }}
         >
           <span className="truncate">{player.name}</span>
-          {isMe && <span className="text-[10px] bg-emerald-500/25 text-emerald-300 px-1 py-0.5 rounded-full flex-shrink-0">나</span>}
         </span>
 
         {/* 💡 상태 램프 (오른쪽) */}

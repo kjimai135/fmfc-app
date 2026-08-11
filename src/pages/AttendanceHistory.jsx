@@ -3,9 +3,11 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 
 function AttendanceHistory() {
-  const { role } = useAuth()
+  const { role, profile } = useAuth()
   // ✅ 수정 권한: 관리자·임원·주장/부주장
   const canEdit = role === 'admin' || role === 'executive' || role === 'captain'
+  // 🙋 본인 선수 id
+  const myPlayerId = profile?.player_id || null
 
   const [attendance, setAttendance] = useState([])
   const [teams, setTeams] = useState([])
@@ -347,45 +349,54 @@ function AttendanceHistory() {
                     </tr>
                   </thead>
                   <tbody>
-                    {teamAttendance.map((record, idx) => (
-                      <tr key={record.id} className="border-b border-slate-700/50 hover:bg-slate-700/30">
-                        <td className="px-4 py-2 text-emerald-400 font-bold">{idx + 1}</td>
-                        <td className="px-4 py-2 font-medium" style={{ color: teamColor }}>{record.player_name}</td>
-                        {/* ✅ 상태: 권한 있으면 드롭다운, 없으면 텍스트만 */}
-                        <td className="px-4 py-2">
-                          {canEdit ? (
-                            <select
-                              value={record.status}
-                              onChange={(e) => updateStatus(record.id, e.target.value)}
-                              className="bg-slate-700 border border-slate-600 rounded-lg px-2 py-1 text-white text-sm focus:outline-none focus:border-emerald-500"
-                            >
-                              {statusOptions.map(s => (
-                                <option key={s} value={s}>{statusIcon(s)} {s}</option>
-                              ))}
-                            </select>
-                          ) : (
-                            <span className="text-slate-200 text-sm">
-                              {statusIcon(record.status)} {record.status}
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-4 py-2 text-slate-400 text-sm">
-                          {record.checked_at ? new Date(record.checked_at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }) : '-'}
-                        </td>
-                        {/* ✅ 삭제 버튼: 수정 권한 있을 때만 */}
-                        {canEdit && (
-                          <td className="px-4 py-2 text-center">
-                            <button
-                              onClick={() => deleteRecord(record.id, record.player_name)}
-                              className="text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg px-2 py-1 text-sm transition-colors"
-                              title="삭제 (불참 처리)"
-                            >
-                              🗑️
-                            </button>
+                    {teamAttendance.map((record, idx) => {
+                      const isMe = myPlayerId && record.player_id === myPlayerId
+                      return (
+                        <tr
+                          key={record.id}
+                          className={`border-b border-slate-700/50 hover:bg-slate-700/30 ${
+                            isMe ? 'bg-sky-500/5' : ''
+                          }`}
+                          style={isMe ? { boxShadow: 'inset 0 0 0 1px rgba(56,189,248,0.6)' } : undefined}
+                        >
+                          <td className="px-4 py-2 text-emerald-400 font-bold">{idx + 1}</td>
+                          <td className="px-4 py-2 font-medium" style={{ color: teamColor }}>{record.player_name}</td>
+                          {/* ✅ 상태: 권한 있으면 드롭다운, 없으면 텍스트만 */}
+                          <td className="px-4 py-2">
+                            {canEdit ? (
+                              <select
+                                value={record.status}
+                                onChange={(e) => updateStatus(record.id, e.target.value)}
+                                className="bg-slate-700 border border-slate-600 rounded-lg px-2 py-1 text-white text-sm focus:outline-none focus:border-emerald-500"
+                              >
+                                {statusOptions.map(s => (
+                                  <option key={s} value={s}>{statusIcon(s)} {s}</option>
+                                ))}
+                              </select>
+                            ) : (
+                              <span className="text-slate-200 text-sm">
+                                {statusIcon(record.status)} {record.status}
+                              </span>
+                            )}
                           </td>
-                        )}
-                      </tr>
-                    ))}
+                          <td className="px-4 py-2 text-slate-400 text-sm">
+                            {record.checked_at ? new Date(record.checked_at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }) : '-'}
+                          </td>
+                          {/* ✅ 삭제 버튼: 수정 권한 있을 때만 */}
+                          {canEdit && (
+                            <td className="px-4 py-2 text-center">
+                              <button
+                                onClick={() => deleteRecord(record.id, record.player_name)}
+                                className="text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg px-2 py-1 text-sm transition-colors"
+                                title="삭제 (불참 처리)"
+                              >
+                                🗑️
+                              </button>
+                            </td>
+                          )}
+                        </tr>
+                      )
+                    })}
                   </tbody>
                 </table>
               </div>

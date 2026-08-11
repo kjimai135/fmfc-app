@@ -1,7 +1,12 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
+import { useAuth } from '../contexts/AuthContext'
 
 function AttendanceStats() {
+  const { profile } = useAuth()
+  // 🙋 본인 선수 id
+  const myPlayerId = profile?.player_id || null
+
   const [stats, setStats] = useState([])
   const [allAttendance, setAllAttendance] = useState([])
   const [teams, setTeams] = useState([])
@@ -10,11 +15,17 @@ function AttendanceStats() {
   const [totalGames, setTotalGames] = useState(0)
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
-  const [filterMode, setFilterMode] = useState('all')
+  // 🗓️ 기본값: 현 시즌
+  const [filterMode, setFilterMode] = useState('season')
+  const [seasonLabel, setSeasonLabel] = useState('')
   const [popupPlayer, setPopupPlayer] = useState(null)
   // placement: 'below' | 'above'
   const [popupPosition, setPopupPosition] = useState({ top: 0, left: 0, placement: 'below' })
   const popupRef = useRef(null)
+
+  // 📅 날짜 입력 ref (클릭 시 달력 열기용)
+  const startInputRef = useRef(null)
+  const endInputRef = useRef(null)
 
   useEffect(() => {
     fetchStats()
@@ -32,6 +43,15 @@ function AttendanceStats() {
 
   async function fetchStats() {
     setLoading(true)
+
+    // 🗓️ 현재 시즌 라벨 조회
+    const { data: seasonRow } = await supabase
+      .from('app_settings')
+      .select('value')
+      .eq('key', 'season_label')
+      .single()
+    const season = seasonRow?.value || ''
+    setSeasonLabel(season)
 
     const { data: attendance } = await supabase
       .from('attendance')
@@ -53,27 +73,36 @@ function AttendanceStats() {
       setAllAttendance(attendance)
       let filtered = attendance
 
-      if (filterMode === 'range' && startDate && endDate) {
-        filtered = attendance.filter(a =>
-          a.game_date >= startDate && a.game_date <= endDate
-        )
-      } else if (filterMode === 'month') {
-        const now = new Date()
-        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0]
-        const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0]
-        filtered = attendance.filter(a =>
-          a.game_date >= monthStart && a.game_date <= monthEnd
-        )
-      } else if (filterMode === '3months') {
-        const now = new Date()
-        const threeMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 3, now.getDate()).toISOString().split('T')[0]
-        filtered = attendance.filter(a => a.game_date >= threeMonthsAgo)
+      if (filterMode === 'range') {
+        if (startDate && endDate) {
+          filtered = attendance.filter(a =>
+            a.game_date >= startDate && a.game_date <= endDate
+          )
+        } else {
+          filtered = []
+        }
+      } else if (filterMode === 'season') {
+        // 🗓️ 현 시즌: matches에서 현재 시즌 경기 날짜를 가져와 그 날짜의 출석만 집계
+        if (season) {
+          const { data: seasonMatches } = await supabase
+            .from('matches')
+            .select('game_date')
+            .eq('season', season)
+          const seasonDates = new Set((seasonMatches || []).map(m => m.game_date))
+          filtered = attendance.filter(a => seasonDates.has(a.game_date))
+        } else {
+          filtered = []
+        }
       }
+      // filterMode === 'all' 이면 전체 (필터 없음)
 
       const gameDates = [...new Set(filtered.map(a => a.game_date))]
       setTotalGames(gameDates.length)
 
-      const playerStats = players.map(player => {
+      // ✅ 탈퇴한 선수(is_active === false) 제외
+      const activePlayers = players.filter(p => p.is_active !== false)
+
+      const playerStats = activePlayers.map(player => {
         const records = filtered.filter(a => a.player_id === player.id)
         const attended = records.filter(a => a.status === '출석').length
         const late = records.filter(a => a.status === '늦참').length
@@ -98,6 +127,24 @@ function AttendanceStats() {
     setLoading(false)
   }
 
+  // 📅 날짜 표시용 (2026. 08. 04.)
+  function formatDate(d) {
+    if (!d) return '날짜 선택'
+    const [y, m, day] = d.split('-')
+    return `${y}. ${m}. ${day}.`
+  }
+
+  // 📅 날짜 칸 클릭 → 달력 즉시 열기
+  function openDatePicker(ref) {
+    if (!ref.current) return
+    if (typeof ref.current.showPicker === 'function') {
+      ref.current.showPicker()
+    } else {
+      ref.current.focus()
+      ref.current.click()
+    }
+  }
+
   // 🎨 팀 색상 가져오기 (남색은 밝은 파랑으로 변환)
   function getTeamColor(teamName) {
     const team = teams.find(t => t.name === teamName)
@@ -119,9 +166,9 @@ function AttendanceStats() {
     const containerRect = container.getBoundingClientRect()
     const btnRect = e.currentTarget.getBoundingClientRect()
 
-    const popupWidth = 360 // 팝업 너비 (w-[360px]와 동일)
-    const margin = 12 // 화면 가장자리 여백
-    const gap = 6 // 이름과 팝업 사이 간격
+    const popupWidth = 360
+    const margin = 12
+    const gap = 6
 
     // ── 좌우 위치 ──
     let left = btnRect.left - containerRect.left
@@ -133,16 +180,15 @@ function AttendanceStats() {
     if (left < 0) left = 0
 
     // ── 상하 위치 ──
-    // 아래 남은 공간이 부족하면 '위로' (팝업 하단이 이름 바로 위에 붙도록 transform 사용)
     const spaceBelow = window.innerHeight - btnRect.bottom
     const spaceAbove = btnRect.top
-    const NEED = 260 // 팝업이 편히 들어갈 최소 높이
+    const NEED = 260
 
     let top
     let placement
     if (spaceBelow < NEED && spaceAbove > spaceBelow) {
       placement = 'above'
-      top = btnRect.top - containerRect.top - gap // 여기서 transform으로 위로 올림
+      top = btnRect.top - containerRect.top - gap
     } else {
       placement = 'below'
       top = btnRect.bottom - containerRect.top + gap
@@ -204,15 +250,19 @@ function AttendanceStats() {
   return (
     <div>
       <h1 className="text-3xl font-bold text-white mb-2">📊 출석율</h1>
-      <p className="text-slate-400 mb-6">총 {totalGames}회 경기 기준</p>
+      <p className="text-slate-400 mb-6">
+        총 {totalGames}회 경기 기준
+        {filterMode === 'season' && seasonLabel && (
+          <span className="ml-2 text-emerald-400 font-semibold">· 시즌 {seasonLabel}</span>
+        )}
+      </p>
 
       {/* 기간 필터 */}
       <div className="bg-slate-800 rounded-xl p-4 border border-slate-700 mb-6">
-        <div className="flex flex-wrap gap-2 mb-4">
+        <div className="flex flex-wrap gap-2">
           {[
             { key: 'all', label: '전체' },
-            { key: 'month', label: '이번 달' },
-            { key: '3months', label: '최근 3개월 (시즌)' },
+            { key: 'season', label: `현 시즌${seasonLabel ? ` (${seasonLabel})` : ''}` },
             { key: 'range', label: '기간 지정' },
           ].map(option => (
             <button
@@ -229,28 +279,86 @@ function AttendanceStats() {
           ))}
         </div>
 
+        {/* 📅 기간 지정 - 클릭하면 바로 달력 */}
         {filterMode === 'range' && (
-          <div className="flex flex-col sm:flex-row gap-4 items-end">
-            <div>
-              <label className="block text-slate-300 text-sm mb-1">시작일</label>
+          <div className="flex flex-wrap items-end gap-3 mt-4">
+            {/* 시작일 */}
+            <div className="relative">
+              <label className="block text-slate-400 text-xs mb-1.5">시작일</label>
+              <button
+                type="button"
+                onClick={() => openDatePicker(startInputRef)}
+                className="flex items-center gap-2 bg-slate-700 hover:bg-slate-600 border border-slate-600 rounded-lg px-4 py-2.5 text-white text-sm font-medium transition-colors min-w-[150px]"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#34d399" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                  <line x1="16" y1="2" x2="16" y2="6"></line>
+                  <line x1="8" y1="2" x2="8" y2="6"></line>
+                  <line x1="3" y1="10" x2="21" y2="10"></line>
+                </svg>
+                <span className={startDate ? 'text-white' : 'text-slate-500'}>
+                  {formatDate(startDate)}
+                </span>
+              </button>
+              {/* 실제 date input (숨김 · 달력만 사용) */}
               <input
+                ref={startInputRef}
                 type="date"
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
-                className="bg-slate-700 border border-slate-600 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-emerald-500"
+                onKeyDown={(e) => e.preventDefault()}
+                className="absolute opacity-0 pointer-events-none"
+                style={{ left: 0, bottom: 0, width: '1px', height: '1px' }}
+                tabIndex={-1}
               />
             </div>
-            <div className="text-slate-400 py-2">~</div>
-            <div>
-              <label className="block text-slate-300 text-sm mb-1">종료일</label>
+
+            <div className="text-slate-400 pb-3">~</div>
+
+            {/* 종료일 */}
+            <div className="relative">
+              <label className="block text-slate-400 text-xs mb-1.5">종료일</label>
+              <button
+                type="button"
+                onClick={() => openDatePicker(endInputRef)}
+                className="flex items-center gap-2 bg-slate-700 hover:bg-slate-600 border border-slate-600 rounded-lg px-4 py-2.5 text-white text-sm font-medium transition-colors min-w-[150px]"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#34d399" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                  <line x1="16" y1="2" x2="16" y2="6"></line>
+                  <line x1="8" y1="2" x2="8" y2="6"></line>
+                  <line x1="3" y1="10" x2="21" y2="10"></line>
+                </svg>
+                <span className={endDate ? 'text-white' : 'text-slate-500'}>
+                  {formatDate(endDate)}
+                </span>
+              </button>
               <input
+                ref={endInputRef}
                 type="date"
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
-                className="bg-slate-700 border border-slate-600 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-emerald-500"
+                onKeyDown={(e) => e.preventDefault()}
+                className="absolute opacity-0 pointer-events-none"
+                style={{ left: 0, bottom: 0, width: '1px', height: '1px' }}
+                tabIndex={-1}
               />
             </div>
+
+            {/* 초기화 */}
+            {(startDate || endDate) && (
+              <button
+                onClick={() => { setStartDate(''); setEndDate('') }}
+                className="bg-slate-700/60 hover:bg-slate-600 text-slate-300 text-xs px-3 py-2.5 rounded-lg transition-colors"
+              >
+                ✕ 초기화
+              </button>
+            )}
           </div>
+        )}
+
+        {filterMode === 'range' && (!startDate || !endDate) && (
+          <p className="text-slate-500 text-xs mt-2">📅 시작일과 종료일을 모두 선택해 주세요.</p>
         )}
       </div>
 
@@ -327,32 +435,48 @@ function AttendanceStats() {
                   </div>
                 </div>
 
-                {/* 선수 목록 - 세로 1열 */}
+                {/* 선수 목록 - 세로 1열 (이름 가운데, % 오른쪽) */}
                 <div className="p-2">
                   {section.players.length === 0 ? (
                     <p className="text-slate-500 text-sm px-2 py-3 text-center">선수 없음</p>
                   ) : (
                     <div className="space-y-1">
-                      {section.players.map(player => (
-                        <button
-                          key={player.id}
-                          onClick={(e) => handleRateClick(e, player)}
-                          className="w-full flex items-center justify-between gap-4 bg-slate-800/50 hover:bg-slate-700/60 rounded-lg px-3 py-2 transition-colors text-left"
-                          title="클릭하면 상세 기록 보기"
-                        >
-                          {/* 이름 - 팀 색상 */}
-                          <span
-                            className="text-sm font-medium truncate"
-                            style={{ color: section.color }}
+                      {section.players.map(player => {
+                        const isMe = myPlayerId && player.id === myPlayerId
+                        const isOpen = popupPlayer?.id === player.id
+                        const pctText = `${player.rate}%`
+                        return (
+                          <button
+                            key={player.id}
+                            onClick={(e) => handleRateClick(e, player)}
+                            className={`w-full flex items-center gap-1.5 bg-slate-800/50 hover:bg-slate-700/60 rounded-lg px-3 py-2 transition-colors ${
+                              isOpen ? 'ring-1 ring-emerald-500' : isMe ? 'ring-1 ring-sky-400/60' : ''
+                            }`}
+                            title="클릭하면 상세 기록 보기"
                           >
-                            {player.name}
-                          </span>
-                          {/* 참석률 % */}
-                          <span className={`font-bold text-sm flex-shrink-0 ${rateColor(player.rate)}`}>
-                            {player.rate}%
-                          </span>
-                        </button>
-                      ))}
+                            {/* % 폭만큼 왼쪽 여백 (이름이 정확히 가운데 오도록) */}
+                            <span
+                              className="text-sm font-bold flex-shrink-0 invisible"
+                              aria-hidden="true"
+                            >
+                              {pctText}
+                            </span>
+
+                            {/* 이름 (가운데) - 팀 색상 */}
+                            <span
+                              className="flex-1 min-w-0 text-sm font-medium text-center truncate"
+                              style={{ color: section.color }}
+                            >
+                              {player.name}
+                            </span>
+
+                            {/* 참석률 % (오른쪽) */}
+                            <span className={`font-bold text-sm flex-shrink-0 ${rateColor(player.rate)}`}>
+                              {pctText}
+                            </span>
+                          </button>
+                        )
+                      })}
                     </div>
                   )}
                 </div>
@@ -368,7 +492,6 @@ function AttendanceStats() {
               style={{
                 top: popupPosition.top,
                 left: popupPosition.left,
-                // 위로 뜰 때: 팝업 하단이 이름 바로 위에 정확히 붙도록
                 transform: popupPosition.placement === 'above' ? 'translateY(-100%)' : 'none',
               }}
             >
