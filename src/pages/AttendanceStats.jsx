@@ -435,7 +435,7 @@ function AttendanceStats() {
                   </div>
                 </div>
 
-                {/* 선수 목록 - 세로 1열 (이름 가운데, % 오른쪽) */}
+                {/* 선수 목록 - 세로 1열 (이름 가운데, % 오른쪽 고정폭) */}
                 <div className="p-2">
                   {section.players.length === 0 ? (
                     <p className="text-slate-500 text-sm px-2 py-3 text-center">선수 없음</p>
@@ -444,35 +444,32 @@ function AttendanceStats() {
                       {section.players.map(player => {
                         const isMe = myPlayerId && player.id === myPlayerId
                         const isOpen = popupPlayer?.id === player.id
-                        const pctText = `${player.rate}%`
                         return (
                           <button
                             key={player.id}
                             onClick={(e) => handleRateClick(e, player)}
-                            className={`w-full flex items-center gap-1.5 bg-slate-800/50 hover:bg-slate-700/60 rounded-lg px-3 py-2 transition-colors ${
+                            className={`w-full flex items-center bg-slate-800/50 hover:bg-slate-700/60 rounded-lg px-2 py-2 transition-colors ${
                               isOpen ? 'ring-1 ring-emerald-500' : isMe ? 'ring-1 ring-sky-400/60' : ''
                             }`}
                             title="클릭하면 상세 기록 보기"
                           >
-                            {/* % 폭만큼 왼쪽 여백 (이름이 정확히 가운데 오도록) */}
-                            <span
-                              className="text-sm font-bold flex-shrink-0 invisible"
-                              aria-hidden="true"
-                            >
-                              {pctText}
-                            </span>
+                            {/* 왼쪽 균형 여백 (고정 폭) */}
+                            <span style={{ width: '24px', flexShrink: 0 }} aria-hidden="true"></span>
 
                             {/* 이름 (가운데) - 팀 색상 */}
                             <span
-                              className="flex-1 min-w-0 text-sm font-medium text-center truncate"
+                              className="flex-1 min-w-0 text-sm font-medium text-center truncate px-0.5"
                               style={{ color: section.color }}
                             >
                               {player.name}
                             </span>
 
-                            {/* 참석률 % (오른쪽) */}
-                            <span className={`font-bold text-sm flex-shrink-0 ${rateColor(player.rate)}`}>
-                              {pctText}
+                            {/* 참석률 % (오른쪽 · 고정 폭 · 우측정렬) */}
+                            <span
+                              className={`text-sm font-bold flex-shrink-0 text-right tabular-nums ${rateColor(player.rate)}`}
+                              style={{ width: '38px' }}
+                            >
+                              {player.rate}%
                             </span>
                           </button>
                         )
