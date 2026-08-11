@@ -12,7 +12,8 @@ function AttendanceStats() {
   const [endDate, setEndDate] = useState('')
   const [filterMode, setFilterMode] = useState('all')
   const [popupPlayer, setPopupPlayer] = useState(null)
-  const [popupPosition, setPopupPosition] = useState({ top: 0, left: 0 })
+  // placement: 'below' | 'above'
+  const [popupPosition, setPopupPosition] = useState({ top: 0, left: 0, placement: 'below' })
   const popupRef = useRef(null)
 
   useEffect(() => {
@@ -108,7 +109,7 @@ function AttendanceStats() {
     return color
   }
 
-  // ✅ 참석률 클릭 시, 팝업이 화면 안에만 뜨도록 위치 계산
+  // ✅ 참석률 클릭 시, 팝업 위치 계산 (좌우 보정 + 아래 공간 부족하면 이름 바로 위)
   function handleRateClick(e, player) {
     if (popupPlayer?.id === player.id) {
       setPopupPlayer(null)
@@ -118,26 +119,36 @@ function AttendanceStats() {
     const containerRect = container.getBoundingClientRect()
     const btnRect = e.currentTarget.getBoundingClientRect()
 
-    const popupWidth = 360 // 팝업 너비 (아래 style의 w-[360px]와 동일)
+    const popupWidth = 360 // 팝업 너비 (w-[360px]와 동일)
     const margin = 12 // 화면 가장자리 여백
+    const gap = 6 // 이름과 팝업 사이 간격
 
-    // 기본: 클릭한 버튼 왼쪽에 맞춤 (컨테이너 기준 상대 좌표)
+    // ── 좌우 위치 ──
     let left = btnRect.left - containerRect.left
-
-    // 팝업 오른쪽 끝이 화면(뷰포트)을 넘어가면 → 왼쪽으로 밀기
     const popupRightOnScreen = btnRect.left + popupWidth
     if (popupRightOnScreen > window.innerWidth - margin) {
       const overflow = popupRightOnScreen - (window.innerWidth - margin)
       left = left - overflow
     }
-
-    // 왼쪽으로 너무 밀려서 컨테이너 밖으로 나가지 않도록 최소값 보정
     if (left < 0) left = 0
 
-    setPopupPosition({
-      top: btnRect.bottom - containerRect.top + 8,
-      left: left,
-    })
+    // ── 상하 위치 ──
+    // 아래 남은 공간이 부족하면 '위로' (팝업 하단이 이름 바로 위에 붙도록 transform 사용)
+    const spaceBelow = window.innerHeight - btnRect.bottom
+    const spaceAbove = btnRect.top
+    const NEED = 260 // 팝업이 편히 들어갈 최소 높이
+
+    let top
+    let placement
+    if (spaceBelow < NEED && spaceAbove > spaceBelow) {
+      placement = 'above'
+      top = btnRect.top - containerRect.top - gap // 여기서 transform으로 위로 올림
+    } else {
+      placement = 'below'
+      top = btnRect.bottom - containerRect.top + gap
+    }
+
+    setPopupPosition({ top, left, placement })
     setPopupPlayer(player)
   }
 
@@ -349,12 +360,17 @@ function AttendanceStats() {
             ))}
           </div>
 
-          {/* 팝업 - 클릭한 이름 바로 아래 (화면 안에만) */}
+          {/* 팝업 - 이름 바로 아래(기본) 또는 바로 위(아래 공간 부족 시) */}
           {popupPlayer && (
             <div
               ref={popupRef}
               className="absolute z-50 bg-slate-800 border border-emerald-500/50 rounded-xl shadow-2xl shadow-black/50 w-[360px] max-w-[90vw]"
-              style={{ top: popupPosition.top, left: popupPosition.left }}
+              style={{
+                top: popupPosition.top,
+                left: popupPosition.left,
+                // 위로 뜰 때: 팝업 하단이 이름 바로 위에 정확히 붙도록
+                transform: popupPosition.placement === 'above' ? 'translateY(-100%)' : 'none',
+              }}
             >
               {/* 팝업 헤더 */}
               <div className="flex justify-between items-center px-4 py-3 border-b border-slate-700">

@@ -133,7 +133,15 @@ function PollVote() {
     return responses.find(r => r.player_id === playerId)?.response || null
   }
 
-  // 상태별 뱃지 스타일
+  // 💡 상태별 램프 색상
+  const LAMP_COLORS = {
+    '참석': '#10b981', // 초록
+    '늦참': '#eab308', // 노랑
+    '조퇴': '#f97316', // 주황
+    '불참': '#ef4444', // 빨강
+  }
+
+  // 상태별 뱃지 스타일 (모달 등에서 사용)
   const responseBadge = {
     '참석': { emoji: '✅', bg: 'bg-emerald-500/20', text: 'text-emerald-400' },
     '불참': { emoji: '❌', bg: 'bg-red-500/20', text: 'text-red-400' },
@@ -198,10 +206,29 @@ function PollVote() {
     return { coming, down }
   }
 
+  // 💡 램프 하나 렌더링 (상태 텍스트 없이 색깔 원만)
+  function StatusLamp({ resp }) {
+    const color = resp ? LAMP_COLORS[resp] : null
+    return (
+      <span
+        title={resp || '미투표'}
+        style={{
+          width: '14px',
+          height: '14px',
+          borderRadius: '9999px',
+          flexShrink: 0,
+          display: 'inline-block',
+          background: color || 'transparent',
+          border: color ? '1px solid rgba(255,255,255,0.35)' : '1.5px solid #64748b',
+          boxShadow: color ? `0 0 6px ${color}80` : 'none',
+        }}
+      ></span>
+    )
+  }
+
   // 선수 한 줄(행) 렌더링
   function renderPlayerRow(player, nameColor) {
     const resp = getPlayerResponse(player.id)
-    const badge = resp ? responseBadge[resp] : null
     const editable = canEditPlayer(player)
     const isMe = myPlayerId && player.id === myPlayerId
 
@@ -218,13 +245,8 @@ function PollVote() {
           {player.name}
           {isMe && <span className="text-[10px] bg-emerald-500/25 text-emerald-300 px-1.5 py-0.5 rounded-full">나</span>}
         </span>
-        {badge ? (
-          <span className={`${badge.bg} ${badge.text} px-2 py-1 rounded-lg text-xs font-medium`}>
-            {badge.emoji} {resp}
-          </span>
-        ) : (
-          <span className="text-slate-500 text-xs">⬜ 미투표</span>
-        )}
+        {/* 💡 상태: 램프만 표시 */}
+        <StatusLamp resp={resp} />
       </button>
     )
   }
@@ -244,12 +266,21 @@ function PollVote() {
       </div>
 
       {/* 안내 문구 */}
-      <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl px-4 py-3 mb-6 text-emerald-200 text-sm">
+      <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl px-4 py-3 mb-4 text-emerald-200 text-sm">
         {canEditAll ? (
           <>👑 관리자·임원·주장은 <b>모든 선수</b>의 참석 여부를 변경할 수 있습니다.</>
         ) : (
           <>👇 <b>본인 이름</b>을 클릭하면 참석 여부를 선택할 수 있습니다. (본인 것만 변경 가능)</>
         )}
+      </div>
+
+      {/* 💡 램프 범례 */}
+      <div className="flex flex-wrap items-center gap-4 mb-6 text-xs text-slate-400">
+        <span className="flex items-center gap-1.5"><StatusLamp resp="참석" /> 참석</span>
+        <span className="flex items-center gap-1.5"><StatusLamp resp="늦참" /> 늦참</span>
+        <span className="flex items-center gap-1.5"><StatusLamp resp="조퇴" /> 조퇴</span>
+        <span className="flex items-center gap-1.5"><StatusLamp resp="불참" /> 불참</span>
+        <span className="flex items-center gap-1.5"><StatusLamp resp={null} /> 미투표</span>
       </div>
 
       {/* 📊 전체 요약 */}
