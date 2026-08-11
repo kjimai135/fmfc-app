@@ -422,16 +422,16 @@ function AttendanceStats() {
                   background: `${section.color}14`,
                 }}
               >
-                {/* 섹션 헤더 (한 줄 고정 · 작게) */}
-                <div className="px-3 py-2.5 font-bold text-sm border-b border-slate-700/50">
+                {/* 섹션 헤더 (한 줄 고정) */}
+                <div className="px-3 py-3 font-bold text-base border-b border-slate-700/50">
                   <div className="flex items-center gap-1.5 min-w-0 whitespace-nowrap">
                     <span
-                      className="inline-block w-3 h-3 rounded-full flex-shrink-0"
+                      className="inline-block w-3.5 h-3.5 rounded-full flex-shrink-0"
                       style={{ background: section.color, border: '1px solid rgba(255,255,255,0.3)' }}
                     ></span>
                     <span className="truncate" style={{ color: section.color }}>
                       {section.name}
-                      <span className="text-xs font-semibold ml-1">({section.players.length})</span>
+                      <span className="text-sm font-semibold ml-1">({section.players.length})</span>
                     </span>
                   </div>
                 </div>

@@ -267,19 +267,17 @@ function TeamRoster() {
                     background: `${teamColor}14`,
                   }}
                 >
-                  {/* 팀 헤더 */}
-                  <div className="px-4 py-3 font-bold text-sm border-b border-slate-700/50">
-                    <div className="flex items-center gap-2 min-w-0">
+                  {/* 팀 헤더 (가운데 정렬 · 한 줄 유지) */}
+                  <div className="px-2 py-3 border-b border-slate-700/50">
+                    <div className="text-center whitespace-nowrap overflow-hidden">
                       <span
-                        className="inline-block w-3 h-3 rounded-full flex-shrink-0"
-                        style={{ background: teamColor, border: '1px solid rgba(255,255,255,0.3)' }}
-                      ></span>
-                      <span
-                        className="whitespace-nowrap overflow-hidden text-ellipsis"
-                        style={{ color: teamColor }}
+                        className="font-bold truncate inline-block max-w-full align-bottom"
+                        style={{ color: teamColor, fontSize: 'clamp(11px, 2.6vw, 15px)' }}
                       >
-                        {team.name}{' '}
-                        <span className="text-xs font-semibold">({teamPlayers.length}명)</span>
+                        {team.name}
+                        <span className="font-semibold ml-1" style={{ fontSize: '0.85em' }}>
+                          ({teamPlayers.length}명)
+                        </span>
                       </span>
                     </div>
                   </div>
@@ -287,8 +285,8 @@ function TeamRoster() {
                   {/* 🎨 색상 선택 */}
                   {canEdit && (
                     <div className="px-3 pt-3 pb-2 border-b border-slate-700/30">
-                      <p className="text-slate-400 text-xs mb-2">🎨 유니폼 색상</p>
-                      <div className="flex flex-wrap gap-2">
+                      <p className="text-slate-400 text-xs mb-2 text-center">🎨 유니폼 색상</p>
+                      <div className="flex flex-wrap gap-2 justify-center">
                         {colorPalette.map(c => (
                           <button
                             key={c.value}
@@ -322,11 +320,18 @@ function TeamRoster() {
 
             {/* 미배정 */}
             <div className="rounded-xl border border-slate-500/30 bg-slate-500/10 overflow-hidden">
-              <div className="px-4 py-3 font-bold text-slate-400 text-sm border-b border-slate-700/50">
-                <span className="whitespace-nowrap overflow-hidden text-ellipsis inline-block max-w-full align-bottom">
-                  ⚪ 미배정{' '}
-                  <span className="text-xs font-semibold">({unassignedPlayers.length}명)</span>
-                </span>
+              <div className="px-2 py-3 border-b border-slate-700/50">
+                <div className="text-center whitespace-nowrap overflow-hidden">
+                  <span
+                    className="font-bold text-slate-400 truncate inline-block max-w-full align-bottom"
+                    style={{ fontSize: 'clamp(11px, 2.6vw, 15px)' }}
+                  >
+                    미배정
+                    <span className="font-semibold ml-1" style={{ fontSize: '0.85em' }}>
+                      ({unassignedPlayers.length}명)
+                    </span>
+                  </span>
+                </div>
               </div>
               <div className="p-3">
                 {unassignedPlayers.length === 0 ? (
