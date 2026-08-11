@@ -272,10 +272,10 @@ function TeamRoster() {
                     <div className="text-center whitespace-nowrap overflow-hidden">
                       <span
                         className="font-bold truncate inline-block max-w-full align-bottom"
-                        style={{ color: teamColor, fontSize: 'clamp(11px, 2.6vw, 15px)' }}
+                        style={{ color: teamColor, fontSize: 'clamp(13px, 3.2vw, 18px)' }}
                       >
                         {team.name}
-                        <span className="font-semibold ml-1" style={{ fontSize: '0.85em' }}>
+                        <span className="font-semibold ml-1" style={{ fontSize: '0.8em' }}>
                           ({teamPlayers.length}명)
                         </span>
                       </span>
@@ -324,10 +324,10 @@ function TeamRoster() {
                 <div className="text-center whitespace-nowrap overflow-hidden">
                   <span
                     className="font-bold text-slate-400 truncate inline-block max-w-full align-bottom"
-                    style={{ fontSize: 'clamp(11px, 2.6vw, 15px)' }}
+                    style={{ fontSize: 'clamp(13px, 3.2vw, 18px)' }}
                   >
                     미배정
-                    <span className="font-semibold ml-1" style={{ fontSize: '0.85em' }}>
+                    <span className="font-semibold ml-1" style={{ fontSize: '0.8em' }}>
                       ({unassignedPlayers.length}명)
                     </span>
                   </span>
