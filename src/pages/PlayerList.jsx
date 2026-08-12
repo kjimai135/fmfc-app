@@ -35,7 +35,6 @@ function PlayerList() {
   const [players, setPlayers] = useState([])
   const [profiles, setProfiles] = useState([])
   const [search, setSearch] = useState('')
-  const [filterRole, setFilterRole] = useState('')
   const [showInactive, setShowInactive] = useState(false)
   const [loading, setLoading] = useState(true)
 
@@ -160,10 +159,8 @@ function PlayerList() {
       p.name?.includes(search) ||
       p.address?.includes(search) ||
       p.main_position?.includes(search)
-    const role = getRoleForPlayer(p.id)
-    const matchRole = filterRole ? role === filterRole : true
     const matchActive = showInactive ? true : (p.is_active !== false)
-    return matchSearch && matchRole && matchActive
+    return matchSearch && matchActive
   })
 
   // 🔽 정렬
@@ -244,35 +241,24 @@ function PlayerList() {
 
       {/* 안내 */}
       <div className="bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 mb-4 text-slate-400 text-sm flex items-center gap-2 flex-wrap">
-        <span>이름을 누르면 상세 정보를 볼 수 있습니다.</span>
+        <span>ℹ️</span>
+        <span>회원을 클릭하면 상세 정보를 볼 수 있습니다.</span>
         <span className="text-slate-600">·</span>
         <span className="inline-flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-black bg-emerald-500 text-white">인</span>
-        <span className="text-slate-500 text-xs">인시공</span>
+        <span className="text-slate-500 text-xs">인천 (숫자=인천시민/전체 계정)</span>
         <span className="inline-flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-black bg-sky-500 text-white">부</span>
-        <span className="text-slate-500 text-xs">부시공</span>
+        <span className="text-slate-500 text-xs">부평</span>
       </div>
 
-      {/* 검색 & 필터 */}
-      <div className="flex flex-col sm:flex-row gap-4 mb-4">
+      {/* 검색 */}
+      <div className="mb-4">
         <input
           type="text"
           placeholder="🔍 이름, 주소, 포지션으로 검색..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+          className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
         />
-        <select
-          value={filterRole}
-          onChange={(e) => setFilterRole(e.target.value)}
-          className="bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-emerald-500"
-        >
-          <option value="">전체 등급</option>
-          <option value="admin">관리자</option>
-          <option value="executive">임원</option>
-          <option value="captain">주장·부주장</option>
-          <option value="member">정회원</option>
-          <option value="associate">준회원</option>
-        </select>
       </div>
 
       {/* 🔽 정렬 */}
