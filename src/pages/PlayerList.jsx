@@ -245,9 +245,9 @@ function PlayerList() {
         <span>이름을 누르면 상세 정보를 볼 수 있습니다.</span>
         <span className="text-slate-600">·</span>
         <span className="inline-flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-black bg-emerald-500 text-white">인</span>
-        <span className="text-slate-500 text-xs">인천 (숫자=인천시민/전체 계정)</span>
+        <span className="text-slate-500 text-xs">인시공</span>
         <span className="inline-flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-black bg-sky-500 text-white">부</span>
-        <span className="text-slate-500 text-xs">부평</span>
+        <span className="text-slate-500 text-xs">부시공</span>
       </div>
 
       {/* 검색 */}
