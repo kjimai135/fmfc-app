@@ -182,11 +182,11 @@ function PlayerList() {
       <div className="bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 mb-4 text-slate-400 text-sm flex items-center gap-2 flex-wrap">
         <span>ℹ️</span>
         <span>회원을 클릭하면 상세 정보를 볼 수 있습니다.</span>
-        <span className="text-slate-500">·</span>
-        <span className="text-emerald-400 font-bold">🏟️</span>
-        <span className="text-slate-500 text-xs">인천</span>
-        <span className="text-sky-400 font-bold">🏟️</span>
-        <span className="text-slate-500 text-xs">부평</span>
+        <span className="text-slate-600">·</span>
+        <span className="inline-flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-black bg-emerald-500 text-white">인</span>
+        <span className="text-slate-500 text-xs">인시공</span>
+        <span className="inline-flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-black bg-sky-500 text-white">부</span>
+        <span className="text-slate-500 text-xs">부시공</span>
       </div>
 
       {/* 검색 & 필터 */}
@@ -302,22 +302,26 @@ function PlayerList() {
                     {player.address || '-'}
                   </span>
 
-                  {/* 🏟️ 시설공단 아이콘 */}
-                  <div className="flex items-center gap-1.5 flex-shrink-0 ml-auto">
-                    <span
-                      className="text-sm"
-                      style={{ opacity: hasIncheon ? 1 : 0.15 }}
-                      title={hasIncheon ? '인천 시설공단 가입' : '인천 시설공단 미가입'}
-                    >
-                      🏟️
-                    </span>
-                    <span
-                      className="text-sm"
-                      style={{ opacity: hasBupyeong ? 1 : 0.15, filter: hasBupyeong ? 'hue-rotate(180deg)' : 'none' }}
-                      title={hasBupyeong ? '부평 시설공단 가입' : '부평 시설공단 미가입'}
-                    >
-                      🏟️
-                    </span>
+                  {/* 🏟️ 시설공단 표시 (인 / 부) */}
+                  <div className="flex items-center gap-1 flex-shrink-0 ml-auto">
+                    {hasIncheon && (
+                      <span
+                        className="inline-flex items-center justify-center rounded-full text-[10px] font-black bg-emerald-500 text-white"
+                        style={{ width: '20px', height: '20px' }}
+                        title="인천 시설공단 가입"
+                      >
+                        인
+                      </span>
+                    )}
+                    {hasBupyeong && (
+                      <span
+                        className="inline-flex items-center justify-center rounded-full text-[10px] font-black bg-sky-500 text-white"
+                        style={{ width: '20px', height: '20px' }}
+                        title="부평 시설공단 가입"
+                      >
+                        부
+                      </span>
+                    )}
                     <span className="text-slate-600 text-sm ml-0.5">›</span>
                   </div>
                 </div>
@@ -429,7 +433,12 @@ function PlayerList() {
                     background: detailPlayer.incheon_member ? 'rgba(16,185,129,0.12)' : 'rgba(51,65,85,0.4)',
                   }}
                 >
-                  <p className="text-white font-bold text-sm">🏟️ 인천 시설공단</p>
+                  <div className="flex items-center gap-2">
+                    <span className="inline-flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-black bg-emerald-500 text-white">
+                      인
+                    </span>
+                    <p className="text-white font-bold text-sm">인천 시설공단</p>
+                  </div>
                   <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
                     detailPlayer.incheon_member ? 'bg-emerald-500/25 text-emerald-300' : 'bg-slate-600/40 text-slate-400'
                   }`}>
@@ -487,7 +496,12 @@ function PlayerList() {
                     background: detailPlayer.bupyeong_member ? 'rgba(14,165,233,0.12)' : 'rgba(51,65,85,0.4)',
                   }}
                 >
-                  <p className="text-white font-bold text-sm">🏟️ 부평 시설공단</p>
+                  <div className="flex items-center gap-2">
+                    <span className="inline-flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-black bg-sky-500 text-white">
+                      부
+                    </span>
+                    <p className="text-white font-bold text-sm">부평 시설공단</p>
+                  </div>
                   <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
                     detailPlayer.bupyeong_member ? 'bg-sky-500/25 text-sky-300' : 'bg-slate-600/40 text-slate-400'
                   }`}>
