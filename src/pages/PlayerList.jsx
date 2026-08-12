@@ -179,8 +179,7 @@ function PlayerList() {
       </div>
 
       {/* 안내 */}
-      <div className="bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 mb-4 text-slate-400 text-sm flex items-center gap-2 flex-wrap">
-        <span>ℹ️</span>
+      <div className="bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 mb-4 text-slate-400 text-sm flex items-center gap-2 flex-wrap">        
         <span>회원을 클릭하면 상세 정보를 볼 수 있습니다.</span>
         <span className="text-slate-600">·</span>
         <span className="inline-flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-black bg-emerald-500 text-white">인</span>
