@@ -11,16 +11,156 @@ function maskPhoneTail(phone) {
   return `${tail[0]}**${tail[3]}`
 }
 
+// 🏟️ 인천 시설공단 등록 동호회 목록
+const INCHEON_CLUBS = [
+  '쎄끈빠끈FC',
+  '로또일등대기자',
+  'FMFC',
+  '초심FC',
+  '백암선생',
+  'FM',
+  '범박FC',
+  'PYS FC',
+  '퍼스트마인드FC',
+  'GOF풋살',
+  '초심',
+]
+
+// 🏟️ 부평 시설공단 등록 동호회 목록 (추후 추가 예정)
+const BUPYEONG_CLUBS = []
+
+// 빈 계정 한 칸
+const emptyAccount = () => ({ name: '', id: '', citizen: false, club: '' })
+
+const FIELD_CLASS =
+  'w-full bg-slate-900/80 border border-slate-600 rounded-lg px-3 py-2.5 text-white text-sm placeholder-slate-600 focus:outline-none focus:border-emerald-500 focus:bg-slate-900'
+
+// ✅ 계정 카드 (컴포넌트 밖에 정의해야 입력 포커스가 유지됨!)
+function AccountCard({ idx, acc, accent, showCitizen, clubList, onChange, onRemove, canRemove }) {
+  const accentColor = accent === 'emerald' ? '#10b981' : '#0ea5e9'
+
+  return (
+    <div
+      className="rounded-xl overflow-hidden border"
+      style={{ borderColor: `${accentColor}44`, background: 'rgba(15,23,42,0.55)' }}
+    >
+      {/* 카드 헤더 */}
+      <div
+        className="flex items-center justify-between px-3 py-2.5"
+        style={{ background: `${accentColor}1a` }}
+      >
+        <div className="flex items-center gap-2">
+          <span
+            className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-black text-white"
+            style={{ background: accentColor }}
+          >
+            {idx + 1}
+          </span>
+          <span className="text-white text-sm font-bold">계정 정보</span>
+        </div>
+        {canRemove && (
+          <button
+            type="button"
+            onClick={onRemove}
+            className="text-slate-400 hover:text-red-400 text-xs px-2 py-1 rounded-lg hover:bg-red-500/10 transition-colors"
+          >
+            🗑️ 삭제
+          </button>
+        )}
+      </div>
+
+      {/* 카드 본문 */}
+      <div className="p-3 space-y-3">
+        {/* 이름 / 아이디 / 인천시민 — 한 줄 */}
+        <div className="flex items-end gap-2">
+          {/* 이름 */}
+          <div className="flex-1 min-w-0">
+            <label className="block text-slate-400 text-[11px] font-semibold mb-1.5">👤 이름</label>
+            <input
+              type="text"
+              value={acc.name}
+              onChange={(e) => onChange('name', e.target.value)}
+              placeholder="홍길동"
+              className={FIELD_CLASS}
+            />
+          </div>
+
+          {/* 아이디 */}
+          <div className="flex-1 min-w-0">
+            <label className="block text-slate-400 text-[11px] font-semibold mb-1.5">🔑 아이디</label>
+            <input
+              type="text"
+              value={acc.id}
+              onChange={(e) => onChange('id', e.target.value)}
+              placeholder="hong1234"
+              className={FIELD_CLASS}
+            />
+          </div>
+
+          {/* 인천시민 체크박스 (네모만) */}
+    {showCitizen && (
+  <div className="flex-shrink-0">
+    <label className="block text-slate-400 text-[11px] font-semibold mb-1.5 text-center">
+      🏙️ 인천시민
+    </label>
+    <label
+      className={`flex items-center justify-center rounded-lg border cursor-pointer transition-colors ${
+        acc.citizen
+          ? 'bg-emerald-500/15 border-emerald-500'
+          : 'bg-slate-900/80 border-slate-600 hover:border-slate-500'
+      }`}
+     
+      title={acc.citizen ? '인천시민 인증됨' : '인천시민 아님'}
+    >
+      <input
+        type="checkbox"
+        checked={acc.citizen}
+        onChange={(e) => onChange('citizen', e.target.checked)}
+        className="w-4 h-4 accent-emerald-500 cursor-pointer"
+      />
+    </label>
+  </div>
+)}
+        </div>
+
+        {/* 동호회 */}
+        <div>
+          <label className="block text-slate-400 text-[11px] font-semibold mb-1.5">⚽ 가입 동호회</label>
+          {clubList.length > 0 ? (
+            <select
+              value={acc.club}
+              onChange={(e) => onChange('club', e.target.value)}
+              className={FIELD_CLASS}
+            >
+              <option value="">— 동호회를 선택하세요 —</option>
+              {clubList.map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+          ) : (
+            <input
+              type="text"
+              value={acc.club}
+              onChange={(e) => onChange('club', e.target.value)}
+              placeholder="동호회명 입력"
+              className={FIELD_CLASS}
+            />
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function MemberRegister() {
   const { user, profile, reloadProfile } = useAuth()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [linkedPlayer, setLinkedPlayer] = useState(null) // 이미 연결된 선수
+  const [linkedPlayer, setLinkedPlayer] = useState(null)
 
   // 'choose' | 'existing' | 'new'
   const [mode, setMode] = useState('choose')
 
-  // 기존 명단에서 찾기용
   const [availablePlayers, setAvailablePlayers] = useState([])
   const [playerSearch, setPlayerSearch] = useState('')
   const [selectedPlayerId, setSelectedPlayerId] = useState('')
@@ -32,6 +172,10 @@ function MemberRegister() {
     main_position: '',
     phone: '',
     address: '',
+    incheon_member: false,
+    incheon_accounts: [emptyAccount()],
+    bupyeong_member: false,
+    bupyeong_accounts: [emptyAccount()],
   })
 
   useEffect(() => {
@@ -39,7 +183,6 @@ function MemberRegister() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile])
 
-  // 이미 선수가 연결돼 있으면(=이미 등록 요청함) 그 정보를 보여줌
   async function checkExisting() {
     setLoading(true)
     if (profile?.player_id) {
@@ -50,12 +193,22 @@ function MemberRegister() {
         .single()
       if (data) {
         setLinkedPlayer(data)
+        const inAcc = Array.isArray(data.incheon_accounts) && data.incheon_accounts.length > 0
+          ? data.incheon_accounts.map(a => ({ ...emptyAccount(), ...a }))
+          : [emptyAccount()]
+        const buAcc = Array.isArray(data.bupyeong_accounts) && data.bupyeong_accounts.length > 0
+          ? data.bupyeong_accounts.map(a => ({ ...emptyAccount(), ...a }))
+          : [emptyAccount()]
         setForm({
           name: data.name || '',
           birth_year: data.birth_year || '',
           main_position: data.main_position || '',
           phone: data.phone || '',
           address: data.address || '',
+          incheon_member: !!data.incheon_member,
+          incheon_accounts: inAcc,
+          bupyeong_member: !!data.bupyeong_member,
+          bupyeong_accounts: buAcc,
         })
       }
     } else {
@@ -64,29 +217,15 @@ function MemberRegister() {
     setLoading(false)
   }
 
-  // 아직 계정과 연결되지 않은 활동중 선수 목록 불러오기
   async function fetchAvailablePlayers() {
     setListLoading(true)
-
     const [playerRes, profileRes] = await Promise.all([
-      supabase
-        .from('players')
-        .select('id, name, phone, is_active')
-        .order('name'),
+      supabase.from('players').select('id, name, phone, is_active').order('name'),
       supabase.from('profiles').select('player_id'),
     ])
-
     const allPlayers = (playerRes.data || []).filter(p => p.is_active !== false)
-
-    // 이미 다른 계정에 연결된 선수 id 목록 (조회 권한이 없으면 필터 생략)
-    const linkedIds = new Set(
-      (profileRes.data || [])
-        .map(p => p.player_id)
-        .filter(Boolean)
-    )
-
-    const available = allPlayers.filter(p => !linkedIds.has(p.id))
-    setAvailablePlayers(available)
+    const linkedIds = new Set((profileRes.data || []).map(p => p.player_id).filter(Boolean))
+    setAvailablePlayers(allPlayers.filter(p => !linkedIds.has(p.id)))
     setListLoading(false)
   }
 
@@ -99,24 +238,40 @@ function MemberRegister() {
 
   function handleSearchChange(e) {
     setPlayerSearch(e.target.value)
-    setSelectedPlayerId('') // 검색어가 바뀌면 선택 해제
+    setSelectedPlayerId('')
   }
 
   function handleChange(e) {
-    const { name, value } = e.target
-    setForm((prev) => ({ ...prev, [name]: value }))
+    const { name, value, type, checked } = e.target
+    setForm((prev) => ({ ...prev, [name]: type === 'checkbox' ? checked : value }))
   }
 
-  // ✅ 기존 명단의 선수와 내 계정 연결하기
+  // 🧩 계정 목록 조작
+  function updateAccount(field, idx, key, value) {
+    setForm((prev) => ({
+      ...prev,
+      [field]: prev[field].map((a, i) => (i === idx ? { ...a, [key]: value } : a)),
+    }))
+  }
+
+  function addAccount(field) {
+    setForm((prev) => ({ ...prev, [field]: [...prev[field], emptyAccount()] }))
+  }
+
+  function removeAccount(field, idx) {
+    setForm((prev) => {
+      const next = prev[field].filter((_, i) => i !== idx)
+      return { ...prev, [field]: next.length > 0 ? next : [emptyAccount()] }
+    })
+  }
+
   async function linkExistingPlayer() {
     if (!selectedPlayerId) {
       alert('본인 이름을 선택해 주세요.')
       return
     }
-
     const target = availablePlayers.find(p => String(p.id) === String(selectedPlayerId))
     const masked = maskPhoneTail(target?.phone)
-
     const ok = window.confirm(
       `'${target?.name}'${masked ? ` (${masked})` : ''} 님이 본인이 맞습니까?\n\n` +
       `본인이 아닌 이름을 선택하면 승인이 거부될 수 있습니다.`
@@ -124,7 +279,6 @@ function MemberRegister() {
     if (!ok) return
 
     setSaving(true)
-
     const { error } = await supabase
       .from('profiles')
       .update({ player_id: selectedPlayerId })
@@ -148,6 +302,17 @@ function MemberRegister() {
     setSaving(false)
   }
 
+  function cleanAccounts(list) {
+    return list
+      .filter(a => (a.name || '').trim() || (a.id || '').trim())
+      .map(a => ({
+        name: (a.name || '').trim(),
+        id: (a.id || '').trim(),
+        citizen: !!a.citizen,
+        club: (a.club || '').trim(),
+      }))
+  }
+
   async function handleSubmit(e) {
     e.preventDefault()
     if (!form.name.trim()) {
@@ -156,8 +321,6 @@ function MemberRegister() {
     }
 
     setSaving(true)
-
-    // 오늘 날짜 (YYYY-MM-DD)
     const today = new Date().toISOString().slice(0, 10)
 
     const payload = {
@@ -166,15 +329,14 @@ function MemberRegister() {
       main_position: form.main_position.trim() || null,
       phone: form.phone.trim() || null,
       address: form.address.trim() || null,
+      incheon_member: form.incheon_member,
+      incheon_accounts: form.incheon_member ? cleanAccounts(form.incheon_accounts) : [],
+      bupyeong_member: form.bupyeong_member,
+      bupyeong_accounts: form.bupyeong_member ? cleanAccounts(form.bupyeong_accounts) : [],
     }
 
     if (linkedPlayer) {
-      // 이미 등록한 경우 → 내 선수 정보 수정
-      const { error } = await supabase
-        .from('players')
-        .update(payload)
-        .eq('id', linkedPlayer.id)
-
+      const { error } = await supabase.from('players').update(payload).eq('id', linkedPlayer.id)
       if (error) {
         console.error('정보 수정 오류:', error)
         alert('정보 수정에 실패했습니다.')
@@ -183,7 +345,6 @@ function MemberRegister() {
         await checkExisting()
       }
     } else {
-      // ⚠️ 신규 등록 전, 동명이인 확인
       const { data: sameName } = await supabase
         .from('players')
         .select('id, name')
@@ -203,14 +364,9 @@ function MemberRegister() {
         }
       }
 
-      // 신규 등록 → players에 추가 + 내 프로필에 연결
       const { data: newPlayer, error } = await supabase
         .from('players')
-        .insert({
-          ...payload,
-          join_date: today,        // 자동: 오늘
-          category: '예비회원',     // 자동: 예비회원
-        })
+        .insert({ ...payload, join_date: today, category: '예비회원' })
         .select()
         .single()
 
@@ -221,7 +377,6 @@ function MemberRegister() {
         return
       }
 
-      // 내 프로필(profiles)에 방금 만든 선수 연결
       const { error: linkError } = await supabase
         .from('profiles')
         .update({ player_id: newPlayer.id })
@@ -244,14 +399,16 @@ function MemberRegister() {
     return <div className="text-center text-slate-400 py-10">⏳ 불러오는 중...</div>
   }
 
-  // 🔍 이름이 "정확히 일치"할 때만 결과 표시
   const keyword = playerSearch.trim()
   const matchedPlayers = keyword
     ? availablePlayers.filter(p => (p.name || '').trim() === keyword)
     : []
 
+  const inputClass =
+    'w-full bg-slate-900/80 border border-slate-600 rounded-lg px-4 py-2.5 text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500'
+
   // ─────────────────────────────────────────────
-  // ① 아직 연결 안 됨 + 선택 화면
+  // ① 선택 화면
   // ─────────────────────────────────────────────
   if (!linkedPlayer && mode === 'choose') {
     return (
@@ -262,7 +419,6 @@ function MemberRegister() {
         </p>
 
         <div className="space-y-4">
-          {/* 기존 회원 */}
           <button
             onClick={goExisting}
             className="w-full text-left bg-slate-800 hover:bg-slate-750 border border-slate-700 hover:border-emerald-500/60 rounded-2xl p-5 transition-all hover:-translate-y-0.5"
@@ -277,7 +433,6 @@ function MemberRegister() {
             </p>
           </button>
 
-          {/* 신규 */}
           <button
             onClick={() => setMode('new')}
             className="w-full text-left bg-slate-800 hover:bg-slate-750 border border-slate-700 hover:border-emerald-500/60 rounded-2xl p-5 transition-all hover:-translate-y-0.5"
@@ -300,7 +455,7 @@ function MemberRegister() {
   }
 
   // ─────────────────────────────────────────────
-  // ② 기존 명단에서 내 이름 찾기 (정확히 일치할 때만 노출)
+  // ② 기존 명단에서 찾기
   // ─────────────────────────────────────────────
   if (!linkedPlayer && mode === 'existing') {
     return (
@@ -318,7 +473,6 @@ function MemberRegister() {
           일치하는 회원이 있으면 아래에 표시됩니다.
         </p>
 
-        {/* 검색 */}
         <input
           type="text"
           value={playerSearch}
@@ -330,16 +484,12 @@ function MemberRegister() {
         {listLoading ? (
           <div className="text-center text-slate-400 py-10">⏳ 명단 불러오는 중...</div>
         ) : !keyword ? (
-          /* 입력 전 안내 */
           <div className="text-center py-12 bg-slate-800/40 rounded-xl border border-dashed border-slate-700">
             <p className="text-4xl mb-3">🔍</p>
             <p className="text-slate-300 mb-1">이름을 입력해 주세요</p>
-            <p className="text-slate-500 text-sm">
-              개인정보 보호를 위해 전체 명단은 표시되지 않습니다
-            </p>
+            <p className="text-slate-500 text-sm">개인정보 보호를 위해 전체 명단은 표시되지 않습니다</p>
           </div>
         ) : matchedPlayers.length === 0 ? (
-          /* 일치하는 이름 없음 */
           <div className="text-center py-10 bg-slate-800/50 rounded-xl border border-slate-700">
             <p className="text-4xl mb-3">🤔</p>
             <p className="text-slate-300 mb-1">
@@ -358,7 +508,6 @@ function MemberRegister() {
           </div>
         ) : (
           <>
-            {/* 결과 개수 안내 */}
             <p className="text-slate-400 text-xs mb-2">
               ✅ {matchedPlayers.length}명 찾았습니다
               {matchedPlayers.length > 1 && (
@@ -370,7 +519,6 @@ function MemberRegister() {
               {matchedPlayers.map(p => {
                 const selected = String(selectedPlayerId) === String(p.id)
                 const masked = maskPhoneTail(p.phone)
-
                 return (
                   <button
                     key={p.id}
@@ -383,8 +531,6 @@ function MemberRegister() {
                   >
                     <div className="flex items-center gap-2">
                       <span className="font-semibold truncate">{p.name}</span>
-
-                      {/* 📱 전화번호 뒷자리 */}
                       {masked ? (
                         <span className="text-emerald-400/90 text-xs font-mono bg-emerald-500/10 px-1.5 py-0.5 rounded flex-shrink-0">
                           {masked}
@@ -394,10 +540,7 @@ function MemberRegister() {
                           번호없음
                         </span>
                       )}
-
-                      {selected && (
-                        <span className="text-emerald-400 text-xs ml-auto flex-shrink-0">✔ 선택됨</span>
-                      )}
+                      {selected && <span className="text-emerald-400 text-xs ml-auto flex-shrink-0">✔ 선택됨</span>}
                     </div>
                   </button>
                 )
@@ -422,7 +565,7 @@ function MemberRegister() {
   }
 
   // ─────────────────────────────────────────────
-  // ③ 신규 등록 폼 / 연결 후 정보 수정 폼
+  // ③ 신규 등록 / 정보 수정 폼
   // ─────────────────────────────────────────────
   return (
     <div className="max-w-lg mx-auto">
@@ -444,87 +587,215 @@ function MemberRegister() {
           : '본인 정보를 입력하고 회원 신청을 해주세요. 신청하면 관리자에게 정회원 요청이 전달됩니다.'}
       </p>
 
-      {/* 상태 안내 배너 */}
       {linkedPlayer && (
         <div className="mb-6 bg-amber-500/15 border border-amber-500/40 text-amber-200 rounded-xl px-4 py-3 text-sm">
           🙋 <b>정회원 요청됨</b> — 관리자 승인을 기다리는 중입니다.
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="space-y-4">
-        {/* 이름 */}
-        <div>
-          <label className="block text-slate-300 text-sm font-medium mb-1">이름 <span className="text-red-400">*</span></label>
-          <input
-            type="text"
-            name="name"
-            value={form.name}
-            onChange={handleChange}
-            placeholder="홍길동"
-            className="w-full bg-slate-800 border border-slate-600 rounded-lg px-4 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
-          />
+      <form onSubmit={handleSubmit}>
+        {/* ── 👤 기본 정보 ── */}
+        <div className="bg-slate-800/40 border border-slate-700 rounded-2xl overflow-hidden">
+          <div className="px-4 py-3 bg-slate-700/40 border-b border-slate-700">
+            <p className="text-white font-bold text-sm">👤 기본 정보</p>
+          </div>
+          <div className="p-4 space-y-4">
+            <div>
+              <label className="block text-slate-300 text-xs font-semibold mb-2">
+                이름 <span className="text-red-400">*</span>
+              </label>
+              <input
+                type="text"
+                name="name"
+                value={form.name}
+                onChange={handleChange}
+                placeholder="홍길동"
+                className={inputClass}
+              />
+            </div>
+
+            <div>
+              <label className="block text-slate-300 text-xs font-semibold mb-2">출생년도</label>
+              <input
+                type="number"
+                name="birth_year"
+                value={form.birth_year}
+                onChange={handleChange}
+                placeholder="예: 1993"
+                className={inputClass}
+              />
+            </div>
+
+            <div>
+              <label className="block text-slate-300 text-xs font-semibold mb-2">주포지션</label>
+              <input
+                type="text"
+                name="main_position"
+                value={form.main_position}
+                onChange={handleChange}
+                placeholder="예: 공격수, 미드필더, 골키퍼 등"
+                className={inputClass}
+              />
+            </div>
+
+            <div>
+              <label className="block text-slate-300 text-xs font-semibold mb-2">전화번호</label>
+              <input
+                type="tel"
+                name="phone"
+                value={form.phone}
+                onChange={handleChange}
+                placeholder="010-1234-5678"
+                className={inputClass}
+              />
+            </div>
+
+            <div>
+              <label className="block text-slate-300 text-xs font-semibold mb-2">주소</label>
+              <input
+                type="text"
+                name="address"
+                value={form.address}
+                onChange={handleChange}
+                placeholder="예: 인천시 연수구"
+                className={inputClass}
+              />
+            </div>
+          </div>
         </div>
 
-        {/* 출생년도 */}
-        <div>
-          <label className="block text-slate-300 text-sm font-medium mb-1">출생년도</label>
-          <input
-            type="number"
-            name="birth_year"
-            value={form.birth_year}
-            onChange={handleChange}
-            placeholder="예: 1993"
-            className="w-full bg-slate-800 border border-slate-600 rounded-lg px-4 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
-          />
+        {/* ── 🏟️ 인천 시설공단 ── */}
+        <div style={{ marginTop: '28px' }}>
+          <div
+            className="rounded-2xl border overflow-hidden transition-colors"
+            style={{
+              borderColor: form.incheon_member ? 'rgba(16,185,129,0.45)' : '#334155',
+              background: form.incheon_member ? 'rgba(16,185,129,0.07)' : 'rgba(30,41,59,0.4)',
+            }}
+          >
+            {/* 섹션 헤더 (토글) */}
+            <label
+              className="flex items-center gap-3 px-4 py-4 cursor-pointer"
+              style={{ background: form.incheon_member ? 'rgba(16,185,129,0.12)' : 'rgba(51,65,85,0.4)' }}
+            >
+              <input
+                type="checkbox"
+                name="incheon_member"
+                checked={form.incheon_member}
+                onChange={handleChange}
+                className="w-5 h-5 accent-emerald-500 flex-shrink-0"
+              />
+              <div>
+                <p className="text-white font-bold">🏟️ 인천 시설공단</p>
+                <p className="text-slate-400 text-xs mt-0.5">가입되어 있다면 체크해 주세요</p>
+              </div>
+            </label>
+
+            {form.incheon_member && (
+              <div className="p-4 space-y-4">
+                <p className="text-emerald-300/80 text-xs leading-relaxed bg-emerald-500/10 rounded-lg px-3 py-2">
+                  💡 여러 계정이 있다면 <b>계정 추가</b>로 각각 등록해 주세요.
+                  계정마다 인천시민 여부와 동호회가 다를 수 있습니다.
+                </p>
+
+                {form.incheon_accounts.map((acc, idx) => (
+                  <AccountCard
+                    key={`in-${idx}`}
+                    idx={idx}
+                    acc={acc}
+                    accent="emerald"
+                    showCitizen={true}
+                    clubList={INCHEON_CLUBS}
+                    canRemove={form.incheon_accounts.length > 1}
+                    onChange={(key, value) => updateAccount('incheon_accounts', idx, key, value)}
+                    onRemove={() => removeAccount('incheon_accounts', idx)}
+                  />
+                ))}
+
+                <button
+                  type="button"
+                  onClick={() => addAccount('incheon_accounts')}
+                  className="w-full py-3 rounded-xl border border-dashed border-emerald-500/50 text-emerald-300 text-sm font-bold hover:bg-emerald-500/10 transition-colors"
+                >
+                  ＋ 계정 추가
+                </button>
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* 주포지션 */}
-        <div>
-          <label className="block text-slate-300 text-sm font-medium mb-1">주포지션</label>
-          <input
-            type="text"
-            name="main_position"
-            value={form.main_position}
-            onChange={handleChange}
-            placeholder="예: 공격수, 미드필더, 골키퍼 등"
-            className="w-full bg-slate-800 border border-slate-600 rounded-lg px-4 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
-          />
+        {/* ── 🏟️ 부평 시설공단 ── */}
+        <div style={{ marginTop: '20px' }}>
+          <div
+            className="rounded-2xl border overflow-hidden transition-colors"
+            style={{
+              borderColor: form.bupyeong_member ? 'rgba(14,165,233,0.45)' : '#334155',
+              background: form.bupyeong_member ? 'rgba(14,165,233,0.07)' : 'rgba(30,41,59,0.4)',
+            }}
+          >
+            <label
+              className="flex items-center gap-3 px-4 py-4 cursor-pointer"
+              style={{ background: form.bupyeong_member ? 'rgba(14,165,233,0.12)' : 'rgba(51,65,85,0.4)' }}
+            >
+              <input
+                type="checkbox"
+                name="bupyeong_member"
+                checked={form.bupyeong_member}
+                onChange={handleChange}
+                className="w-5 h-5 accent-sky-500 flex-shrink-0"
+              />
+              <div>
+                <p className="text-white font-bold">🏟️ 부평 시설공단</p>
+                <p className="text-slate-400 text-xs mt-0.5">가입되어 있다면 체크해 주세요</p>
+              </div>
+            </label>
+
+            {form.bupyeong_member && (
+              <div className="p-4 space-y-4">
+                <p className="text-sky-300/80 text-xs leading-relaxed bg-sky-500/10 rounded-lg px-3 py-2">
+                  💡 여러 계정이 있다면 <b>계정 추가</b>로 각각 등록해 주세요.
+                </p>
+
+                {form.bupyeong_accounts.map((acc, idx) => (
+                  <AccountCard
+                    key={`bu-${idx}`}
+                    idx={idx}
+                    acc={acc}
+                    accent="sky"
+                    showCitizen={false}
+                    clubList={BUPYEONG_CLUBS}
+                    canRemove={form.bupyeong_accounts.length > 1}
+                    onChange={(key, value) => updateAccount('bupyeong_accounts', idx, key, value)}
+                    onRemove={() => removeAccount('bupyeong_accounts', idx)}
+                  />
+                ))}
+
+                <button
+                  type="button"
+                  onClick={() => addAccount('bupyeong_accounts')}
+                  className="w-full py-3 rounded-xl border border-dashed border-sky-500/50 text-sky-300 text-sm font-bold hover:bg-sky-500/10 transition-colors"
+                >
+                  ＋ 계정 추가
+                </button>
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* 전화번호 */}
-        <div>
-          <label className="block text-slate-300 text-sm font-medium mb-1">전화번호</label>
-          <input
-            type="tel"
-            name="phone"
-            value={form.phone}
-            onChange={handleChange}
-            placeholder="010-1234-5678"
-            className="w-full bg-slate-800 border border-slate-600 rounded-lg px-4 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
-          />
+        {/* 제출 버튼 */}
+        <div style={{ marginTop: '32px' }}>
+          <button
+            type="submit"
+            disabled={saving}
+            className="w-full bg-emerald-500 hover:bg-emerald-600 disabled:opacity-60 text-white font-bold py-4 rounded-xl text-lg transition-colors shadow-lg shadow-emerald-500/20"
+          >
+            {saving ? '저장 중...' : linkedPlayer ? '💾 정보 수정하기' : '✅ 회원 신청하기'}
+          </button>
         </div>
-
-        {/* 주소 */}
-        <div>
-          <label className="block text-slate-300 text-sm font-medium mb-1">주소</label>
-          <input
-            type="text"
-            name="address"
-            value={form.address}
-            onChange={handleChange}
-            placeholder="예: 인천시 연수구"
-            className="w-full bg-slate-800 border border-slate-600 rounded-lg px-4 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
-          />
-        </div>
-
-        <button
-          type="submit"
-          disabled={saving}
-          className="w-full bg-emerald-500 hover:bg-emerald-600 disabled:opacity-60 text-white font-bold py-3 rounded-xl text-lg transition-colors"
-        >
-          {saving ? '저장 중...' : linkedPlayer ? '정보 수정하기' : '회원 신청하기'}
-        </button>
       </form>
+
+      {/* ⬇️ 하단 여백 */}
+      <div style={{ height: '70px', width: '100%' }} aria-hidden="true"></div>
     </div>
   )
 }

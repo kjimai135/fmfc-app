@@ -27,6 +27,9 @@ function PlayerList() {
   const [showInactive, setShowInactive] = useState(false)
   const [loading, setLoading] = useState(true)
 
+  // 👤 상세 팝업 대상
+  const [detailPlayer, setDetailPlayer] = useState(null)
+
   useEffect(() => {
     fetchAll()
   }, [])
@@ -76,6 +79,7 @@ function PlayerList() {
       alert('선수는 탈퇴 처리됐지만, 연결된 계정 권한 변경에 실패했습니다. 회원 권한 관리에서 확인해 주세요.')
     }
 
+    setDetailPlayer(null)
     fetchAll()
   }
 
@@ -89,6 +93,7 @@ function PlayerList() {
       console.error('복구 오류:', error)
       alert('처리에 실패했습니다.')
     } else {
+      setDetailPlayer(null)
       fetchAll()
     }
   }
@@ -113,6 +118,7 @@ function PlayerList() {
       console.error('삭제 오류:', error)
       alert('삭제에 실패했습니다.')
     } else {
+      setDetailPlayer(null)
       fetchAll()
     }
   }
@@ -145,6 +151,17 @@ function PlayerList() {
     return `${yy}년생`
   }
 
+  // 🏟️ 시설공단 계정 배열 안전하게 가져오기
+  function getAccounts(player, key) {
+    const arr = player?.[key]
+    return Array.isArray(arr) ? arr : []
+  }
+
+  const detailRole = detailPlayer ? getRoleForPlayer(detailPlayer.id) : null
+  const detailInactive = detailPlayer?.is_active === false
+  const incheonAccounts = getAccounts(detailPlayer, 'incheon_accounts')
+  const bupyeongAccounts = getAccounts(detailPlayer, 'bupyeong_accounts')
+
   return (
     <div>
       {/* 헤더 */}
@@ -161,10 +178,15 @@ function PlayerList() {
         </Link>
       </div>
 
-      {/* 안내: 등급은 권한관리에서 */}
-      <div className="bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 mb-4 text-slate-400 text-sm flex items-center gap-2">
+      {/* 안내 */}
+      <div className="bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 mb-4 text-slate-400 text-sm flex items-center gap-2 flex-wrap">
         <span>ℹ️</span>
-        <span>등급(권한)은 <b>권한관리</b>에서 변경합니다.</span>
+        <span>회원을 클릭하면 상세 정보를 볼 수 있습니다.</span>
+        <span className="text-slate-500">·</span>
+        <span className="text-emerald-400 font-bold">🏟️</span>
+        <span className="text-slate-500 text-xs">인천</span>
+        <span className="text-sky-400 font-bold">🏟️</span>
+        <span className="text-slate-500 text-xs">부평</span>
       </div>
 
       {/* 검색 & 필터 */}
@@ -203,7 +225,7 @@ function PlayerList() {
         </label>
       </div>
 
-      {/* 선수 목록 - 테이블 (이름/출생/주소/연락처/포지션/등급 + 관리) */}
+      {/* 📋 선수 목록 (가로 얇은 한 줄씩) */}
       {loading ? (
         <div className="text-center py-20 text-slate-400">
           <p className="text-xl">⏳ 로딩 중...</p>
@@ -215,117 +237,336 @@ function PlayerList() {
           <p className="mt-2">위의 "선수 등록" 버튼을 눌러 선수를 추가하세요!</p>
         </div>
       ) : (
-        <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="border-b border-slate-700 bg-slate-800/80">
-                <th className="px-5 py-4 text-slate-400 text-sm font-semibold whitespace-nowrap">이름</th>
-                <th className="px-5 py-4 text-slate-400 text-sm font-semibold whitespace-nowrap">출생</th>
-                <th className="px-5 py-4 text-slate-400 text-sm font-semibold whitespace-nowrap">주소</th>
-                <th className="px-5 py-4 text-slate-400 text-sm font-semibold whitespace-nowrap">연락처</th>
-                <th className="px-5 py-4 text-slate-400 text-sm font-semibold whitespace-nowrap">포지션</th>
-                <th className="px-5 py-4 text-slate-400 text-sm font-semibold whitespace-nowrap">등급</th>
-                <th className="px-5 py-4 text-slate-400 text-sm font-semibold text-center whitespace-nowrap">관리</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map(player => {
-                const inactive = player.is_active === false
-                const role = getRoleForPlayer(player.id)
-                return (
-                  <tr
-                    key={player.id}
-                    className={`border-b border-slate-700/50 hover:bg-slate-700/30 transition-colors ${inactive ? 'opacity-50' : ''}`}
-                  >
-                    {/* 이름 (+ 탈퇴 배지) */}
-                    <td className="px-5 py-4 text-white font-medium text-[15px] whitespace-nowrap">
-                      {player.name}
-                      {inactive && (
-                        <span className="ml-2 px-2 py-0.5 rounded-full text-xs font-medium bg-slate-600/40 text-slate-300">탈퇴</span>
-                      )}
-                    </td>
+        <div className="space-y-2">
+          {filtered.map(player => {
+            const inactive = player.is_active === false
+            const role = getRoleForPlayer(player.id)
+            const hasIncheon = !!player.incheon_member
+            const hasBupyeong = !!player.bupyeong_member
 
-                    {/* 출생 (연생) */}
-                    <td className="px-5 py-4 text-slate-300 text-sm whitespace-nowrap">
-                      {birthLabel(player.birth_year)}
-                    </td>
+            return (
+              <button
+                key={player.id}
+                onClick={() => setDetailPlayer(player)}
+                className={`w-full text-left bg-slate-800 hover:bg-slate-700/70 border border-slate-700 hover:border-emerald-500/50 rounded-xl px-3 py-2.5 transition-colors ${
+                  inactive ? 'opacity-50' : ''
+                }`}
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  {/* 이름 */}
+                  <div className="flex items-center gap-1 flex-shrink-0" style={{ minWidth: '62px' }}>
+                    <span className="text-white font-bold text-sm truncate">{player.name}</span>
+                    {inactive && (
+                      <span className="px-1 py-0.5 rounded text-[9px] font-medium bg-slate-600/40 text-slate-300 flex-shrink-0">
+                        탈퇴
+                      </span>
+                    )}
+                  </div>
 
-                    {/* 주소 */}
-                    <td className="px-5 py-4 text-slate-300 text-sm whitespace-nowrap">{player.address || '-'}</td>
+                  {/* 등급 */}
+                  <div className="flex-shrink-0" style={{ minWidth: '58px' }}>
+                    {role ? (
+                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${ROLE_COLORS[role] || 'bg-slate-500/20 text-slate-400'}`}>
+                        {ROLE_LABELS[role] || role}
+                      </span>
+                    ) : (
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-600/30 text-slate-500" title="구글 계정과 연결되지 않음">
+                        미연결
+                      </span>
+                    )}
+                  </div>
 
-                    {/* 연락처 */}
-                    <td className="px-5 py-4 text-slate-300 text-sm whitespace-nowrap">{player.phone || '-'}</td>
+                  {/* 출생 (항상 표시) */}
+                  <span className="text-slate-400 text-[11px] flex-shrink-0 tabular-nums" style={{ minWidth: '48px' }}>
+                    {birthLabel(player.birth_year)}
+                  </span>
 
-                    {/* 포지션 */}
-                    <td className="px-5 py-4 whitespace-nowrap">
-                      {player.main_position ? (
-                        <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${positionColor(player.main_position)}`}>
-                          {player.main_position}
-                        </span>
-                      ) : '-'}
-                    </td>
+                  {/* 연락처 (항상 표시) */}
+                  <span className="text-slate-400 text-[11px] flex-shrink-0 tabular-nums truncate" style={{ minWidth: '96px' }}>
+                    {player.phone || '-'}
+                  </span>
 
-                    {/* 등급 */}
-                    <td className="px-5 py-4 whitespace-nowrap">
-                      {role ? (
-                        <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${ROLE_COLORS[role] || 'bg-slate-500/20 text-slate-400'}`}>
-                          {ROLE_LABELS[role] || role}
-                        </span>
-                      ) : (
-                        <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-slate-600/30 text-slate-500" title="구글 계정과 연결되지 않음">
-                          미연결
-                        </span>
-                      )}
-                    </td>
+                  {/* 포지션 (좁으면 숨김) */}
+                  <div className="flex-shrink-0 hidden sm:block" style={{ minWidth: '40px' }}>
+                    {player.main_position ? (
+                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${positionColor(player.main_position)}`}>
+                        {player.main_position}
+                      </span>
+                    ) : (
+                      <span className="text-slate-600 text-[10px]">-</span>
+                    )}
+                  </div>
 
-                    {/* 관리 */}
-                    <td className="px-5 py-4 whitespace-nowrap">
-                      <div className="flex gap-2 justify-center">
-                        <Link
-                          to={`/players/${player.id}/edit`}
-                          className="bg-slate-700 hover:bg-slate-600 text-white px-3 py-1.5 rounded-lg text-xs transition-colors"
-                          title="수정"
-                        >
-                          ✏️
-                        </Link>
+                  {/* 주소 (넓을 때만) */}
+                  <span className="text-slate-500 text-[11px] truncate flex-1 min-w-0 hidden lg:inline">
+                    {player.address || '-'}
+                  </span>
 
-                        {inactive ? (
-                          <>
-                            <button
-                              onClick={() => restorePlayer(player.id)}
-                              className="bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 px-3 py-1.5 rounded-lg text-xs transition-colors"
-                              title="복구(재가입)"
-                            >
-                              ↩️
-                            </button>
-                            <button
-                              onClick={() => deletePlayerForever(player.id, player.name)}
-                              className="bg-red-500/10 hover:bg-red-500/20 text-red-400 px-3 py-1.5 rounded-lg text-xs transition-colors"
-                              title="완전 삭제"
-                            >
-                              🗑️
-                            </button>
-                          </>
-                        ) : (
-                          <button
-                            onClick={() => withdrawPlayer(player.id, player.name)}
-                            className="bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 px-3 py-1.5 rounded-lg text-xs transition-colors"
-                            title="탈퇴 처리"
-                          >
-                            🚪
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
+                  {/* 🏟️ 시설공단 아이콘 */}
+                  <div className="flex items-center gap-1.5 flex-shrink-0 ml-auto">
+                    <span
+                      className="text-sm"
+                      style={{ opacity: hasIncheon ? 1 : 0.15 }}
+                      title={hasIncheon ? '인천 시설공단 가입' : '인천 시설공단 미가입'}
+                    >
+                      🏟️
+                    </span>
+                    <span
+                      className="text-sm"
+                      style={{ opacity: hasBupyeong ? 1 : 0.15, filter: hasBupyeong ? 'hue-rotate(180deg)' : 'none' }}
+                      title={hasBupyeong ? '부평 시설공단 가입' : '부평 시설공단 미가입'}
+                    >
+                      🏟️
+                    </span>
+                    <span className="text-slate-600 text-sm ml-0.5">›</span>
+                  </div>
+                </div>
+              </button>
+            )
+          })}
         </div>
       )}
 
-      {/* ⬇️ 하단 여백 (맨 아래 줄이 안 잘리게) */}
+      {/* 👤 상세 팝업 */}
+      {detailPlayer && (
+        <div
+          onClick={() => setDetailPlayer(null)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.7)',
+            zIndex: 100,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '20px',
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: '#1e293b',
+              border: '1px solid #475569',
+              borderRadius: '16px',
+              width: '100%',
+              maxWidth: '520px',
+              maxHeight: '85vh',
+              overflowY: 'auto',
+              boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
+            }}
+          >
+            {/* 팝업 헤더 */}
+            <div className="flex items-start justify-between px-5 py-4 border-b border-slate-700 sticky top-0 bg-slate-800 z-10">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h2 className="text-white text-xl font-bold truncate">{detailPlayer.name}</h2>
+                  {detailInactive && (
+                    <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-slate-600/40 text-slate-300">탈퇴</span>
+                  )}
+                  {detailRole ? (
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${ROLE_COLORS[detailRole] || 'bg-slate-500/20 text-slate-400'}`}>
+                      {ROLE_LABELS[detailRole] || detailRole}
+                    </span>
+                  ) : (
+                    <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-slate-600/30 text-slate-500">미연결</span>
+                  )}
+                </div>
+                {detailPlayer.current_team && (
+                  <p className="text-slate-400 text-sm mt-1">⚽ {detailPlayer.current_team}</p>
+                )}
+              </div>
+              <button
+                onClick={() => setDetailPlayer(null)}
+                className="text-slate-400 hover:text-white text-xl leading-none px-2 flex-shrink-0"
+                title="닫기"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-5 space-y-5">
+              {/* 기본 정보 */}
+              <div className="bg-slate-900/50 border border-slate-700 rounded-xl overflow-hidden">
+                <div className="px-4 py-2.5 bg-slate-700/40 border-b border-slate-700">
+                  <p className="text-white font-bold text-sm">👤 기본 정보</p>
+                </div>
+                <div className="p-4 grid grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <p className="text-slate-500 text-xs mb-0.5">출생년도</p>
+                    <p className="text-slate-200">{detailPlayer.birth_year ? `${detailPlayer.birth_year}년 (${birthLabel(detailPlayer.birth_year)})` : '-'}</p>
+                  </div>
+                  <div>
+                    <p className="text-slate-500 text-xs mb-0.5">주포지션</p>
+                    <p className="text-slate-200">{detailPlayer.main_position || '-'}</p>
+                  </div>
+                  <div>
+                    <p className="text-slate-500 text-xs mb-0.5">연락처</p>
+                    <p className="text-slate-200">{detailPlayer.phone || '-'}</p>
+                  </div>
+                  <div>
+                    <p className="text-slate-500 text-xs mb-0.5">가입일</p>
+                    <p className="text-slate-200">{detailPlayer.join_date || '-'}</p>
+                  </div>
+                  <div className="col-span-2">
+                    <p className="text-slate-500 text-xs mb-0.5">주소</p>
+                    <p className="text-slate-200">{detailPlayer.address || '-'}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* 🏟️ 인천 시설공단 */}
+              <div
+                className="rounded-xl border overflow-hidden"
+                style={{
+                  borderColor: detailPlayer.incheon_member ? 'rgba(16,185,129,0.4)' : '#334155',
+                  background: detailPlayer.incheon_member ? 'rgba(16,185,129,0.06)' : 'rgba(15,23,42,0.4)',
+                }}
+              >
+                <div
+                  className="px-4 py-2.5 border-b flex items-center justify-between"
+                  style={{
+                    borderColor: detailPlayer.incheon_member ? 'rgba(16,185,129,0.25)' : '#334155',
+                    background: detailPlayer.incheon_member ? 'rgba(16,185,129,0.12)' : 'rgba(51,65,85,0.4)',
+                  }}
+                >
+                  <p className="text-white font-bold text-sm">🏟️ 인천 시설공단</p>
+                  <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                    detailPlayer.incheon_member ? 'bg-emerald-500/25 text-emerald-300' : 'bg-slate-600/40 text-slate-400'
+                  }`}>
+                    {detailPlayer.incheon_member ? '가입' : '미가입'}
+                  </span>
+                </div>
+
+                {detailPlayer.incheon_member && (
+                  <div className="p-3 space-y-2">
+                    {incheonAccounts.length === 0 ? (
+                      <p className="text-slate-500 text-sm px-1 py-2">등록된 계정 정보가 없습니다</p>
+                    ) : (
+                      incheonAccounts.map((acc, idx) => (
+                        <div key={idx} className="bg-slate-900/60 border border-slate-700/70 rounded-lg p-3">
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className="w-5 h-5 rounded-full bg-emerald-500 text-white text-[10px] font-black flex items-center justify-center flex-shrink-0">
+                              {idx + 1}
+                            </span>
+                            <span className="text-white font-semibold text-sm truncate">{acc.name || '(이름 없음)'}</span>
+                            {acc.citizen && (
+                              <span className="ml-auto px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/25 text-emerald-300 flex-shrink-0">
+                                🏙️ 인천시민
+                              </span>
+                            )}
+                          </div>
+                          <div className="grid grid-cols-2 gap-2 text-xs">
+                            <div className="min-w-0">
+                              <p className="text-slate-500 text-[11px] mb-0.5">아이디</p>
+                              <p className="text-slate-200 font-mono truncate">{acc.id || '-'}</p>
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-slate-500 text-[11px] mb-0.5">동호회</p>
+                              <p className="text-slate-200 truncate">{acc.club || '-'}</p>
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* 🏟️ 부평 시설공단 */}
+              <div
+                className="rounded-xl border overflow-hidden"
+                style={{
+                  borderColor: detailPlayer.bupyeong_member ? 'rgba(14,165,233,0.4)' : '#334155',
+                  background: detailPlayer.bupyeong_member ? 'rgba(14,165,233,0.06)' : 'rgba(15,23,42,0.4)',
+                }}
+              >
+                <div
+                  className="px-4 py-2.5 border-b flex items-center justify-between"
+                  style={{
+                    borderColor: detailPlayer.bupyeong_member ? 'rgba(14,165,233,0.25)' : '#334155',
+                    background: detailPlayer.bupyeong_member ? 'rgba(14,165,233,0.12)' : 'rgba(51,65,85,0.4)',
+                  }}
+                >
+                  <p className="text-white font-bold text-sm">🏟️ 부평 시설공단</p>
+                  <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                    detailPlayer.bupyeong_member ? 'bg-sky-500/25 text-sky-300' : 'bg-slate-600/40 text-slate-400'
+                  }`}>
+                    {detailPlayer.bupyeong_member ? '가입' : '미가입'}
+                  </span>
+                </div>
+
+                {detailPlayer.bupyeong_member && (
+                  <div className="p-3 space-y-2">
+                    {bupyeongAccounts.length === 0 ? (
+                      <p className="text-slate-500 text-sm px-1 py-2">등록된 계정 정보가 없습니다</p>
+                    ) : (
+                      bupyeongAccounts.map((acc, idx) => (
+                        <div key={idx} className="bg-slate-900/60 border border-slate-700/70 rounded-lg p-3">
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className="w-5 h-5 rounded-full bg-sky-500 text-white text-[10px] font-black flex items-center justify-center flex-shrink-0">
+                              {idx + 1}
+                            </span>
+                            <span className="text-white font-semibold text-sm truncate">{acc.name || '(이름 없음)'}</span>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2 text-xs">
+                            <div className="min-w-0">
+                              <p className="text-slate-500 text-[11px] mb-0.5">아이디</p>
+                              <p className="text-slate-200 font-mono truncate">{acc.id || '-'}</p>
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-slate-500 text-[11px] mb-0.5">동호회</p>
+                              <p className="text-slate-200 truncate">{acc.club || '-'}</p>
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* 관리 버튼 */}
+              <div className="pt-2 border-t border-slate-700/60">
+                <p className="text-slate-500 text-xs mb-2.5">🔧 관리</p>
+                <div className="flex flex-wrap gap-2">
+                  <Link
+                    to={`/players/${detailPlayer.id}/edit`}
+                    className="flex-1 min-w-[100px] text-center bg-slate-700 hover:bg-slate-600 text-white px-4 py-2.5 rounded-lg text-sm font-medium transition-colors"
+                  >
+                    ✏️ 정보 수정
+                  </Link>
+
+                  {detailInactive ? (
+                    <>
+                      <button
+                        onClick={() => restorePlayer(detailPlayer.id)}
+                        className="flex-1 min-w-[100px] bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors"
+                      >
+                        ↩️ 복구
+                      </button>
+                      <button
+                        onClick={() => deletePlayerForever(detailPlayer.id, detailPlayer.name)}
+                        className="flex-1 min-w-[100px] bg-red-500/15 hover:bg-red-500/25 text-red-400 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors"
+                      >
+                        🗑️ 완전삭제
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      onClick={() => withdrawPlayer(detailPlayer.id, detailPlayer.name)}
+                      className="flex-1 min-w-[100px] bg-amber-500/15 hover:bg-amber-500/25 text-amber-400 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors"
+                    >
+                      🚪 탈퇴 처리
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ⬇️ 하단 여백 */}
       <div style={{ height: '80px', width: '100%' }} aria-hidden="true"></div>
     </div>
   )
