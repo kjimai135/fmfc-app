@@ -19,6 +19,18 @@ const ROLE_COLORS = {
   associate: 'bg-slate-500/20 text-slate-400',
 }
 
+// 등급 정렬 순서 (높은 권한 → 낮은 권한)
+const ROLE_ORDER = { admin: 1, executive: 2, captain: 3, member: 4, associate: 5 }
+
+// 🔽 정렬 항목
+const SORT_OPTIONS = [
+  { key: 'name', label: '이름' },
+  { key: 'role', label: '등급' },
+  { key: 'birth', label: '출생년도' },
+  { key: 'incheon', label: '인천 시설공단' },
+  { key: 'bupyeong', label: '부평 시설공단' },
+]
+
 function PlayerList() {
   const [players, setPlayers] = useState([])
   const [profiles, setProfiles] = useState([])
@@ -26,6 +38,10 @@ function PlayerList() {
   const [filterRole, setFilterRole] = useState('')
   const [showInactive, setShowInactive] = useState(false)
   const [loading, setLoading] = useState(true)
+
+  // 🔽 정렬 상태
+  const [sortKey, setSortKey] = useState('name')
+  const [sortAsc, setSortAsc] = useState(true)
 
   // 👤 상세 팝업 대상
   const [detailPlayer, setDetailPlayer] = useState(null)
@@ -123,6 +139,22 @@ function PlayerList() {
     }
   }
 
+  // 🏟️ 시설공단 계정 배열 안전하게 가져오기
+  function getAccounts(player, key) {
+    const arr = player?.[key]
+    return Array.isArray(arr) ? arr : []
+  }
+
+  // 🏙️ 인천시민 인증 수 / 전체 계정 수
+  function getCitizenCount(player) {
+    const accs = getAccounts(player, 'incheon_accounts')
+    return {
+      citizen: accs.filter(a => a.citizen).length,
+      total: accs.length,
+    }
+  }
+
+  // 필터링
   const filtered = players.filter(p => {
     const matchSearch =
       p.name?.includes(search) ||
@@ -132,6 +164,44 @@ function PlayerList() {
     const matchRole = filterRole ? role === filterRole : true
     const matchActive = showInactive ? true : (p.is_active !== false)
     return matchSearch && matchRole && matchActive
+  })
+
+  // 🔽 정렬
+  const sorted = [...filtered].sort((a, b) => {
+    let cmp = 0
+
+    if (sortKey === 'name') {
+      cmp = (a.name || '').localeCompare(b.name || '')
+    } else if (sortKey === 'role') {
+      const ra = ROLE_ORDER[getRoleForPlayer(a.id)] || 99
+      const rb = ROLE_ORDER[getRoleForPlayer(b.id)] || 99
+      cmp = ra - rb
+      if (cmp === 0) cmp = (a.name || '').localeCompare(b.name || '')
+    } else if (sortKey === 'birth') {
+      const ba = a.birth_year || 0
+      const bb = b.birth_year || 0
+      cmp = ba - bb
+      if (cmp === 0) cmp = (a.name || '').localeCompare(b.name || '')
+    } else if (sortKey === 'incheon') {
+      // 가입 여부 → 인천시민 수 → 이름
+      const ia = a.incheon_member ? 1 : 0
+      const ib = b.incheon_member ? 1 : 0
+      cmp = ib - ia // 가입자 먼저
+      if (cmp === 0) {
+        cmp = getCitizenCount(b).citizen - getCitizenCount(a).citizen
+      }
+      if (cmp === 0) cmp = (a.name || '').localeCompare(b.name || '')
+    } else if (sortKey === 'bupyeong') {
+      const ba = a.bupyeong_member ? 1 : 0
+      const bb = b.bupyeong_member ? 1 : 0
+      cmp = bb - ba // 가입자 먼저
+      if (cmp === 0) {
+        cmp = getAccounts(b, 'bupyeong_accounts').length - getAccounts(a, 'bupyeong_accounts').length
+      }
+      if (cmp === 0) cmp = (a.name || '').localeCompare(b.name || '')
+    }
+
+    return sortAsc ? cmp : -cmp
   })
 
   const positionColor = (pos) => {
@@ -151,12 +221,6 @@ function PlayerList() {
     return `${yy}년생`
   }
 
-  // 🏟️ 시설공단 계정 배열 안전하게 가져오기
-  function getAccounts(player, key) {
-    const arr = player?.[key]
-    return Array.isArray(arr) ? arr : []
-  }
-
   const detailRole = detailPlayer ? getRoleForPlayer(detailPlayer.id) : null
   const detailInactive = detailPlayer?.is_active === false
   const incheonAccounts = getAccounts(detailPlayer, 'incheon_accounts')
@@ -168,7 +232,7 @@ function PlayerList() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
         <div>
           <h1 className="text-3xl font-bold text-white">👤 회원관리</h1>
-          <p className="text-slate-400 mt-1">총 {filtered.length}명</p>
+          <p className="text-slate-400 mt-1">총 {sorted.length}명</p>
         </div>
         <Link
           to="/players/new"
@@ -211,6 +275,35 @@ function PlayerList() {
         </select>
       </div>
 
+      {/* 🔽 정렬 */}
+      <div className="flex flex-wrap items-center gap-2 mb-4">
+        <span className="text-slate-400 text-sm">정렬:</span>
+        {SORT_OPTIONS.map(opt => {
+          const active = sortKey === opt.key
+          return (
+            <button
+              key={opt.key}
+              onClick={() => {
+                if (active) {
+                  setSortAsc(v => !v)
+                } else {
+                  setSortKey(opt.key)
+                  setSortAsc(true)
+                }
+              }}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
+                active
+                  ? 'bg-emerald-500 text-white border-emerald-500'
+                  : 'bg-slate-800 text-slate-300 border-slate-600 hover:bg-slate-700'
+              }`}
+            >
+              {opt.label}
+              {active && <span className="ml-1">{sortAsc ? '↑' : '↓'}</span>}
+            </button>
+          )
+        })}
+      </div>
+
       {/* 탈퇴 회원 포함 보기 */}
       <div className="mb-6">
         <label className="inline-flex items-center gap-2 text-slate-300 text-sm cursor-pointer select-none">
@@ -229,7 +322,7 @@ function PlayerList() {
         <div className="text-center py-20 text-slate-400">
           <p className="text-xl">⏳ 로딩 중...</p>
         </div>
-      ) : filtered.length === 0 ? (
+      ) : sorted.length === 0 ? (
         <div className="text-center py-20 text-slate-400">
           <p className="text-4xl mb-4">⚽</p>
           <p className="text-xl">등록된 선수가 없습니다</p>
@@ -237,11 +330,13 @@ function PlayerList() {
         </div>
       ) : (
         <div className="space-y-2">
-          {filtered.map(player => {
+          {sorted.map(player => {
             const inactive = player.is_active === false
             const role = getRoleForPlayer(player.id)
             const hasIncheon = !!player.incheon_member
             const hasBupyeong = !!player.bupyeong_member
+            const { citizen, total } = getCitizenCount(player)
+            const buCount = getAccounts(player, 'bupyeong_accounts').length
 
             return (
               <button
@@ -301,24 +396,32 @@ function PlayerList() {
                     {player.address || '-'}
                   </span>
 
-                  {/* 🏟️ 시설공단 표시 (인 / 부) */}
-                  <div className="flex items-center gap-1 flex-shrink-0 ml-auto">
+                  {/* 🏟️ 시설공단 표시 (인 + 인천시민 수 / 부) */}
+                  <div className="flex items-center gap-1.5 flex-shrink-0 ml-auto">
                     {hasIncheon && (
-                      <span
-                        className="inline-flex items-center justify-center rounded-full text-[10px] font-black bg-emerald-500 text-white"
-                        style={{ width: '20px', height: '20px' }}
-                        title="인천 시설공단 가입"
-                      >
-                        인
+                      <span className="inline-flex items-center gap-1" title={`인천 시설공단 · 인천시민 ${citizen}/${total}`}>
+                        <span
+                          className="inline-flex items-center justify-center rounded-full text-[10px] font-black bg-emerald-500 text-white"
+                          style={{ width: '20px', height: '20px' }}
+                        >
+                          인
+                        </span>
+                        <span className={`text-[10px] font-bold tabular-nums ${citizen > 0 ? 'text-emerald-300' : 'text-slate-500'}`}>
+                          {citizen}/{total}
+                        </span>
                       </span>
                     )}
                     {hasBupyeong && (
-                      <span
-                        className="inline-flex items-center justify-center rounded-full text-[10px] font-black bg-sky-500 text-white"
-                        style={{ width: '20px', height: '20px' }}
-                        title="부평 시설공단 가입"
-                      >
-                        부
+                      <span className="inline-flex items-center gap-1" title={`부평 시설공단 · 계정 ${buCount}개`}>
+                        <span
+                          className="inline-flex items-center justify-center rounded-full text-[10px] font-black bg-sky-500 text-white"
+                          style={{ width: '20px', height: '20px' }}
+                        >
+                          부
+                        </span>
+                        <span className="text-[10px] font-bold tabular-nums text-sky-300">
+                          {buCount}
+                        </span>
                       </span>
                     )}
                     <span className="text-slate-600 text-sm ml-0.5">›</span>
@@ -437,6 +540,11 @@ function PlayerList() {
                       인
                     </span>
                     <p className="text-white font-bold text-sm">인천 시설공단</p>
+                    {detailPlayer.incheon_member && incheonAccounts.length > 0 && (
+                      <span className="text-emerald-300 text-xs font-bold">
+                        · 인천시민 {incheonAccounts.filter(a => a.citizen).length}/{incheonAccounts.length}
+                      </span>
+                    )}
                   </div>
                   <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
                     detailPlayer.incheon_member ? 'bg-emerald-500/25 text-emerald-300' : 'bg-slate-600/40 text-slate-400'
@@ -500,6 +608,9 @@ function PlayerList() {
                       부
                     </span>
                     <p className="text-white font-bold text-sm">부평 시설공단</p>
+                    {detailPlayer.bupyeong_member && bupyeongAccounts.length > 0 && (
+                      <span className="text-sky-300 text-xs font-bold">· 계정 {bupyeongAccounts.length}개</span>
+                    )}
                   </div>
                   <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
                     detailPlayer.bupyeong_member ? 'bg-sky-500/25 text-sky-300' : 'bg-slate-600/40 text-slate-400'
