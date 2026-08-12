@@ -222,12 +222,19 @@ function MemberRoles() {
     // 1) 권한 필터
     if (roleFilter !== 'all' && p.role !== roleFilter) return false
 
-    // 2) 이름/이메일 검색
+    // 2) 이름/이메일/연결된 선수 이름 검색
     const q = search.trim().toLowerCase()
     if (!q) return true
+
+    // 🔍 연결된 선수 이름도 검색 대상에 포함
+    const linkedPlayerName = p.player_id
+      ? (players.find((pl) => pl.id === p.player_id)?.name || '')
+      : ''
+
     return (
       (p.name || '').toLowerCase().includes(q) ||
-      (p.email || '').toLowerCase().includes(q)
+      (p.email || '').toLowerCase().includes(q) ||
+      linkedPlayerName.toLowerCase().includes(q)
     )
   })
 
@@ -251,7 +258,7 @@ function MemberRoles() {
         type="text"
         value={search}
         onChange={(e) => setSearch(e.target.value)}
-        placeholder="이름 또는 이메일로 검색"
+        placeholder="이름, 이메일, 연결된 선수 이름으로 검색"
         className="w-full mb-4 bg-slate-800 border border-slate-600 rounded-lg px-4 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
       />
 
