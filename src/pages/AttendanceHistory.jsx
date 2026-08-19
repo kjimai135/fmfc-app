@@ -25,6 +25,9 @@ function AttendanceHistory() {
   const [addStatus, setAddStatus] = useState('출석')
   const [saving, setSaving] = useState(false)
 
+  // 🔀 순서 변경 중 표시
+  const [movingId, setMovingId] = useState(null)
+
   useEffect(() => {
     fetchAvailableDates()
     fetchTeams()
@@ -80,7 +83,7 @@ function AttendanceHistory() {
     setLoading(false)
   }
 
-  // ✅ 개별 선수 상태 수정 (관리자·임원·주장/부주장)
+  // ✅ 개별 선수 상태 수정
   async function updateStatus(recordId, newStatus) {
     if (!canEdit) return
     await supabase
@@ -90,7 +93,7 @@ function AttendanceHistory() {
     fetchAttendance(selectedDate)
   }
 
-  // ✅ 개별 선수 기록 삭제 (관리자·임원·주장/부주장)
+  // ✅ 개별 선수 기록 삭제
   async function deleteRecord(recordId, playerName) {
     if (!canEdit) return
     if (!window.confirm(`${playerName} 선수의 출석 기록을 삭제(불참 처리)할까요?`)) return
@@ -101,13 +104,42 @@ function AttendanceHistory() {
     fetchAttendance(selectedDate)
   }
 
-  // ✅ 선택한 날짜 전체 삭제 (관리자·임원·주장/부주장) — 2단계 재확인
+  // 🔀 순서 변경 (같은 팀 안에서 위/아래로 이동)
+  async function moveRecord(teamName, idx, direction) {
+    if (!canEdit) return
+
+    const list = attendance
+      .filter(a => a.team === teamName)
+      .sort((a, b) => (a.check_order || 0) - (b.check_order || 0))
+
+    const targetIdx = direction === 'up' ? idx - 1 : idx + 1
+    if (targetIdx < 0 || targetIdx >= list.length) return
+
+    setMovingId(list[idx].id)
+
+    // 배열에서 위치 교환
+    const reordered = [...list]
+    const tmp = reordered[idx]
+    reordered[idx] = reordered[targetIdx]
+    reordered[targetIdx] = tmp
+
+    // 1..n 으로 순서 재부여
+    for (let i = 0; i < reordered.length; i++) {
+      await supabase
+        .from('attendance')
+        .update({ check_order: i + 1 })
+        .eq('id', reordered[i].id)
+    }
+
+    await fetchAttendance(selectedDate)
+    setMovingId(null)
+  }
+
+  // ✅ 선택한 날짜 전체 삭제 — 2단계 재확인
   async function deleteAllForDate() {
     if (!canEdit) return
     const count = attendance.length
-    // 1차 확인
     if (!window.confirm(`⚠️ ${selectedDate} 날짜의 출석 기록 ${count}건을 전부 삭제할까요?\n(복구할 수 없습니다!)`)) return
-    // 2차 확인 (실수 방지)
     if (!window.confirm(`정말 삭제하시겠습니까?\n${selectedDate} · 총 ${count}건이 영구 삭제됩니다.`)) return
 
     await supabase
@@ -118,7 +150,16 @@ function AttendanceHistory() {
     fetchAttendance(selectedDate)
   }
 
-  // ✅ 선수 수동 추가 (관리자·임원·주장/부주장)
+  // 🧑 선수 선택 시 → 소속팀 자동 채움 (수정 가능)
+  function handleSelectPlayer(playerId) {
+    setAddPlayerId(playerId)
+    const p = players.find(x => x.id === playerId)
+    if (p) {
+      setAddTeam(p.current_team || '')
+    }
+  }
+
+  // ✅ 선수 수동 추가
   async function addAttendance() {
     if (!canEdit) return
     if (!addPlayerId) {
@@ -157,6 +198,7 @@ function AttendanceHistory() {
       alert('출석 추가에 실패했습니다.')
     } else {
       setAddPlayerId('')
+      setAddTeam('')
       await fetchAvailableDates()
       await fetchAttendance(selectedDate)
     }
@@ -188,11 +230,15 @@ function AttendanceHistory() {
   const alreadyIds = new Set(attendance.map(a => a.player_id).filter(Boolean))
   const selectablePlayers = players.filter(p => !alreadyIds.has(p.id))
 
+  // 선택된 선수 정보 (미배정 안내용)
+  const selectedPlayerObj = players.find(p => p.id === addPlayerId)
+  const isUnassignedPlayer = !!addPlayerId && !selectedPlayerObj?.current_team
+
   return (
     <div>
       <h1 className="text-3xl font-bold text-white mb-6">📋 출석현황</h1>
 
-      {/* 🔒 읽기 전용 안내 (수정 권한 없을 때 = 정회원) */}
+      {/* 🔒 읽기 전용 안내 */}
       {!canEdit && (
         <div className="bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 mb-6 text-slate-400 text-sm flex items-center gap-2">
           <span>🔒</span>
@@ -232,7 +278,7 @@ function AttendanceHistory() {
         </div>
       </div>
 
-      {/* 상단 버튼: 선수 추가만 (전체 삭제는 맨 아래로 이동) */}
+      {/* 상단 버튼 */}
       {canEdit && (
         <div className="flex flex-wrap items-center gap-2 mb-4">
           <button
@@ -244,33 +290,41 @@ function AttendanceHistory() {
         </div>
       )}
 
-      {/* ✅ 수동 추가 폼 (수정 권한자만) */}
+      {/* ✅ 수동 추가 폼 (팀 자동 채움 · 수정 가능) */}
       {canEdit && showAddForm && (
         <div className="bg-slate-800 border border-emerald-500/40 rounded-xl p-4 mb-6">
           <p className="text-slate-300 text-sm mb-3">
             <b>{selectedDate}</b> 날짜에 선수를 수동으로 추가합니다.
+            <span className="text-slate-500 text-xs ml-2">선수를 고르면 소속팀이 자동 선택됩니다. (변경 가능)</span>
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
             <div className="sm:col-span-2">
               <label className="block text-slate-400 text-xs mb-1">선수</label>
               <select
                 value={addPlayerId}
-                onChange={(e) => setAddPlayerId(e.target.value)}
+                onChange={(e) => handleSelectPlayer(e.target.value)}
                 className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-emerald-500"
               >
                 <option value="">— 선수 선택 —</option>
                 {selectablePlayers.map(p => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
+                  <option key={p.id} value={p.id}>
+                    {p.name}{p.current_team ? ` (${p.current_team})` : ' (미배정)'}
+                  </option>
                 ))}
               </select>
             </div>
 
             <div>
-              <label className="block text-slate-400 text-xs mb-1">팀</label>
+              <label className="block text-slate-400 text-xs mb-1">
+                팀
+                {isUnassignedPlayer && <span className="text-amber-400 ml-1">· 선택 필요</span>}
+              </label>
               <select
                 value={addTeam}
                 onChange={(e) => setAddTeam(e.target.value)}
-                className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-emerald-500"
+                className={`w-full bg-slate-700 border rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-emerald-500 ${
+                  isUnassignedPlayer && !addTeam ? 'border-amber-500/60' : 'border-slate-600'
+                }`}
               >
                 <option value="">— 팀 선택 —</option>
                 {teams.map(t => (
@@ -292,6 +346,12 @@ function AttendanceHistory() {
               </select>
             </div>
           </div>
+
+          {isUnassignedPlayer && (
+            <p className="text-amber-400/90 text-xs mt-2.5">
+              ⚠️ 미배정 선수입니다. 임시로 배정할 팀을 직접 선택해 주세요.
+            </p>
+          )}
 
           <div className="flex justify-end mt-3">
             <button
@@ -324,7 +384,9 @@ function AttendanceHistory() {
         </div>
       ) : (
         recordedTeams.map(teamName => {
-          const teamAttendance = attendance.filter(a => a.team === teamName)
+          const teamAttendance = attendance
+            .filter(a => a.team === teamName)
+            .sort((a, b) => (a.check_order || 0) - (b.check_order || 0))
           if (teamAttendance.length === 0) return null
           const teamColor = getTeamColor(teamName)
 
@@ -342,7 +404,6 @@ function AttendanceHistory() {
                       <th className="px-4 py-2 text-slate-400 text-sm">이름</th>
                       <th className="px-4 py-2 text-slate-400 text-sm">상태</th>
                       <th className="px-4 py-2 text-slate-400 text-sm">시간</th>
-                      {/* 관리 열은 수정 권한 있을 때만 */}
                       {canEdit && (
                         <th className="px-4 py-2 text-slate-400 text-sm text-center">관리</th>
                       )}
@@ -351,17 +412,17 @@ function AttendanceHistory() {
                   <tbody>
                     {teamAttendance.map((record, idx) => {
                       const isMe = myPlayerId && record.player_id === myPlayerId
+                      const isMoving = movingId === record.id
                       return (
                         <tr
                           key={record.id}
                           className={`border-b border-slate-700/50 hover:bg-slate-700/30 ${
                             isMe ? 'bg-sky-500/5' : ''
-                          }`}
+                          } ${isMoving ? 'opacity-50' : ''}`}
                           style={isMe ? { boxShadow: 'inset 0 0 0 1px rgba(56,189,248,0.6)' } : undefined}
                         >
                           <td className="px-4 py-2 text-emerald-400 font-bold">{idx + 1}</td>
                           <td className="px-4 py-2 font-medium" style={{ color: teamColor }}>{record.player_name}</td>
-                          {/* ✅ 상태: 권한 있으면 드롭다운, 없으면 텍스트만 */}
                           <td className="px-4 py-2">
                             {canEdit ? (
                               <select
@@ -382,16 +443,36 @@ function AttendanceHistory() {
                           <td className="px-4 py-2 text-slate-400 text-sm">
                             {record.checked_at ? new Date(record.checked_at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }) : '-'}
                           </td>
-                          {/* ✅ 삭제 버튼: 수정 권한 있을 때만 */}
                           {canEdit && (
-                            <td className="px-4 py-2 text-center">
-                              <button
-                                onClick={() => deleteRecord(record.id, record.player_name)}
-                                className="text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg px-2 py-1 text-sm transition-colors"
-                                title="삭제 (불참 처리)"
-                              >
-                                🗑️
-                              </button>
+                            <td className="px-4 py-2">
+                              <div className="flex items-center justify-center gap-1">
+                                {/* 🔼 위로 */}
+                                <button
+                                  onClick={() => moveRecord(teamName, idx, 'up')}
+                                  disabled={idx === 0 || isMoving}
+                                  className="text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10 disabled:opacity-25 disabled:hover:bg-transparent disabled:hover:text-slate-400 rounded px-1.5 py-1 text-sm transition-colors"
+                                  title="위로"
+                                >
+                                  ▲
+                                </button>
+                                {/* 🔽 아래로 */}
+                                <button
+                                  onClick={() => moveRecord(teamName, idx, 'down')}
+                                  disabled={idx === teamAttendance.length - 1 || isMoving}
+                                  className="text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10 disabled:opacity-25 disabled:hover:bg-transparent disabled:hover:text-slate-400 rounded px-1.5 py-1 text-sm transition-colors"
+                                  title="아래로"
+                                >
+                                  ▼
+                                </button>
+                                {/* 🗑️ 삭제 */}
+                                <button
+                                  onClick={() => deleteRecord(record.id, record.player_name)}
+                                  className="text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded px-1.5 py-1 text-sm transition-colors ml-1"
+                                  title="삭제 (불참 처리)"
+                                >
+                                  🗑️
+                                </button>
+                              </div>
                             </td>
                           )}
                         </tr>
@@ -405,7 +486,7 @@ function AttendanceHistory() {
         })
       )}
 
-      {/* ⬇️ 기록 전체 삭제 (맨 아래 · 명단과 넉넉히 띄움 · 빨간 버튼) */}
+      {/* ⬇️ 기록 전체 삭제 */}
       {canEdit && attendance.length > 0 && !loading && (
         <div style={{ marginTop: '80px', paddingTop: '28px', borderTop: '1px solid rgba(71,85,105,0.4)' }}>
           <div className="flex justify-center">

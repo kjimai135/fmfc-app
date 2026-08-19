@@ -17,6 +17,10 @@ function AttendanceCheck() {
   const [todayChecked, setTodayChecked] = useState([])
   const [showOthers, setShowOthers] = useState(false)
 
+  // 🚗 픽업 여부
+  const [myPickup, setMyPickup] = useState(false)
+  const [otherPickup, setOtherPickup] = useState(false)
+
   const today = new Date(new Date().getTime() + 9 * 60 * 60 * 1000).toISOString().split('T')[0]
 
   useEffect(() => {
@@ -53,7 +57,7 @@ function AttendanceCheck() {
   }
 
   // 특정 선수를 출석 처리 (본인/대리 공통)
-  async function checkInPlayer(player, status) {
+  async function checkInPlayer(player, status, isPickup) {
     if (!player) {
       alert('선수 정보가 없습니다!')
       return
@@ -74,6 +78,7 @@ function AttendanceCheck() {
         status: status,
         check_order: nextOrder,
         game_date: today,
+        is_pickup: !!isPickup,
       },
     ])
 
@@ -81,9 +86,12 @@ function AttendanceCheck() {
       alert('오류가 발생했습니다: ' + error.message)
       setMessage('')
     } else {
-      setMessage(`${player.name}님 ${status} 완료! (${player.current_team || '미배정'})`)
+      setMessage(
+        `${player.name}님 ${status} 완료!${isPickup ? ' 🚗 픽업' : ''} (${player.current_team || '미배정'})`
+      )
       setSelectedPlayer(null)
       setSearch('')
+      setOtherPickup(false)
       await fetchTodayCount()
       setTimeout(() => setMessage(''), 3000)
     }
@@ -123,29 +131,53 @@ function AttendanceCheck() {
               <p className="text-emerald-400 font-bold text-lg">오늘 출석 완료!</p>
             </div>
           ) : (
-            <div className="grid grid-cols-3 gap-4">
-              <button
-                onClick={() => checkInPlayer(myPlayer, '출석')}
-                disabled={loading}
-                className="bg-emerald-500 hover:bg-emerald-600 disabled:opacity-30 text-white py-8 rounded-2xl font-bold text-xl transition-colors shadow-lg shadow-emerald-500/20"
+            <>
+              {/* 🚗 픽업 체크 */}
+              <label
+                className={`flex items-center gap-3 rounded-xl border p-3 mb-4 cursor-pointer transition-colors ${
+                  myPickup
+                    ? 'bg-amber-500/15 border-amber-500/50'
+                    : 'bg-slate-700/40 border-slate-600 hover:bg-slate-700/60'
+                }`}
               >
-                ✅<br />출석
-              </button>
-              <button
-                onClick={() => checkInPlayer(myPlayer, '늦참')}
-                disabled={loading}
-                className="bg-blue-500 hover:bg-blue-600 disabled:opacity-30 text-white py-8 rounded-2xl font-bold text-xl transition-colors shadow-lg shadow-blue-500/20"
-              >
-                🕐<br />늦참
-              </button>
-              <button
-                onClick={() => checkInPlayer(myPlayer, '조퇴')}
-                disabled={loading}
-                className="bg-orange-500 hover:bg-orange-600 disabled:opacity-30 text-white py-8 rounded-2xl font-bold text-xl transition-colors shadow-lg shadow-orange-500/20"
-              >
-                🏃<br />조퇴
-              </button>
-            </div>
+                <input
+                  type="checkbox"
+                  checked={myPickup}
+                  onChange={(e) => setMyPickup(e.target.checked)}
+                  className="w-5 h-5 accent-amber-500 flex-shrink-0"
+                />
+                <div>
+                  <p className="text-white font-bold text-sm">🚗 픽업했어요</p>
+                  <p className="text-slate-400 text-xs mt-0.5">
+                    픽업하신 분은 1시간 일찍 온 것으로 순서가 앞당겨집니다
+                  </p>
+                </div>
+              </label>
+
+              <div className="grid grid-cols-3 gap-4">
+                <button
+                  onClick={() => checkInPlayer(myPlayer, '출석', myPickup)}
+                  disabled={loading}
+                  className="bg-emerald-500 hover:bg-emerald-600 disabled:opacity-30 text-white py-8 rounded-2xl font-bold text-xl transition-colors shadow-lg shadow-emerald-500/20"
+                >
+                  ✅<br />출석
+                </button>
+                <button
+                  onClick={() => checkInPlayer(myPlayer, '늦참', myPickup)}
+                  disabled={loading}
+                  className="bg-blue-500 hover:bg-blue-600 disabled:opacity-30 text-white py-8 rounded-2xl font-bold text-xl transition-colors shadow-lg shadow-blue-500/20"
+                >
+                  🕐<br />늦참
+                </button>
+                <button
+                  onClick={() => checkInPlayer(myPlayer, '조퇴', myPickup)}
+                  disabled={loading}
+                  className="bg-orange-500 hover:bg-orange-600 disabled:opacity-30 text-white py-8 rounded-2xl font-bold text-xl transition-colors shadow-lg shadow-orange-500/20"
+                >
+                  🏃<br />조퇴
+                </button>
+              </div>
+            </>
           )}
         </div>
       ) : (
@@ -213,23 +245,40 @@ function AttendanceCheck() {
                     <p className="text-slate-400">{selectedPlayer.current_team || '팀 미배정'}</p>
                   </div>
 
+                  {/* 🚗 픽업 체크 (대리) */}
+                  <label
+                    className={`flex items-center gap-3 rounded-xl border p-3 mt-4 cursor-pointer transition-colors ${
+                      otherPickup
+                        ? 'bg-amber-500/15 border-amber-500/50'
+                        : 'bg-slate-700/40 border-slate-600 hover:bg-slate-700/60'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={otherPickup}
+                      onChange={(e) => setOtherPickup(e.target.checked)}
+                      className="w-5 h-5 accent-amber-500 flex-shrink-0"
+                    />
+                    <span className="text-white font-bold text-sm">🚗 픽업함</span>
+                  </label>
+
                   <div className="grid grid-cols-3 gap-4" style={{ marginTop: '16px' }}>
                     <button
-                      onClick={() => checkInPlayer(selectedPlayer, '출석')}
+                      onClick={() => checkInPlayer(selectedPlayer, '출석', otherPickup)}
                       disabled={loading}
                       className="bg-emerald-500 hover:bg-emerald-600 disabled:opacity-30 text-white py-6 rounded-2xl font-bold text-lg transition-colors"
                     >
                       ✅<br />출석
                     </button>
                     <button
-                      onClick={() => checkInPlayer(selectedPlayer, '늦참')}
+                      onClick={() => checkInPlayer(selectedPlayer, '늦참', otherPickup)}
                       disabled={loading}
                       className="bg-blue-500 hover:bg-blue-600 disabled:opacity-30 text-white py-6 rounded-2xl font-bold text-lg transition-colors"
                     >
                       🕐<br />늦참
                     </button>
                     <button
-                      onClick={() => checkInPlayer(selectedPlayer, '조퇴')}
+                      onClick={() => checkInPlayer(selectedPlayer, '조퇴', otherPickup)}
                       disabled={loading}
                       className="bg-orange-500 hover:bg-orange-600 disabled:opacity-30 text-white py-6 rounded-2xl font-bold text-lg transition-colors"
                     >
@@ -245,6 +294,9 @@ function AttendanceCheck() {
 
       {/* 오늘 출석 인원 */}
       <p className="text-slate-500 text-sm text-center mt-6">오늘 출석 인원: {todayCount}명</p>
+
+      {/* 하단 여백 */}
+      <div style={{ height: '60px', width: '100%' }} aria-hidden="true"></div>
     </div>
   )
 }

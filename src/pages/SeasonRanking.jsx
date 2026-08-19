@@ -55,7 +55,7 @@ function SeasonRanking() {
     setTeams(data || [])
   }
 
-  // ✅ 현재 시즌 + 조회 시각 기준 "이미 시작한 경기"만 반영
+  // ✅ 현재 시즌 + 조회 시각 기준 "이미 시작한 경기"만 반영 (🏆 챔스 제외)
   async function fetchMatches(season) {
     setLoading(true)
 
@@ -81,15 +81,17 @@ function SeasonRanking() {
       }
     }
 
-    // 3) 미래 경기(아직 시작 안 한 날짜) 제외
-    const past = (matchData || []).filter((m) => {
-      const d = m.game_date
-      if (d < todayKey) return true
-      if (d > todayKey) return false
-      const startHour = startHourByDate[d]
-      if (startHour === undefined || startHour === null) return true
-      return now.getHours() >= startHour
-    })
+    // 3) 🏆 챔스 경기 제외 + 미래 경기(아직 시작 안 한 날짜) 제외
+    const past = (matchData || [])
+      .filter((m) => !m.is_champions)
+      .filter((m) => {
+        const d = m.game_date
+        if (d < todayKey) return true
+        if (d > todayKey) return false
+        const startHour = startHourByDate[d]
+        if (startHour === undefined || startHour === null) return true
+        return now.getHours() >= startHour
+      })
 
     setMatches(past)
     setLoading(false)
@@ -148,10 +150,21 @@ function SeasonRanking() {
       else if (m.totalA < m.totalB) { standings[m.teamB].wins++; standings[m.teamB].points += 3; standings[m.teamA].losses++ }
       else { standings[m.teamA].draws++; standings[m.teamA].points += 1; standings[m.teamB].draws++; standings[m.teamB].points += 1 }
     }
+
+    // 🏆 순위 정렬: ① 승점 → ② 골득실 → ③ 다승 → ④ 다득점
     return Object.values(standings).sort((a, b) => {
+      // ① 승점
       if (b.points !== a.points) return b.points - a.points
-      const gdA = a.goalsFor - a.goalsAgainst, gdB = b.goalsFor - b.goalsAgainst
+
+      // ② 골득실
+      const gdA = a.goalsFor - a.goalsAgainst
+      const gdB = b.goalsFor - b.goalsAgainst
       if (gdB !== gdA) return gdB - gdA
+
+      // ③ 다승
+      if (b.wins !== a.wins) return b.wins - a.wins
+
+      // ④ 다득점
       return b.goalsFor - a.goalsFor
     })
   }

@@ -27,6 +27,7 @@ const dashboardMenu = [
   // 🔧 관리
   { to: '/matches', icon: '⚽', label: '경기 생성 및 기록', desc: '경기 생성·스코어 기록', roles: ['admin', 'executive', 'captain'], group: 'manage' },
   { to: '/archive', icon: '🗂️', label: '아카이브', desc: '시즌별 우승·기록 보관', roles: ['admin', 'executive'], group: 'manage' },
+  { to: '/stars', icon: '⭐', label: '별 관리', desc: '시즌 별 수여·조회', roles: ['admin', 'executive'], group: 'manage' },
   { to: '/players', icon: '🧑', label: '회원관리', desc: '회원 등록·수정·삭제', roles: ['admin', 'executive'], group: 'manage' },
   { to: '/member-roles', icon: '🔑', label: '권한관리', desc: '회원 권한 부여·변경', roles: ['admin', 'executive'], group: 'manage' },
   { to: '/season-transition', icon: '🔄', label: '시즌 전환', desc: '새 시즌으로 전환·초기화', roles: ['admin'], group: 'manage' },
