@@ -2,47 +2,14 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 
-// "7시", "20시-22시" 등에서 시작 시각(시)만 추출
-function parseStartHour(timeStr) {
-  if (!timeStr) return null
-  const m = String(timeStr).match(/\d{1,2}/)
-  if (!m) return null
-  let h = parseInt(m[0], 10)
-  if (isNaN(h) || h < 0 || h > 23) return null
-  return h
-}
-
 function SeasonArchive() {
   const { role } = useAuth()
   const canEdit = role === 'admin' || role === 'executive'
 
-  const [seasonLabel, setSeasonLabel] = useState('')
   const [teams, setTeams] = useState([])
-  const [players, setPlayers] = useState([])
-
-  const [computed, setComputed] = useState({
-    leagueChampion: '',
-    scorerRecords: [], // [{name, team, goals}] (골 내림차순)
-    champsChampionAuto: '', // 🏆 자동 감지된 챔스 우승팀
-    champsMvpAuto: '',      // ⭐ 자동 감지된 챔스 MVP
-  })
-
-  const [topScorerIdx, setTopScorerIdx] = useState(0)
-
-  const [champsChampion, setChampsChampion] = useState('')
-  const [champsMvp, setChampsMvp] = useState('')
-  const [note, setNote] = useState('')
-  const [saving, setSaving] = useState(false)
-
-  const [showSaveForm, setShowSaveForm] = useState(false)
-
   const [archives, setArchives] = useState([])
   const [selected, setSelected] = useState(null)
   const [loading, setLoading] = useState(true)
-
-  const [formRosterOpen, setFormRosterOpen] = useState(false)
-  const [formScorerOpen, setFormScorerOpen] = useState(false)
-
   const [openYears, setOpenYears] = useState({})
 
   useEffect(() => {
@@ -52,26 +19,9 @@ function SeasonArchive() {
 
   async function init() {
     setLoading(true)
-    const { data: seasonRow } = await supabase
-      .from('app_settings')
-      .select('value')
-      .eq('key', 'season_label')
-      .single()
-    const season = seasonRow?.value || ''
-    setSeasonLabel(season)
-
-    const [teamRes, playerRes] = await Promise.all([
-      supabase.from('teams').select('*').order('display_order'),
-      supabase.from('players').select('*'),
-    ])
-    setTeams(teamRes.data || [])
-    setPlayers(playerRes.data || [])
-
+    const { data: teamData } = await supabase.from('teams').select('*').order('display_order')
+    setTeams(teamData || [])
     await fetchArchives()
-
-    if (season) {
-      await computeCurrentSeason(season, teamRes.data || [], playerRes.data || [])
-    }
     setLoading(false)
   }
 
@@ -93,168 +43,12 @@ function SeasonArchive() {
     }
   }
 
-  async function computeCurrentSeason(season, teamList, playerList) {
-    const [mRes, gRes, resvRes] = await Promise.all([
-      supabase.from('matches').select('*').eq('season', season).order('game_date', { ascending: false }),
-      supabase.from('goals').select('*').eq('season', season),
-      supabase.from('reservations').select('date, time, is_confirmed'),
-    ])
-
-    const now = new Date()
-    const pad = (n) => String(n).padStart(2, '0')
-    const todayKey = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
-
-    const startHourByDate = {}
-    for (const r of (resvRes.data || [])) {
-      if (startHourByDate[r.date] === undefined || r.is_confirmed) {
-        const h = parseStartHour(r.time)
-        if (h !== null) startHourByDate[r.date] = h
-      }
-    }
-    const isPast = (d) => {
-      if (d < todayKey) return true
-      if (d > todayKey) return false
-      const sh = startHourByDate[d]
-      if (sh === undefined || sh === null) return true
-      return now.getHours() >= sh
-    }
-
-    const allMatchesRaw = mRes.data || []
-    const allGoalsRaw = gRes.data || []
-
-    // 리그 우승/득점왕: isPast 필터 적용 (이미 치른 경기만)
-    const pastMatches = allMatchesRaw.filter((m) => isPast(m.game_date))
-    const pastGoals = allGoalsRaw.filter((g) => isPast(g.game_date))
-
-    const leagueMatches = pastMatches.filter((m) => !m.is_champions)
-    const champsMatchIdsPast = new Set(pastMatches.filter((m) => m.is_champions).map((m) => m.id))
-    const leagueGoals = pastGoals.filter((g) => !(g.match_id && champsMatchIdsPast.has(g.match_id)))
-
-    const leagueChampion = computeChampion(leagueMatches, teamList)
-    const scorerRecords = computeScorers(leagueGoals, playerList)
-
-    // 🏆 챔스 우승/MVP: isPast 필터 없이 전체 챔스 경기 기준 (입력된 값이면 반영)
-    const champsMatches = allMatchesRaw.filter((m) => m.is_champions)
-    const champsChampionAuto = computeChampsChampion(champsMatches, teamList)
-    const champsMvpAuto = champsMatches.find((m) => m.champs_mvp)?.champs_mvp || ''
-
-    setComputed({ leagueChampion, scorerRecords, champsChampionAuto, champsMvpAuto })
-    setTopScorerIdx(0)
-
-    // 자동 감지값을 폼 초기값으로 채움 (관리자가 수정 가능)
-    setChampsChampion(champsChampionAuto || '')
-    setChampsMvp(champsMvpAuto || '')
-  }
-
-  function computeChampion(matches, teamList) {
-    const dates = [...new Set(matches.map((m) => m.game_date))]
-    const allMatchups = []
-    for (const date of dates) {
-      const dayMatches = matches.filter((m) => m.game_date === date).sort((a, b) => a.match_number - b.match_number)
-      if (dayMatches.length >= 6) {
-        const pairs = [
-          { first: dayMatches[0], second: dayMatches[3] },
-          { first: dayMatches[1], second: dayMatches[4] },
-          { first: dayMatches[2], second: dayMatches[5] },
-        ]
-        for (const pair of pairs) {
-          const teamA = pair.first.team_a
-          const teamB = pair.first.team_b
-          let totalA = pair.first.score_a
-          let totalB = pair.first.score_b
-          if (pair.second.team_a === teamA) {
-            totalA += pair.second.score_a
-            totalB += pair.second.score_b
-          } else {
-            totalA += pair.second.score_b
-            totalB += pair.second.score_a
-          }
-          allMatchups.push({ teamA, teamB, totalA, totalB })
-        }
-      }
-    }
-
-    const standings = {}
-    for (const t of teamList) {
-      standings[t.name] = { name: t.name, points: 0, goalsFor: 0, goalsAgainst: 0 }
-    }
-    for (const m of allMatchups) {
-      if (!standings[m.teamA] || !standings[m.teamB]) continue
-      standings[m.teamA].goalsFor += m.totalA
-      standings[m.teamA].goalsAgainst += m.totalB
-      standings[m.teamB].goalsFor += m.totalB
-      standings[m.teamB].goalsAgainst += m.totalA
-      if (m.totalA > m.totalB) standings[m.teamA].points += 3
-      else if (m.totalA < m.totalB) standings[m.teamB].points += 3
-      else { standings[m.teamA].points += 1; standings[m.teamB].points += 1 }
-    }
-
-    const sorted = Object.values(standings).sort((a, b) => {
-      if (b.points !== a.points) return b.points - a.points
-      const gdA = a.goalsFor - a.goalsAgainst, gdB = b.goalsFor - b.goalsAgainst
-      if (gdB !== gdA) return gdB - gdA
-      return b.goalsFor - a.goalsFor
-    })
-
-    const hasData = sorted.some((s) => s.points > 0 || s.goalsFor > 0)
-    return hasData && sorted.length > 0 ? sorted[0].name : ''
-  }
-
-  // 🏆 챔스 우승팀 (개별 6경기 각각 승무패, 승점 최다)
-  function computeChampsChampion(matches, teamList) {
-    if (!matches || matches.length === 0) return ''
-    const standings = {}
-    function ensure(name) {
-      if (!standings[name]) {
-        standings[name] = { name, points: 0, goalsFor: 0, goalsAgainst: 0 }
-      }
-    }
-    for (const m of matches) {
-      const a = m.team_a
-      const b = m.team_b
-      if (!a || !b) continue
-      ensure(a)
-      ensure(b)
-      const sa = m.score_a || 0
-      const sb = m.score_b || 0
-      standings[a].goalsFor += sa
-      standings[a].goalsAgainst += sb
-      standings[b].goalsFor += sb
-      standings[b].goalsAgainst += sa
-      if (sa > sb) standings[a].points += 3
-      else if (sa < sb) standings[b].points += 3
-      else { standings[a].points += 1; standings[b].points += 1 }
-    }
-    const sorted = Object.values(standings).sort((x, y) => {
-      if (y.points !== x.points) return y.points - x.points
-      const gdX = x.goalsFor - x.goalsAgainst, gdY = y.goalsFor - y.goalsAgainst
-      if (gdY !== gdX) return gdY - gdX
-      return y.goalsFor - x.goalsFor
-    })
-    const hasData = sorted.some((s) => s.points > 0 || s.goalsFor > 0)
-    return hasData && sorted.length > 0 ? sorted[0].name : ''
-  }
-
-  function computeScorers(goals, playerList) {
-    function isSpecial(g) {
-      if (!g.player_id) return true
-      const n = g.player_name
-      return n === 'PK(핸디캡)' || n === 'PK' || n === '자책골'
-    }
-    function teamOf(playerId, fallback) {
-      const p = playerList.find((x) => x.id === playerId)
-      return p?.current_team || fallback || '미배정'
-    }
-
-    const map = {}
-    for (const g of goals) {
-      if (isSpecial(g)) continue
-      if (!map[g.player_id]) {
-        map[g.player_id] = { name: g.player_name, team: teamOf(g.player_id, g.team), goals: 0 }
-      }
-      map[g.player_id].goals++
-    }
-    return Object.values(map).sort((a, b) => b.goals - a.goals)
+  async function deleteArchive(season) {
+    if (!canEdit) return
+    if (!window.confirm(`"${season}" 아카이브를 삭제할까요?`)) return
+    await supabase.from('season_archives').delete().eq('season', season)
+    if (selected?.season === season) setSelected(null)
+    fetchArchives()
   }
 
   function getTeamColor(teamName) {
@@ -277,74 +71,6 @@ function SeasonArchive() {
     })
   }
 
-  function buildCurrentRoster() {
-    const activeAssigned = players.filter((p) => p.is_active !== false && p.current_team)
-    const list = []
-    for (const t of teams) {
-      const members = activeAssigned
-        .filter((p) => p.current_team === t.name)
-        .map((p) => p.name)
-        .sort((a, b) => a.localeCompare(b))
-      if (members.length > 0) {
-        list.push({ team: t.name, players: members })
-      }
-    }
-    return list
-  }
-
-  async function saveArchive() {
-    if (!canEdit) return
-    if (!seasonLabel) {
-      alert('현재 시즌이 설정되어 있지 않습니다. (팀명단에서 시즌을 설정하세요)')
-      return
-    }
-    if (!window.confirm(`"${seasonLabel}" 시즌 아카이브를 저장할까요?\n(같은 시즌이 이미 있으면 덮어씁니다)`)) return
-
-    setSaving(true)
-    const chosen = computed.scorerRecords[topScorerIdx] || computed.scorerRecords[0] || null
-
-    const payload = {
-      season: seasonLabel,
-      league_champion: computed.leagueChampion || null,
-      league_top_scorer: chosen ? chosen.name : null,
-      league_top_scorer_goals: chosen ? chosen.goals : 0,
-      scorer_records: computed.scorerRecords,
-      roster_records: buildCurrentRoster(),
-      champs_champion: champsChampion || null,
-      champs_mvp: champsMvp || null,
-      note: note.trim() || null,
-      updated_at: new Date().toISOString(),
-    }
-
-    const { error } = await supabase
-      .from('season_archives')
-      .upsert(payload, { onConflict: 'season' })
-
-    setSaving(false)
-    if (error) {
-      alert('저장에 실패했습니다: ' + error.message)
-    } else {
-      alert(`✅ "${seasonLabel}" 시즌 아카이브가 저장되었습니다!`)
-      setNote('')
-      setShowSaveForm(false)
-      fetchArchives()
-    }
-  }
-
-  async function deleteArchive(season) {
-    if (!canEdit) return
-    if (!window.confirm(`"${season}" 아카이브를 삭제할까요?`)) return
-    await supabase.from('season_archives').delete().eq('season', season)
-    if (selected?.season === season) setSelected(null)
-    fetchArchives()
-  }
-
-  const teamNames = teams.map((t) => t.name)
-  const activePlayers = players.filter((p) => p.is_active !== false)
-  const rankedScorers = withRank(computed.scorerRecords)
-  const currentRosterPreview = buildCurrentRoster()
-  const currentRosterTotal = currentRosterPreview.reduce((sum, r) => sum + r.players.length, 0)
-
   function groupByYear(list) {
     const groups = {}
     for (const a of list) {
@@ -365,17 +91,6 @@ function SeasonArchive() {
   }
 
   // ── 공통 UI ────────────────────────────────
-
-  function FormRow({ icon, label, children }) {
-    return (
-      <div className="flex items-center gap-3 py-2 border-b border-slate-700/40">
-        <span className="text-slate-300 text-sm font-medium w-28 flex-shrink-0">
-          {icon} {label}
-        </span>
-        <div className="flex-1 min-w-0">{children}</div>
-      </div>
-    )
-  }
 
   function RosterTiles({ roster }) {
     if (!roster || roster.length === 0) return <p className="text-slate-600 text-sm">명단 없음</p>
@@ -521,8 +236,6 @@ function SeasonArchive() {
     )
   }
 
-  const selectClass = "w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-emerald-500"
-
   return (
     <div className="max-w-3xl mx-auto">
       <div className="mb-6">
@@ -530,119 +243,22 @@ function SeasonArchive() {
         <p className="text-slate-400 mt-1">시즌별 우승팀 · 득점왕 · 팀 명단 · 챔스 기록</p>
       </div>
 
+      {canEdit && (
+        <p className="bg-slate-800/60 border border-slate-700 rounded-lg px-4 py-2.5 mb-6 text-slate-400 text-sm">
+          💡 시즌 기록 저장은 <span className="text-emerald-400 font-semibold">🔄 시즌 전환</span> 메뉴의 1단계에서 진행합니다.
+        </p>
+      )}
+
       {loading ? (
         <div className="text-center py-20 text-slate-400">⏳ 불러오는 중...</div>
       ) : (
         <>
-          {/* ===== 관리자·임원: 현재 시즌 저장 ===== */}
-          {canEdit && (
-            <div className="bg-slate-800 rounded-2xl border border-emerald-500/30 mb-8 overflow-hidden">
-              <button
-                onClick={() => setShowSaveForm((v) => !v)}
-                className="w-full flex items-center justify-between px-5 py-4 hover:bg-slate-700/40 transition-colors"
-              >
-                <div className="text-left">
-                  <h2 className="text-lg font-bold text-white">💾 현재 시즌 저장</h2>
-                  <p className="text-slate-400 text-sm mt-0.5">
-                    시즌 <span className="text-emerald-400 font-bold">{seasonLabel || '(미설정)'}</span>
-                  </p>
-                </div>
-                <span className="text-slate-400 text-lg flex-shrink-0 ml-3">{showSaveForm ? '▲' : '▼'}</span>
-              </button>
-
-              {showSaveForm && (
-                <div className="px-5 pb-5 pt-1 border-t border-slate-700/50">
-                  <div className="mt-2">
-                    <FormRow icon="🏆" label="리그 우승팀">
-                      <span className="font-bold" style={{ color: getTeamColor(computed.leagueChampion) }}>
-                        {computed.leagueChampion || '-'}
-                      </span>
-                    </FormRow>
-
-                    <FormRow icon="👟" label="득점왕">
-                      {computed.scorerRecords.length === 0 ? (
-                        <span className="text-slate-500 text-sm">기록 없음</span>
-                      ) : (
-                        <select value={topScorerIdx} onChange={(e) => setTopScorerIdx(Number(e.target.value))} className={selectClass}>
-                          {rankedScorers.map((s, i) => (
-                            <option key={i} value={i}>{s.rank}위 · {s.name} · {s.goals}골</option>
-                          ))}
-                        </select>
-                      )}
-                    </FormRow>
-
-                    <FormRow icon="👥" label="팀 명단">
-                      <button
-                        onClick={() => setFormRosterOpen((v) => !v)}
-                        className="w-full flex items-center justify-between bg-slate-700/60 hover:bg-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 transition-colors"
-                      >
-                        <span>{currentRosterPreview.length}팀 · {currentRosterTotal}명</span>
-                        <span className="text-slate-400">{formRosterOpen ? '▲' : '▼'}</span>
-                      </button>
-                    </FormRow>
-                    {formRosterOpen && (
-                      <div className="py-2"><RosterTiles roster={currentRosterPreview} /></div>
-                    )}
-
-                    <FormRow icon="📋" label="득점기록">
-                      <button
-                        onClick={() => setFormScorerOpen((v) => !v)}
-                        className="w-full flex items-center justify-between bg-slate-700/60 hover:bg-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 transition-colors"
-                      >
-                        <span>{computed.scorerRecords.length}명</span>
-                        <span className="text-slate-400">{formScorerOpen ? '▲' : '▼'}</span>
-                      </button>
-                    </FormRow>
-                    {formScorerOpen && (
-                      <div className="py-2"><ScorerRows records={computed.scorerRecords} /></div>
-                    )}
-
-                    <FormRow icon="👑" label="챔스 우승팀">
-                      <select value={champsChampion} onChange={(e) => setChampsChampion(e.target.value)} className={selectClass}>
-                        <option value="">선택 안 함</option>
-                        {teamNames.map((n) => (<option key={n} value={n}>{n}</option>))}
-                      </select>
-                    </FormRow>
-
-                    <FormRow icon="⭐" label="챔스 MVP">
-                      <select value={champsMvp} onChange={(e) => setChampsMvp(e.target.value)} className={selectClass}>
-                        <option value="">선택 안 함</option>
-                        {activePlayers.map((p) => (
-                          <option key={p.id} value={p.name}>{p.name}{p.current_team ? ` (${p.current_team})` : ''}</option>
-                        ))}
-                      </select>
-                    </FormRow>
-
-                    <FormRow icon="📝" label="비고">
-                      <input
-                        type="text"
-                        value={note}
-                        onChange={(e) => setNote(e.target.value)}
-                        placeholder="선택 입력"
-                        className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm placeholder-slate-500 focus:outline-none focus:border-emerald-500"
-                      />
-                    </FormRow>
-                  </div>
-
-                  <button
-                    onClick={saveArchive}
-                    disabled={saving}
-                    className="w-full mt-4 bg-emerald-500 hover:bg-emerald-600 text-white py-3 rounded-xl font-bold transition-colors disabled:opacity-50"
-                  >
-                    {saving ? '저장 중...' : `💾 "${seasonLabel}" 시즌 저장`}
-                  </button>
-                  <p className="text-slate-500 text-xs mt-2 text-center">※ 같은 시즌이 있으면 덮어씁니다.</p>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* ===== 저장된 아카이브 목록 (연도별 접기/펼치기) ===== */}
           <h2 className="text-xl font-bold text-white mb-3">📚 저장된 시즌</h2>
           {archives.length === 0 ? (
             <div className="text-center py-16 text-slate-400 bg-slate-800/40 border border-dashed border-slate-700 rounded-2xl">
               <p className="text-4xl mb-3">🏆</p>
               <p>저장된 아카이브가 없습니다</p>
+              {canEdit && <p className="text-sm mt-2">시즌 전환 1단계에서 시즌 기록을 저장해 주세요.</p>}
             </div>
           ) : (
             <div className="space-y-4">
@@ -650,7 +266,7 @@ function SeasonArchive() {
                 const yearOpen = !!openYears[year]
                 return (
                   <div key={year}>
-                    {/* 연도 헤더 (진한 배경, 명확히 구분) */}
+                    {/* 연도 헤더 */}
                     <button
                       onClick={() => toggleYear(year)}
                       className={`w-full flex items-center justify-between px-4 py-3 rounded-xl transition-colors ${
@@ -664,7 +280,7 @@ function SeasonArchive() {
                       <span className="text-slate-300 text-base">{yearOpen ? '▲' : '▼'}</span>
                     </button>
 
-                    {/* 그 해 시즌들 (들여쓰기 + 왼쪽 라인으로 계층 표현) */}
+                    {/* 그 해 시즌들 */}
                     {yearOpen && (
                       <div className="mt-2 ml-3 pl-3 border-l-2 border-emerald-500/30 space-y-2">
                         {items.map((a) => (
