@@ -47,6 +47,10 @@ function StarManage() {
   const [viewFilter, setViewFilter] = useState('all') // all | ready | used
   const [expanded, setExpanded] = useState(null)
 
+  // ✏️ 편집 모드 (선수 단위)
+  const [editMode, setEditMode] = useState(false)
+  const [editRows, setEditRows] = useState({}) // { [starId]: { season, reason, note, deleted } }
+
   // 수동 지급 폼
   const [showAddForm, setShowAddForm] = useState(false)
   const [addPlayerId, setAddPlayerId] = useState('')
@@ -59,9 +63,11 @@ function StarManage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // 🔍 검색어를 지우거나 필터를 바꾸면 펼침 자동 축소
+  // 🔍 검색어·필터가 바뀌면 펼침·편집 초기화
   useEffect(() => {
     setExpanded(null)
+    setEditMode(false)
+    setEditRows({})
   }, [search, viewFilter])
 
   async function fetchAll() {
@@ -99,12 +105,95 @@ function StarManage() {
     else { setAddPlayerId(''); setAddNote(''); fetchAll() }
   }
 
-  async function deleteStar(star) {
+  // ✏️ 편집 시작
+  function startEdit(items) {
+    const rows = {}
+    for (const s of items) {
+      rows[s.id] = {
+        season: s.season || '',
+        reason: normalizeReason(s.reason),
+        note: s.note || '',
+        deleted: false,
+      }
+    }
+    setEditRows(rows)
+    setEditMode(true)
+  }
+
+  function cancelEdit() {
+    setEditMode(false)
+    setEditRows({})
+  }
+
+  function updateRow(id, field, value) {
+    setEditRows(prev => ({ ...prev, [id]: { ...prev[id], [field]: value } }))
+  }
+
+  function toggleDelete(id) {
+    setEditRows(prev => ({ ...prev, [id]: { ...prev[id], deleted: !prev[id].deleted } }))
+  }
+
+  // 💾 일괄 저장
+  async function saveAll(items) {
     if (!canEdit) return
-    if (!window.confirm(`'${star.player_name}' 님의 별을 삭제할까요?\n\n· ${star.season} · ${reasonInfo(star.reason).label}`)) return
-    const { error } = await supabase.from('player_stars').delete().eq('id', star.id)
-    if (error) alert('삭제에 실패했습니다: ' + error.message)
-    else fetchAll()
+
+    const updates = []
+    const deletes = []
+
+    for (const s of items) {
+      const row = editRows[s.id]
+      if (!row) continue
+
+      if (row.deleted) {
+        deletes.push(s.id)
+        continue
+      }
+      if (!row.season.trim()) {
+        return alert('시즌은 비워둘 수 없습니다.')
+      }
+      const changed =
+        row.season.trim() !== (s.season || '') ||
+        row.reason !== normalizeReason(s.reason) ||
+        (row.note.trim() || null) !== (s.note || null)
+
+      if (changed) {
+        updates.push({
+          id: s.id,
+          season: row.season.trim(),
+          reason: row.reason,
+          note: row.note.trim() || null,
+        })
+      }
+    }
+
+    if (updates.length === 0 && deletes.length === 0) {
+      cancelEdit()
+      return
+    }
+
+    let msg = ''
+    if (updates.length) msg += `· 수정 ${updates.length}건\n`
+    if (deletes.length) msg += `· 삭제 ${deletes.length}건\n`
+    if (!window.confirm(`변경 내용을 저장할까요?\n\n${msg}\n※ 삭제는 되돌릴 수 없습니다.`)) return
+
+    setSaving(true)
+    try {
+      for (const u of updates) {
+        const { id, ...fields } = u
+        const { error } = await supabase.from('player_stars').update(fields).eq('id', id)
+        if (error) throw error
+      }
+      if (deletes.length) {
+        const { error } = await supabase.from('player_stars').delete().in('id', deletes)
+        if (error) throw error
+      }
+      cancelEdit()
+      await fetchAll()
+    } catch (e) {
+      alert('저장에 실패했습니다: ' + (e.message || e))
+    } finally {
+      setSaving(false)
+    }
   }
 
   // 🎁 10개 교환 처리 (오래된 시즌부터 차감)
@@ -147,11 +236,33 @@ function StarManage() {
     else fetchAll()
   }
 
-  // ↩️ 사용 취소
-  async function cancelUse(star) {
+  // ↩️ 사용 취소 (선수 단위 · 최근 사용분부터 되돌림)
+  async function cancelUse(playerName, usedList) {
     if (!canEdit) return
-    if (!window.confirm(`사용 기록을 취소하고 잔량으로 되돌릴까요?\n\n· ${star.season} · ${reasonInfo(star.reason).label}`)) return
-    const { error } = await supabase.from('player_stars').update({ used_at: null, used_note: null }).eq('id', star.id)
+    if (usedList.length === 0) return alert('사용 기록이 없습니다.')
+
+    const input = window.prompt(
+      `'${playerName}' 님의 사용 기록을 되돌립니다.\n사용 ${usedList.length}개 · 최근 사용분부터 복구됩니다.\n\n몇 개를 되돌릴까요?`,
+      String(Math.min(EXCHANGE_UNIT, usedList.length))
+    )
+    if (input === null) return
+
+    const cnt = parseInt(input, 10)
+    if (isNaN(cnt) || cnt < 1) return alert('1 이상의 숫자를 입력해 주세요.')
+    if (cnt > usedList.length) return alert(`사용 개수(${usedList.length})보다 많이 되돌릴 수 없습니다.`)
+
+    const targets = [...usedList]
+      .sort((a, b) => new Date(b.used_at) - new Date(a.used_at))
+      .slice(0, cnt)
+      .map(s => s.id)
+
+    setSaving(true)
+    const { error } = await supabase
+      .from('player_stars')
+      .update({ used_at: null, used_note: null })
+      .in('id', targets)
+    setSaving(false)
+
     if (error) alert('취소에 실패했습니다: ' + error.message)
     else fetchAll()
   }
@@ -166,11 +277,11 @@ function StarManage() {
     for (const s of stars) {
       const key = s.player_id || s.player_name
       if (!map[key]) {
-        map[key] = { key, name: s.player_name, count: 0, used: 0, remain: 0, reasons: {}, items: [], remainItems: [] }
+        map[key] = { key, name: s.player_name, count: 0, used: 0, remain: 0, reasons: {}, items: [], remainItems: [], usedItems: [] }
       }
       const rk = normalizeReason(s.reason)
       map[key].count++
-      if (s.used_at) map[key].used++
+      if (s.used_at) { map[key].used++; map[key].usedItems.push(s) }
       else { map[key].remain++; map[key].remainItems.push(s) }
       map[key].reasons[rk] = (map[key].reasons[rk] || 0) + 1
       map[key].items.push(s)
@@ -198,6 +309,8 @@ function StarManage() {
 
   const inputClass =
     'w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2.5 text-white text-sm placeholder-slate-600 focus:outline-none focus:border-emerald-500'
+  const editInputClass =
+    'bg-slate-800 border border-slate-600 rounded px-2 py-1 text-white text-xs focus:outline-none focus:border-emerald-500'
 
   return (
     <div className="max-w-3xl mx-auto">
@@ -218,7 +331,7 @@ function StarManage() {
 
       {!canEdit && (
         <p className="bg-sky-500/10 border border-sky-500/30 rounded-lg px-4 py-2.5 mb-4 text-sky-200 text-sm">
-          👀 열람 전용 · 지급·교환은 관리자·임원만 가능합니다.
+          👀 열람 전용 · 지급·교환·수정은 관리자·임원만 가능합니다.
         </p>
       )}
 
@@ -297,6 +410,8 @@ function StarManage() {
             const isOpen = expanded === p.key
             const ready = p.times > 0
             const pct = Math.round((p.progress / EXCHANGE_UNIT) * 100)
+            const editing = isOpen && editMode
+            const sortedItems = [...p.items].sort((a, b) => (b.season || '').localeCompare(a.season || ''))
 
             return (
               <div
@@ -309,8 +424,15 @@ function StarManage() {
               >
                 {/* 요약 행 */}
                 <div
-                  onClick={() => setExpanded(isOpen ? null : p.key)}
-                  className="flex items-center gap-3 px-3.5 py-3 cursor-pointer hover:bg-slate-700/30 transition-colors"
+                  onClick={() => {
+                    if (editing) return
+                    setExpanded(isOpen ? null : p.key)
+                    setEditMode(false)
+                    setEditRows({})
+                  }}
+                  className={`flex items-center gap-3 px-3.5 py-3 transition-colors ${
+                    editing ? '' : 'cursor-pointer hover:bg-slate-700/30'
+                  }`}
                 >
                   <span className="text-slate-600 text-sm font-bold w-6 text-right flex-shrink-0">{idx + 1}</span>
                   <span className="text-white text-base font-bold w-20 flex-shrink-0 truncate">{p.name}</span>
@@ -340,7 +462,7 @@ function StarManage() {
                   )}
 
                   <span className="ml-auto flex items-center gap-2 flex-shrink-0">
-                    {canEdit && (
+                    {canEdit && !editing && (
                       <button
                         onClick={(e) => { e.stopPropagation(); exchange(p.name, p.remainItems) }}
                         disabled={saving || !ready}
@@ -361,62 +483,151 @@ function StarManage() {
                 {/* 펼침 상세 */}
                 {isOpen && (
                   <div className="border-t border-slate-700/50 bg-slate-900/50">
-                    <div className="flex flex-wrap items-center gap-1.5 px-3.5 py-2.5 border-b border-slate-700/30">
-                      <span className="text-slate-500 text-xs mr-1">
+                    {/* 상세 헤더 — 편집 / 사용취소 버튼 */}
+                    <div className="flex items-center gap-2 px-3.5 py-2 border-b border-slate-700/40 flex-wrap">
+                      <span className="text-slate-500 text-xs">
                         총 {p.count} · 사용 {p.used} · 잔량 {p.remain}
                       </span>
-                      {Object.entries(p.reasons).map(([reason, cnt]) => {
-                        const info = reasonInfo(reason)
-                        return (
-                          <span
-                            key={reason}
-                            className="px-2 py-0.5 rounded text-xs font-bold"
-                            style={{ background: `${info.color}1f`, color: info.color }}
-                          >
-                            {info.icon} {info.label}{cnt > 1 ? ` ${cnt}` : ''}
-                          </span>
-                        )
-                      })}
+
+                      {canEdit && (
+                        <span className="ml-auto flex items-center gap-1.5">
+                          {editing ? (
+                            <>
+                              <button
+                                onClick={() => saveAll(sortedItems)}
+                                disabled={saving}
+                                className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-bold px-3.5 py-1.5 rounded"
+                              >
+                                {saving ? '저장 중...' : '💾 저장'}
+                              </button>
+                              <button
+                                onClick={cancelEdit}
+                                className="bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs px-3 py-1.5 rounded"
+                              >
+                                취소
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              {p.used > 0 && (
+                                <button
+                                  onClick={() => cancelUse(p.name, p.usedItems)}
+                                  disabled={saving}
+                                  className="text-emerald-400 hover:bg-emerald-500/10 border border-emerald-500/30 text-xs px-3 py-1.5 rounded"
+                                  title="사용 기록 되돌리기"
+                                >
+                                  ↩️ 사용 취소
+                                </button>
+                              )}
+                              <button
+                                onClick={() => startEdit(sortedItems)}
+                                className="bg-slate-700 hover:bg-slate-600 text-slate-100 text-xs font-semibold px-3.5 py-1.5 rounded"
+                              >
+                                ✏️ 편집
+                              </button>
+                            </>
+                          )}
+                        </span>
+                      )}
                     </div>
 
-                    <div className="divide-y divide-slate-800/70 max-h-80 overflow-y-auto">
-                      {[...p.items]
-                        .sort((a, b) => (b.season || '').localeCompare(a.season || ''))
-                        .map(s => {
-                          const info = reasonInfo(s.reason)
-                          const used = !!s.used_at
+                    {/* 사유 요약 (보기 모드에서만) */}
+                    {!editing && (
+                      <div className="flex flex-wrap items-center gap-1.5 px-3.5 py-2.5 border-b border-slate-700/30">
+                        {Object.entries(p.reasons).map(([reason, cnt]) => {
+                          const info = reasonInfo(reason)
                           return (
-                            <div key={s.id} className={`flex items-center gap-2.5 px-3.5 py-2 text-sm ${used ? 'opacity-45' : ''}`}>
-                              <span className="text-slate-500 w-16 flex-shrink-0">{s.season}</span>
-                              <span className="flex-shrink-0 font-medium" style={{ color: info.color }}>
-                                {info.icon} {info.label}
-                              </span>
-                              {s.note && <span className="text-slate-600 text-xs truncate hidden sm:inline">· {s.note}</span>}
-                              {used && (
-                                <span className="text-slate-500 text-xs flex-shrink-0">
-                                  사용 {fmtDate(s.used_at)}{s.used_note ? ` · ${s.used_note}` : ''}
-                                </span>
-                              )}
-
-                              {canEdit && (
-                                <span className="ml-auto flex items-center gap-1 flex-shrink-0">
-                                  {used && (
-                                    <button
-                                      onClick={() => cancelUse(s)}
-                                      className="text-emerald-400 hover:bg-emerald-500/10 rounded px-2 py-1"
-                                      title="사용 취소"
-                                    >↩️</button>
-                                  )}
-                                  <button
-                                    onClick={() => deleteStar(s)}
-                                    className="text-red-400/60 hover:text-red-300 hover:bg-red-500/10 rounded px-2 py-1"
-                                    title="삭제"
-                                  >🗑️</button>
-                                </span>
-                              )}
-                            </div>
+                            <span
+                              key={reason}
+                              className="px-2 py-0.5 rounded text-xs font-bold"
+                              style={{ background: `${info.color}1f`, color: info.color }}
+                            >
+                              {info.icon} {info.label}{cnt > 1 ? ` ${cnt}` : ''}
+                            </span>
                           )
                         })}
+                      </div>
+                    )}
+
+                    {editing && (
+                      <p className="px-3.5 py-2 text-amber-300/80 text-[11px] bg-amber-500/5 border-b border-slate-700/30">
+                        시즌·사유·비고를 수정하고 저장하세요. 지울 항목은 우측 ✕ 를 눌러 표시합니다.
+                      </p>
+                    )}
+
+                    {/* 목록 */}
+                    <div className="divide-y divide-slate-800/70 max-h-96 overflow-y-auto">
+                      {sortedItems.map(s => {
+                        const info = reasonInfo(s.reason)
+                        const used = !!s.used_at
+
+                        // ✏️ 편집 모드
+                        if (editing) {
+                          const row = editRows[s.id]
+                          if (!row) return null
+                          return (
+                            <div
+                              key={s.id}
+                              className={`flex items-center gap-1.5 px-3.5 py-2 ${row.deleted ? 'bg-red-500/10' : ''}`}
+                            >
+                              <input
+                                type="text"
+                                value={row.season}
+                                onChange={(e) => updateRow(s.id, 'season', e.target.value)}
+                                disabled={row.deleted}
+                                placeholder="시즌"
+                                className={`${editInputClass} w-[74px] flex-shrink-0 ${row.deleted ? 'line-through opacity-50' : ''}`}
+                              />
+                              <select
+                                value={row.reason}
+                                onChange={(e) => updateRow(s.id, 'reason', e.target.value)}
+                                disabled={row.deleted}
+                                className={`${editInputClass} flex-shrink-0 ${row.deleted ? 'opacity-50' : ''}`}
+                              >
+                                {REASONS.map(r => (
+                                  <option key={r.key} value={r.key}>{r.icon} {r.label}</option>
+                                ))}
+                              </select>
+                              <input
+                                type="text"
+                                value={row.note}
+                                onChange={(e) => updateRow(s.id, 'note', e.target.value)}
+                                disabled={row.deleted}
+                                placeholder="비고"
+                                className={`${editInputClass} flex-1 min-w-[60px] ${row.deleted ? 'opacity-50' : ''}`}
+                              />
+                              {used && <span className="text-slate-600 text-[10px] flex-shrink-0">사용</span>}
+                              <button
+                                onClick={() => toggleDelete(s.id)}
+                                className={`flex-shrink-0 text-xs px-2 py-1 rounded transition-colors ${
+                                  row.deleted
+                                    ? 'bg-red-500/25 text-red-300'
+                                    : 'text-slate-500 hover:text-red-300 hover:bg-red-500/10'
+                                }`}
+                                title={row.deleted ? '삭제 취소' : '삭제 표시'}
+                              >
+                                {row.deleted ? '↺' : '✕'}
+                              </button>
+                            </div>
+                          )
+                        }
+
+                        // 보기 모드
+                        return (
+                          <div key={s.id} className={`flex items-center gap-2.5 px-3.5 py-2 text-sm ${used ? 'opacity-45' : ''}`}>
+                            <span className="text-slate-500 w-16 flex-shrink-0">{s.season}</span>
+                            <span className="flex-shrink-0 font-medium" style={{ color: info.color }}>
+                              {info.icon} {info.label}
+                            </span>
+                            {s.note && <span className="text-slate-600 text-xs truncate hidden sm:inline">· {s.note}</span>}
+                            {used && (
+                              <span className="ml-auto text-slate-500 text-xs flex-shrink-0">
+                                사용 {fmtDate(s.used_at)}{s.used_note ? ` · ${s.used_note}` : ''}
+                              </span>
+                            )}
+                          </div>
+                        )
+                      })}
                     </div>
                   </div>
                 )}
