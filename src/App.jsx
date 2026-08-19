@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { BrowserRouter as Router, Routes, Route, Link, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
+import { supabase } from './lib/supabase'
 import LoginPage from './pages/LoginPage'
 import Home from './pages/Home'
 import PlayerList from './pages/PlayerList'
@@ -30,6 +31,7 @@ import NoticeDetail from './pages/NoticeDetail'
 import LetterBoard from './pages/LetterBoard'
 import CalendarPage from './pages/CalendarPage'
 import NoticeTicker from './components/NoticeTicker'
+import StarBadge from './components/StarBadge'
 import logoImg from './assets/logo.png'
 import './App.css'
 
@@ -55,13 +57,13 @@ const allMenu = [
   { to: '/roster', label: '📋 팀명단', roles: ['admin', 'executive', 'captain', 'member'], group: 'general' },
   { to: '/rankings', label: '🏆 순위 (팀·득점)', roles: ['admin', 'executive', 'captain', 'member'], group: 'general' },
   { to: '/attendance/stats', label: '📊 출석율', roles: ['admin', 'executive', 'captain', 'member'], group: 'general' },
+  { to: '/stars', label: '⭐ 별 현황', roles: ['admin', 'executive', 'captain', 'member'], group: 'general' },
   { to: '/notices', label: '📢 공지', roles: ['admin', 'executive', 'captain', 'member'], group: 'general' },
   { to: '/letter', label: '💌 마음의 편지', roles: ['admin', 'executive', 'captain', 'member'], group: 'general' },
 
   // 🔧 관리
   { to: '/matches', label: '⚽ 경기 생성 및 기록', roles: ['admin', 'executive', 'captain'], group: 'manage' },
   { to: '/archive', label: '🗂️ 아카이브', roles: ['admin', 'executive'], group: 'manage' },
-  { to: '/stars', label: '⭐ 별 관리', roles: ['admin', 'executive'], group: 'manage' },
   { to: '/players', label: '🧑 회원관리', roles: ['admin', 'executive'], group: 'manage' },
   { to: '/member-roles', label: '🔑 권한관리', roles: ['admin', 'executive'], group: 'manage' },
   // 🔄 시즌 전환: 관리자·회장만 (executive에게도 메뉴는 보이되, 페이지 내부에서 admin/회장만 실행 가능)
@@ -241,11 +243,37 @@ function PullIndicator({ pullDistance, refreshing, threshold }) {
   )
 }
 
+// ⭐ 내 별 잔량 조회 (used_at 이 없는 것 = 아직 사용하지 않은 별)
+function useMyStars(playerId) {
+  const [count, setCount] = useState(null)
+
+  useEffect(() => {
+    let alive = true
+    if (!playerId) {
+      setCount(null)
+      return
+    }
+    ;(async () => {
+      const { count: c } = await supabase
+        .from('player_stars')
+        .select('id', { count: 'exact', head: true })
+        .eq('player_id', playerId)
+        .is('used_at', null)
+      if (alive) setCount(c || 0)
+    })()
+    return () => { alive = false }
+  }, [playerId])
+
+  return count
+}
+
 // 실제 앱 내용 (로그인한 사용자만 여기 도달)
 function AppContent() {
   const [menuOpen, setMenuOpen] = useState(false)
   const { profile, role, isPresident, signOut } = useAuth()
   const { pullDistance, refreshing, THRESHOLD } = usePullToRefresh()
+
+  const myStars = useMyStars(profile?.player_id)
 
   const visibleMenu = allMenu.filter((item) => item.roles.includes(role))
 
@@ -300,8 +328,8 @@ function AppContent() {
               )}
             </button>
 
-            {/* 오른쪽: 내 정보(아이콘+이름) + 로그아웃 + 로고 */}
-            <div className="flex items-center gap-4 flex-shrink-0">
+            {/* 오른쪽: 내 정보(아이콘+이름) + ⭐별 + 로그아웃 + 로고 */}
+            <div className="flex items-center gap-3 sm:gap-4 flex-shrink-0">
               {profile && (
                 <Link
                   to="/my-profile"
@@ -317,6 +345,19 @@ function AppContent() {
                   </span>
                 </Link>
               )}
+
+              {/* ⭐ 내 별 잔량 → 별 현황으로 이동 */}
+              {profile?.player_id && myStars !== null && role !== 'associate' && (
+                <Link
+                  to="/stars"
+                  onClick={() => setMenuOpen(false)}
+                  title={`내 별 ${myStars}개 · 별 현황 보기`}
+                  className="flex items-center hover:scale-110 transition-transform"
+                >
+                  <StarBadge count={myStars} size={26} />
+                </Link>
+              )}
+
               <button
                 onClick={signOut}
                 title="로그아웃"
@@ -329,7 +370,7 @@ function AppContent() {
                   <line x1="21" y1="12" x2="9" y2="12"></line>
                 </svg>
               </button>
-              <Link to="/" className="text-2xl sm:text-4xl font-bold text-emerald-400 whitespace-nowrap ml-4" onClick={() => setMenuOpen(false)}>
+              <Link to="/" className="text-2xl sm:text-4xl font-bold text-emerald-400 whitespace-nowrap ml-2 sm:ml-4" onClick={() => setMenuOpen(false)}>
                 FM FC&nbsp;
               </Link>
             </div>
@@ -414,8 +455,8 @@ function AppContent() {
             {/* 🏆 팀 아카이브 - 관리자·임원만 */}
             <Route path="/archive" element={<Protected allowed={['admin', 'executive']}><SeasonArchive /></Protected>} />
 
-            {/* ⭐ 별 관리 - 관리자·임원만 */}
-            <Route path="/stars" element={<Protected allowed={['admin', 'executive']}><StarManage /></Protected>} />
+            {/* ⭐ 별 현황 - 전 회원 조회 가능 (수정은 화면 내부에서 admin/executive만) */}
+            <Route path="/stars" element={<Protected allowed={['admin', 'executive', 'captain', 'member']}><StarManage /></Protected>} />
 
             {/* 🔄 시즌 전환 - 라우트는 admin/executive 통과, 실제 실행은 페이지에서 admin/회장만 */}
             <Route path="/season-transition" element={<Protected allowed={['admin', 'executive']}><SeasonTransition /></Protected>} />
