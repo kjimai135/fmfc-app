@@ -301,8 +301,9 @@ function AttendanceStats() {
     return color
   }
 
-  // ✅ 참석률 클릭 시, 팝업 위치 계산 (좌우 보정 + 아래 공간 부족하면 이름 바로 위)
+  // ✅ 참석률 클릭 시, 팝업 위치 계산 (챔스 탭에서는 동작 안 함)
   function handleRateClick(e, player) {
+    if (isChampsView) return
     if (popupPlayer?.id === player.id) {
       setPopupPlayer(null)
       return
@@ -312,7 +313,7 @@ function AttendanceStats() {
     const containerRect = container.getBoundingClientRect()
     const btnRect = e.currentTarget.getBoundingClientRect()
 
-    const popupWidth = 360
+    const popupWidth = 320
     const margin = 12
     const gap = 6
 
@@ -328,7 +329,7 @@ function AttendanceStats() {
     // ── 상하 위치 ──
     const spaceBelow = window.innerHeight - btnRect.bottom
     const spaceAbove = btnRect.top
-    const NEED = 280
+    const NEED = 260
 
     let top
     let placement
@@ -440,15 +441,18 @@ function AttendanceStats() {
                 <div className="space-y-1">
                   {section.players.map(player => {
                     const isMe = myPlayerId && player.id === myPlayerId
-                    const isOpen = popupPlayer?.id === player.id
+                    const isOpen = !champsView && popupPlayer?.id === player.id
                     return (
-                      <button
+                      <div
                         key={player.id}
-                        onClick={(e) => handleRateClick(e, player)}
-                        className={`w-full flex items-center bg-slate-800/50 hover:bg-slate-700/60 rounded-lg px-2 py-2 transition-colors ${
+                        onClick={champsView ? undefined : (e) => handleRateClick(e, player)}
+                        role={champsView ? undefined : 'button'}
+                        className={`w-full flex items-center bg-slate-800/50 rounded-lg px-2 py-2 transition-colors ${
+                          champsView ? '' : 'hover:bg-slate-700/60 cursor-pointer'
+                        } ${
                           isOpen ? 'ring-1 ring-emerald-500' : isMe ? 'ring-1 ring-sky-400/60' : ''
                         }`}
-                        title="클릭하면 상세 기록 보기"
+                        title={champsView ? '' : '클릭하면 상세 기록 보기'}
                       >
                         <span style={{ width: '30px', flexShrink: 0 }} aria-hidden="true"></span>
 
@@ -476,7 +480,7 @@ function AttendanceStats() {
                             {player.leagueRate}%
                           </span>
                         )}
-                      </button>
+                      </div>
                     )
                   })}
                 </div>
@@ -602,7 +606,7 @@ function AttendanceStats() {
         )}
       </div>
 
-      {/* ⚽🏆 탭 (Rankings.jsx 와 동일 포맷) */}
+      {/* ⚽🏆 탭 */}
       <div className="flex gap-2 mb-4 bg-slate-800/60 border border-slate-700 rounded-xl p-1.5">
         {TABS.map((tab, i) => {
           const active = index === i
@@ -737,11 +741,11 @@ function AttendanceStats() {
             ))}
           </div>
 
-          {/* 팝업 */}
-          {popupPlayer && (
+          {/* 팝업 (리그 탭에서만) */}
+          {popupPlayer && !isChampsView && (
             <div
               ref={popupRef}
-              className="absolute z-50 bg-slate-800 border border-emerald-500/50 rounded-xl shadow-2xl shadow-black/50 w-[340px] max-w-[90vw]"
+              className="absolute z-50 bg-slate-800 border border-emerald-500/50 rounded-xl shadow-2xl shadow-black/50 w-[320px] max-w-[92vw] overflow-hidden"
               style={{
                 top: popupPosition.top,
                 left: popupPosition.left,
@@ -749,7 +753,7 @@ function AttendanceStats() {
               }}
             >
               {/* 팝업 헤더 */}
-              <div className="flex justify-between items-center px-3.5 py-2.5 border-b border-slate-700">
+              <div className="flex justify-between items-center px-3 py-2 border-b border-slate-700">
                 <h3 className="font-bold text-white text-sm">
                   👤 {popupPlayer.name}
                   {popupPlayer.team && (
@@ -760,75 +764,71 @@ function AttendanceStats() {
                 </h3>
                 <button
                   onClick={() => setPopupPlayer(null)}
-                  className="text-slate-400 hover:text-white text-lg leading-none"
+                  className="text-slate-400 hover:text-white text-base leading-none"
                 >
                   ✕
                 </button>
               </div>
 
               {/* ⚽ 리그 요약 */}
-              <div className="px-3.5 py-2.5 border-b border-slate-700 bg-emerald-500/5">
+              <div className="px-3 py-2 border-b border-slate-700 bg-emerald-500/5">
                 <div className="flex items-baseline justify-between">
-                  <span className="text-emerald-300 text-sm font-bold">⚽ 리그 출석률</span>
-                  <span className={`text-2xl font-black ${rateColor(popupPlayer.leagueRate)}`}>
+                  <span className="text-emerald-300 text-xs font-bold">⚽ 리그 출석률</span>
+                  <span className={`text-xl font-black ${rateColor(popupPlayer.leagueRate)}`}>
                     {popupPlayer.leagueRate}%
                   </span>
                 </div>
-                <div className="flex items-center justify-between mt-0.5">
-                  <p className="text-slate-400 text-[11px]">
+                <div className="flex items-center justify-between">
+                  <p className="text-slate-400 text-[10px]">
                     {popupPlayer.leaguePresent} / {leagueGames}회 참석
                   </p>
-                  <p className="text-slate-500 text-[11px]">
+                  <p className="text-slate-500 text-[10px]">
                     ✅{popupPlayer.leagueAttended} 🕐{popupPlayer.leagueLate} 🏃{popupPlayer.leagueEarly}
                   </p>
                 </div>
               </div>
 
-              {/* 날짜별 기록 — 간격 좁힘 */}
-              <div className="max-h-60 overflow-y-auto">
-                <table className="w-full text-left table-fixed">
-                  <colgroup>
-                    <col style={{ width: '38%' }} />
-                    <col style={{ width: '28%' }} />
-                    <col style={{ width: '34%' }} />
-                  </colgroup>
-                  <thead className="sticky top-0 bg-slate-800">
-                    <tr className="border-b border-slate-700">
-                      <th className="px-3 py-1.5 text-slate-400 text-[11px] font-medium">날짜</th>
-                      <th className="px-1 py-1.5 text-slate-400 text-[11px] font-medium">라운드</th>
-                      <th className="px-3 py-1.5 text-slate-400 text-[11px] font-medium text-right">상태</th>
-                    </tr>
+              {/* 날짜별 기록 — 매우 컴팩트 */}
+              <div className="max-h-64 overflow-y-auto">
+                <table className="w-full border-collapse">
+                  
+                  <thead className="sticky top-0 bg-slate-800 z-10">
+                    <tr>
+  <th className="px-1.5 py-1 text-slate-500 text-[10px] font-medium text-center border-b border-slate-700">날짜</th>
+  <th className="px-1.5 py-1 text-slate-500 text-[10px] font-medium text-center border-b border-slate-700">라운드</th>
+  <th className="px-1.5 py-1 text-slate-500 text-[10px] font-medium text-center border-b border-slate-700">상태</th>
+</tr>
                   </thead>
                   <tbody>
                     {popupRecords.map(record => {
                       const isChampsRec = champsDateSet.has(record.game_date)
                       const roundLabel = roundMap[record.game_date]
                       return (
-                        <tr key={record.id} className="border-b border-slate-700/30 hover:bg-slate-700/20">
-                          <td className="px-3 py-1 text-white text-[11px] whitespace-nowrap">
-                            {record.game_date}
-                          </td>
-                          <td className="px-1 py-1 text-[11px] whitespace-nowrap">
-                            {isChampsRec ? (
-                              <span className="font-bold" style={{ color: '#fbbf24' }}>🏆 챔스</span>
-                            ) : roundLabel ? (
-                              <span className="text-emerald-300 font-semibold">{roundLabel}</span>
-                            ) : (
-                              <span className="text-slate-600">-</span>
-                            )}
-                          </td>
-                          <td className="px-3 py-1 text-right">
-                            <span className={`inline-block px-1.5 py-0.5 rounded text-[11px] ${statusBgColor(record.status)}`}>
-                              {statusIcon(record.status)} {record.status}
-                            </span>
-                          </td>
+                        <tr key={record.id} className="border-b border-slate-700/25 hover:bg-slate-700/20">
+                          <td className="px-1.5 py-0.5 text-slate-200 text-[11px] whitespace-nowrap leading-tight text-center">
+  {record.game_date}
+</td>
+<td className="px-1.5 py-0.5 text-[11px] whitespace-nowrap leading-tight text-center">
+  {isChampsRec ? (
+    <span className="font-bold" style={{ color: '#fbbf24' }}>🏆챔스</span>
+  ) : roundLabel ? (
+    <span className="text-emerald-300 font-semibold">{roundLabel}</span>
+  ) : (
+    <span className="text-slate-600">-</span>
+  )}
+</td>
+<td className="px-1.5 py-0.5 text-center leading-tight">
+  <span className={`inline-block px-1 py-0 rounded text-[11px] ${statusBgColor(record.status)}`}>
+    {statusIcon(record.status)}{record.status}
+  </span>
+</td>
                         </tr>
                       )
                     })}
                   </tbody>
                 </table>
                 {popupRecords.length === 0 && (
-                  <p className="text-center text-slate-400 py-4 text-sm">기록 없음</p>
+                  <p className="text-center text-slate-400 py-3 text-xs">기록 없음</p>
                 )}
               </div>
             </div>
