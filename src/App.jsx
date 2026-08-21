@@ -31,7 +31,6 @@ import NoticeDetail from './pages/NoticeDetail'
 import LetterBoard from './pages/LetterBoard'
 import CalendarPage from './pages/CalendarPage'
 import NoticeTicker from './components/NoticeTicker'
-import StarBadge from './components/StarBadge'
 import logoImg from './assets/logo.png'
 import './App.css'
 
@@ -243,28 +242,112 @@ function PullIndicator({ pullDistance, refreshing, threshold }) {
   )
 }
 
-// ⭐ 내 별 잔량 조회 (used_at 이 없는 것 = 아직 사용하지 않은 별)
+// ⭐ 내 별 개수 조회 (전체 + 잔여)
 function useMyStars(playerId) {
-  const [count, setCount] = useState(null)
+  const [stars, setStars] = useState({ total: 0, remain: 0 })
 
   useEffect(() => {
     let alive = true
     if (!playerId) {
-      setCount(null)
+      setStars({ total: 0, remain: 0 })
       return
     }
     ;(async () => {
-      const { count: c } = await supabase
+      const { data } = await supabase
         .from('player_stars')
-        .select('id', { count: 'exact', head: true })
+        .select('used_at')
         .eq('player_id', playerId)
-        .is('used_at', null)
-      if (alive) setCount(c || 0)
+      
+      if (alive && data) {
+        const total = data.length
+        const remain = data.filter(s => !s.used_at).length
+        setStars({ total, remain })
+      }
     })()
     return () => { alive = false }
   }, [playerId])
 
-  return count
+  return stars
+}
+
+// 🌟 진한 노란색 별 배지 (숫자 포함 - 네비용)
+function DarkStarBadge({ count = 0, size = 24 }) {
+  const n = Number(count) || 0
+  const digits = String(n).length
+  const fontSize = digits >= 3 ? size * 0.34 : digits === 2 ? size * 0.40 : size * 0.46
+
+  return (
+    <span
+      className="relative inline-flex items-center justify-center align-middle flex-shrink-0"
+      style={{ width: size, height: size }}
+    >
+      <svg
+        viewBox="0 0 24 24"
+        width={size}
+        height={size}
+        className="absolute inset-0"
+        aria-hidden="true"
+      >
+        <path
+          d="M12 1.8l3.09 6.26 6.91 1.01-5 4.87 1.18 6.88L12 17.57l-6.18 3.25L7 13.94l-5-4.87 6.91-1.01L12 1.8z"
+          fill="#f59e0b"
+          stroke="#b45309"
+          strokeWidth="1"
+          strokeLinejoin="round"
+        />
+      </svg>
+      <span
+        className="relative font-black leading-none"
+        style={{
+          fontSize,
+          color: '#78350f',
+          marginTop: size * 0.06,
+        }}
+      >
+        {n}
+      </span>
+    </span>
+  )
+}
+
+// ⭐ 연한 노란색 별 배지 (숫자 포함 - 네비용)
+function LightStarBadge({ count = 0, size = 24 }) {
+  const n = Number(count) || 0
+  const digits = String(n).length
+  const fontSize = digits >= 3 ? size * 0.34 : digits === 2 ? size * 0.40 : size * 0.46
+
+  return (
+    <span
+      className="relative inline-flex items-center justify-center align-middle flex-shrink-0"
+      style={{ width: size, height: size }}
+    >
+      <svg
+        viewBox="0 0 24 24"
+        width={size}
+        height={size}
+        className="absolute inset-0"
+        aria-hidden="true"
+      >
+        <path
+          d="M12 1.8l3.09 6.26 6.91 1.01-5 4.87 1.18 6.88L12 17.57l-6.18 3.25L7 13.94l-5-4.87 6.91-1.01L12 1.8z"
+          fill="#fef08a"
+          stroke="#facc15"
+          strokeWidth="1"
+          strokeLinejoin="round"
+        />
+      </svg>
+      <span
+        className="relative font-black leading-none"
+        style={{
+          fontSize,
+          color: '#713f12',
+          marginTop: size * 0.06,
+        }}
+      >
+        {n}
+      </span>
+    </span>
+  )
 }
 
 // 실제 앱 내용 (로그인한 사용자만 여기 도달)
@@ -328,7 +411,7 @@ function AppContent() {
               )}
             </button>
 
-            {/* 오른쪽: 내 정보(아이콘+이름) + ⭐별 + 로그아웃 + 로고 */}
+            {/* 오른쪽: 내 정보(아이콘+이름) + 별 + 로그아웃 + 로고 */}
             <div className="flex items-center gap-3 sm:gap-4 flex-shrink-0">
               {profile && (
                 <Link
@@ -346,15 +429,17 @@ function AppContent() {
                 </Link>
               )}
 
-              {/* ⭐ 내 별 잔량 → 별 현황으로 이동 */}
-              {profile?.player_id && myStars !== null && role !== 'associate' && (
+              {/* ⭐ 내 별 개수 (전체 + 잔여) → 별 현황으로 이동 */}
+              {profile?.player_id && role !== 'associate' && (
                 <Link
                   to="/stars"
                   onClick={() => setMenuOpen(false)}
-                  title={`내 별 ${myStars}개 · 별 현황 보기`}
-                  className="flex items-center hover:scale-110 transition-transform"
+                  title={`전체 별 ${myStars.total}개 · 잔여 별 ${myStars.remain}개 → 별 현황 보기`}
+                  className="flex items-center gap-1.5 hover:scale-105 transition-transform"
                 >
-                  <StarBadge count={myStars} size={26} />
+                  <DarkStarBadge count={myStars.total} size={24} />
+                  <span className="text-slate-600">·</span>
+                  <LightStarBadge count={myStars.remain} size={24} />
                 </Link>
               )}
 
