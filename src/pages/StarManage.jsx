@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
+import StarBadge from '../components/StarBadge'
 
 // 🎁 교환 기준 (별 10개 = 1회)
 const EXCHANGE_UNIT = 10
@@ -44,7 +45,7 @@ function StarManage() {
   const [saving, setSaving] = useState(false)
 
   const [search, setSearch] = useState('')
-  const [viewFilter, setViewFilter] = useState('all') // all | ready | used
+  const [viewFilter, setViewFilter] = useState('all') // all | ready | used | has | none
   const [expanded, setExpanded] = useState(null)
 
   // ✏️ 편집 모드 (선수 단위)
@@ -271,13 +272,33 @@ function StarManage() {
   const totalUsed = stars.filter(s => s.used_at).length
   const totalRemain = totalAll - totalUsed
 
-  // 선수별 집계
+  // 👥 선수 전체 기준 집계 (별 0개인 선수도 포함)
   const allPlayers = (() => {
     const map = {}
+
+    // 1) 활성 선수 전원을 먼저 등록 (별 0개도 목록에 나오도록)
+    for (const p of players) {
+      map[p.id] = {
+        key: p.id,
+        name: p.name,
+        team: p.current_team || '',
+        count: 0, used: 0, remain: 0,
+        reasons: {}, items: [], remainItems: [], usedItems: [],
+      }
+    }
+
+    // 2) 별 기록 반영 (탈퇴자 등 players 에 없는 경우는 이름 키로 추가)
     for (const s of stars) {
-      const key = s.player_id || s.player_name
+      const key = (s.player_id && map[s.player_id]) ? s.player_id : (s.player_id || s.player_name)
       if (!map[key]) {
-        map[key] = { key, name: s.player_name, count: 0, used: 0, remain: 0, reasons: {}, items: [], remainItems: [], usedItems: [] }
+        map[key] = {
+          key,
+          name: s.player_name,
+          team: '',
+          inactive: true,
+          count: 0, used: 0, remain: 0,
+          reasons: {}, items: [], remainItems: [], usedItems: [],
+        }
       }
       const rk = normalizeReason(s.reason)
       map[key].count++
@@ -286,6 +307,7 @@ function StarManage() {
       map[key].reasons[rk] = (map[key].reasons[rk] || 0) + 1
       map[key].items.push(s)
     }
+
     return Object.values(map).map(p => ({
       ...p,
       times: Math.floor(p.remain / EXCHANGE_UNIT),
@@ -299,10 +321,13 @@ function StarManage() {
     if (q) list = list.filter(p => (p.name || '').includes(q))
     if (viewFilter === 'ready') list = list.filter(p => p.times > 0)
     if (viewFilter === 'used') list = list.filter(p => p.used > 0)
+    if (viewFilter === 'has') list = list.filter(p => p.remain > 0)
+    if (viewFilter === 'none') list = list.filter(p => p.remain === 0)
 
     return list.sort((a, b) => {
       if (b.times !== a.times) return b.times - a.times
       if (b.remain !== a.remain) return b.remain - a.remain
+      if (b.count !== a.count) return b.count - a.count
       return (a.name || '').localeCompare(b.name || '')
     })
   })()
@@ -317,7 +342,7 @@ function StarManage() {
       {/* 헤더 */}
       <div className="flex items-end justify-between gap-3 mb-4 flex-wrap">
         <div>
-          <h1 className="text-3xl font-bold text-white">⭐ 별 관리</h1>
+          <h1 className="text-3xl font-bold text-white">⭐ 별 현황</h1>
           <p className="text-slate-500 text-sm mt-1">별 {EXCHANGE_UNIT}개 = 교환 1회</p>
         </div>
         <div className="flex items-center gap-3 text-sm">
@@ -332,6 +357,12 @@ function StarManage() {
       {!canEdit && (
         <p className="bg-sky-500/10 border border-sky-500/30 rounded-lg px-4 py-2.5 mb-4 text-sky-200 text-sm">
           👀 열람 전용 · 지급·교환·수정은 관리자·임원만 가능합니다.
+        </p>
+      )}
+
+      {canEdit && (
+        <p className="text-slate-500 text-xs mb-3">
+          💡 <span className="text-amber-400 font-semibold">🎁 ×N</span> 배지를 누르면 교환 처리됩니다.
         </p>
       )}
 
@@ -362,6 +393,8 @@ function StarManage() {
         >
           <option value="all">전체</option>
           <option value="ready">🎁 교환 가능</option>
+          <option value="has">별 보유</option>
+          <option value="none">별 없음</option>
           <option value="used">사용 이력</option>
         </select>
         {canEdit && (
@@ -409,6 +442,7 @@ function StarManage() {
           {byPlayer.map((p, idx) => {
             const isOpen = expanded === p.key
             const ready = p.times > 0
+            const empty = p.count === 0
             const pct = Math.round((p.progress / EXCHANGE_UNIT) * 100)
             const editing = isOpen && editMode
             const sortedItems = [...p.items].sort((a, b) => (b.season || '').localeCompare(a.season || ''))
@@ -420,27 +454,30 @@ function StarManage() {
                 style={{
                   borderColor: ready ? 'rgba(245,158,11,0.45)' : 'rgba(51,65,85,0.7)',
                   background: ready ? 'rgba(245,158,11,0.07)' : 'rgba(30,41,59,0.6)',
+                  opacity: empty ? 0.6 : 1,
                 }}
               >
                 {/* 요약 행 */}
                 <div
                   onClick={() => {
-                    if (editing) return
+                    if (editing || empty) return
                     setExpanded(isOpen ? null : p.key)
                     setEditMode(false)
                     setEditRows({})
                   }}
                   className={`flex items-center gap-3 px-3.5 py-3 transition-colors ${
-                    editing ? '' : 'cursor-pointer hover:bg-slate-700/30'
+                    editing || empty ? '' : 'cursor-pointer hover:bg-slate-700/30'
                   }`}
                 >
                   <span className="text-slate-600 text-sm font-bold w-6 text-right flex-shrink-0">{idx + 1}</span>
-                  <span className="text-white text-base font-bold w-20 flex-shrink-0 truncate">{p.name}</span>
+                  <span className="text-white text-base font-bold w-20 flex-shrink-0 truncate">
+                    {p.name}
+                    {p.inactive && <span className="text-slate-600 text-[10px] ml-1">탈퇴</span>}
+                  </span>
 
-                  {/* 잔량 */}
-                  <span className="flex items-baseline gap-1 flex-shrink-0 w-16">
-                    <span className="text-amber-400 text-base leading-none">⭐</span>
-                    <span className="text-amber-300 font-black text-xl leading-none">{p.remain}</span>
+                  {/* ⭐ 잔량 (별 안에 숫자) */}
+                  <span className="flex items-center justify-center flex-shrink-0 w-9">
+                    <StarBadge count={p.remain} size={34} title={`잔량 ${p.remain}개`} />
                   </span>
 
                   {/* 진행 바 */}
@@ -454,34 +491,32 @@ function StarManage() {
                     <span className="text-slate-500 text-xs w-9 flex-shrink-0">{p.progress}/{EXCHANGE_UNIT}</span>
                   </span>
 
-                  {/* 교환 가능 배지 */}
-                  {ready && (
-                    <span className="px-2.5 py-1 rounded text-xs font-black bg-amber-500 text-slate-900 flex-shrink-0">
-                      🎁 ×{p.times}
-                    </span>
-                  )}
-
+                  {/* 🎁 교환 배지 (관리자는 클릭 = 교환 처리) */}
                   <span className="ml-auto flex items-center gap-2 flex-shrink-0">
-                    {canEdit && !editing && (
-                      <button
-                        onClick={(e) => { e.stopPropagation(); exchange(p.name, p.remainItems) }}
-                        disabled={saving || !ready}
-                        className={`text-xs font-bold px-3 py-1.5 rounded transition-colors ${
-                          ready
-                            ? 'bg-amber-500 hover:bg-amber-400 text-slate-900'
-                            : 'bg-slate-700/50 text-slate-600 cursor-not-allowed'
-                        }`}
-                        title={ready ? `별 ${EXCHANGE_UNIT}개 교환` : `${EXCHANGE_UNIT - p.progress}개 더 필요`}
-                      >
-                        교환
-                      </button>
+                    {ready && (
+                      canEdit && !editing ? (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); exchange(p.name, p.remainItems) }}
+                          disabled={saving}
+                          className="px-3 py-1.5 rounded text-xs font-black bg-amber-500 hover:bg-amber-400 active:scale-95 disabled:opacity-50 text-slate-900 shadow-sm shadow-amber-500/30 transition-all"
+                          title={`클릭하면 별 ${EXCHANGE_UNIT}개 교환 처리`}
+                        >
+                          🎁 ×{p.times}
+                        </button>
+                      ) : (
+                        <span className="px-2.5 py-1 rounded text-xs font-black bg-amber-500 text-slate-900">
+                          🎁 ×{p.times}
+                        </span>
+                      )
                     )}
-                    <span className="text-slate-600 text-sm w-3">{isOpen ? '▲' : '▼'}</span>
+                    <span className="text-slate-600 text-sm w-3">
+                      {empty ? '' : (isOpen ? '▲' : '▼')}
+                    </span>
                   </span>
                 </div>
 
                 {/* 펼침 상세 */}
-                {isOpen && (
+                {isOpen && !empty && (
                   <div className="border-t border-slate-700/50 bg-slate-900/50">
                     {/* 상세 헤더 — 편집 / 사용취소 버튼 */}
                     <div className="flex items-center gap-2 px-3.5 py-2 border-b border-slate-700/40 flex-wrap">
@@ -542,7 +577,7 @@ function StarManage() {
                               className="px-2 py-0.5 rounded text-xs font-bold"
                               style={{ background: `${info.color}1f`, color: info.color }}
                             >
-                              {info.icon} {info.label}{cnt > 1 ? ` ${cnt}` : ''}
+                              {info.icon} {info.label} ×{cnt}
                             </span>
                           )
                         })}

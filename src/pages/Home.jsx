@@ -18,19 +18,20 @@ const dashboardMenu = [
   { to: '/polls', icon: '🗳️', label: '투표', desc: '경기 참석 여부 투표', roles: ['admin', 'executive', 'captain', 'member'], group: 'game' },
   { to: '/calendar', icon: '📅', label: '일정', desc: '월별 경기·구장 일정', roles: ['admin', 'executive', 'captain', 'member'], group: 'game' },
 
+  // 📋 일반
   { to: '/roster', icon: '📋', label: '팀명단', desc: '전체 선수 명단 확인', roles: ['admin', 'executive', 'captain', 'member'], group: 'general' },
   { to: '/rankings', icon: '🏆', label: '순위', desc: '팀 순위 · 득점 순위', roles: ['admin', 'executive', 'captain', 'member'], group: 'general' },
   { to: '/attendance/stats', icon: '📊', label: '출석율', desc: '선수별 출석률 분석', roles: ['admin', 'executive', 'captain', 'member'], group: 'general' },
+  { to: '/stars', icon: '⭐', label: '별 현황', desc: '보유 별 · 교환 내역', roles: ['admin', 'executive', 'captain', 'member'], group: 'general' },
   { to: '/notices', icon: '📢', label: '공지', desc: '팀 공지 확인·작성', roles: ['admin', 'executive', 'captain', 'member'], group: 'general' },
   { to: '/letter', icon: '💌', label: '마음의 편지', desc: '회장님께 익명으로 전하기', roles: ['admin', 'executive', 'captain', 'member'], group: 'general' },
 
   // 🔧 관리
   { to: '/matches', icon: '⚽', label: '경기 생성 및 기록', desc: '경기 생성·스코어 기록', roles: ['admin', 'executive', 'captain'], group: 'manage' },
   { to: '/archive', icon: '🗂️', label: '아카이브', desc: '시즌별 우승·기록 보관', roles: ['admin', 'executive'], group: 'manage' },
-  { to: '/stars', icon: '⭐', label: '별 관리', desc: '시즌 별 수여·조회', roles: ['admin', 'executive'], group: 'manage' },
   { to: '/players', icon: '🧑', label: '회원관리', desc: '회원 등록·수정·삭제', roles: ['admin', 'executive'], group: 'manage' },
   { to: '/member-roles', icon: '🔑', label: '권한관리', desc: '회원 권한 부여·변경', roles: ['admin', 'executive'], group: 'manage' },
-  { to: '/season-transition', icon: '🔄', label: '시즌 전환', desc: '새 시즌으로 전환·초기화', roles: ['admin'], group: 'manage' },
+  { to: '/season-transition', icon: '🔄', label: '시즌 전환', desc: '새 시즌으로 전환·초기화', roles: ['admin', 'executive'], group: 'manage' },
 ]
 
 function MenuCard({ item }) {

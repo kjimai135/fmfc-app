@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 
@@ -18,6 +18,10 @@ function AttendanceHistory() {
   const [availableDates, setAvailableDates] = useState([])
   const [loading, setLoading] = useState(true)
 
+  // 📅 최근 경기 드롭다운
+  const [dateMenuOpen, setDateMenuOpen] = useState(false)
+  const dateMenuRef = useRef(null)
+
   // 수동 추가 폼 상태
   const [showAddForm, setShowAddForm] = useState(false)
   const [addPlayerId, setAddPlayerId] = useState('')
@@ -32,6 +36,7 @@ function AttendanceHistory() {
     fetchAvailableDates()
     fetchTeams()
     if (canEdit) fetchPlayers()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
@@ -39,6 +44,17 @@ function AttendanceHistory() {
       fetchAttendance(selectedDate)
     }
   }, [selectedDate])
+
+  // 📅 드롭다운 바깥 클릭 시 닫기
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (dateMenuRef.current && !dateMenuRef.current.contains(e.target)) {
+        setDateMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
 
   async function fetchTeams() {
     const { data } = await supabase
@@ -224,6 +240,15 @@ function AttendanceHistory() {
     return color
   }
 
+  // 📅 날짜에 요일 붙이기
+  function fmtDateLabel(dateStr) {
+    if (!dateStr) return ''
+    const d = new Date(dateStr + 'T00:00:00')
+    if (isNaN(d)) return dateStr
+    const days = ['일', '월', '화', '수', '목', '금', '토']
+    return `${dateStr} (${days[d.getDay()]})`
+  }
+
   const recordedTeams = [...new Set(attendance.map(a => a.team))]
   const statusOptions = ['출석', '늦참', '조퇴']
 
@@ -247,7 +272,7 @@ function AttendanceHistory() {
       )}
 
       {/* 날짜 선택 */}
-      <div className="flex flex-col sm:flex-row gap-4 mb-6">
+      <div className="flex flex-wrap items-end gap-3 mb-6">
         <div>
           <label className="block text-slate-300 text-sm font-medium mb-2">날짜 선택</label>
           <input
@@ -258,23 +283,54 @@ function AttendanceHistory() {
           />
         </div>
 
-        <div>
+        {/* 📅 최근 경기 — 드롭다운 */}
+        <div className="relative" ref={dateMenuRef}>
           <label className="block text-slate-300 text-sm font-medium mb-2">최근 경기</label>
-          <div className="flex flex-wrap gap-2">
-            {availableDates.slice(0, 6).map(date => (
-              <button
-                key={date}
-                onClick={() => setSelectedDate(date)}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  selectedDate === date
-                    ? 'bg-emerald-500 text-white'
-                    : 'bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700'
-                }`}
-              >
-                {date}
-              </button>
-            ))}
-          </div>
+          <button
+            onClick={() => setDateMenuOpen(v => !v)}
+            className={`flex items-center gap-2 min-w-[200px] bg-slate-800 border rounded-xl px-4 py-3 text-white transition-colors ${
+              dateMenuOpen ? 'border-emerald-500' : 'border-slate-700 hover:border-slate-600'
+            }`}
+          >
+            <span className="text-base">📅</span>
+            <span className="font-medium">{fmtDateLabel(selectedDate)}</span>
+            <span className="ml-auto text-slate-400 text-xs">{dateMenuOpen ? '▲' : '▼'}</span>
+          </button>
+
+          {dateMenuOpen && (
+            <div className="absolute left-0 top-full mt-1.5 z-40 w-full min-w-[200px] bg-slate-800 border border-slate-600 rounded-xl shadow-2xl shadow-black/50 overflow-hidden">
+              <div className="px-3 py-2 border-b border-slate-700 flex items-center justify-between">
+                <span className="text-slate-400 text-xs">기록 있는 날짜</span>
+                <span className="text-slate-500 text-xs">{availableDates.length}건</span>
+              </div>
+              <div className="max-h-72 overflow-y-auto py-1">
+                {availableDates.length === 0 ? (
+                  <p className="px-4 py-3 text-slate-500 text-sm text-center">기록 없음</p>
+                ) : (
+                  availableDates.map(date => {
+                    const active = selectedDate === date
+                    return (
+                      <button
+                        key={date}
+                        onClick={() => {
+                          setSelectedDate(date)
+                          setDateMenuOpen(false)
+                        }}
+                        className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm text-left transition-colors ${
+                          active
+                            ? 'bg-emerald-500/20 text-emerald-300 font-bold'
+                            : 'text-slate-300 hover:bg-slate-700'
+                        }`}
+                      >
+                        <span className="w-3 flex-shrink-0">{active ? '✓' : ''}</span>
+                        <span>{fmtDateLabel(date)}</span>
+                      </button>
+                    )
+                  })
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

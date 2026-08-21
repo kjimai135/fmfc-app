@@ -1,22 +1,22 @@
 /**
- * ⭐ 별 개수 배지 — 별 모양 안에 숫자 표시
+ * ⭐ 별 개수 배지 — 별 모양 안에 숫자 표시 (0도 표시)
  *
  * 사용 예)
  *   <StarBadge count={7} />
- *   <StarBadge count={12} size={22} />
+ *   <StarBadge count={0} />
+ *   <StarBadge count={12} size={34} />
  */
 function StarBadge({ count = 0, size = 20, title }) {
-  if (!count || count <= 0) return null
+  const n = Number(count) || 0
 
-  // 자릿수에 따라 글자 크기 자동 조정
-  const digits = String(count).length
+  const digits = String(n).length
   const fontSize = digits >= 3 ? size * 0.34 : digits === 2 ? size * 0.40 : size * 0.46
 
   return (
     <span
       className="relative inline-flex items-center justify-center align-middle flex-shrink-0"
       style={{ width: size, height: size }}
-      title={title || `보유 별 ${count}개`}
+      title={title || `보유 별 ${n}개`}
     >
       <svg
         viewBox="0 0 24 24"
@@ -41,7 +41,7 @@ function StarBadge({ count = 0, size = 20, title }) {
           marginTop: size * 0.06,
         }}
       >
-        {count}
+        {n}
       </span>
     </span>
   )
