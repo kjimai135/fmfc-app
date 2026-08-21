@@ -1,12 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
+import { calcRounds } from '../lib/rounds'
 
 const WEEK_LABELS = ['월', '화', '수', '목', '금', '토', '일']
-
-// 🎯 라운드 기준점: 이 날짜가 (13, 14)라운드
-const ANCHOR_DATE = '2026-08-08'
-const ANCHOR_FIRST_ROUND = 13
 
 // 🏆 챔스 강조색 (진한 황금색)
 const CHAMPS_COLOR = '#f59e0b'
@@ -235,28 +232,6 @@ function CalendarPage() {
     setEditKey(key)
   }
 
-  // 🔢 라운드 자동 계산 (경기일 1일 = 2라운드, ANCHOR_DATE = 13·14 고정)
-  async function calcRounds(date) {
-    const { data } = await supabase
-      .from('matches')
-      .select('game_date')
-
-    const dates = [...new Set((data || []).map((d) => d.game_date))]
-    if (!dates.includes(ANCHOR_DATE)) dates.push(ANCHOR_DATE)
-    if (!dates.includes(date)) dates.push(date)
-    dates.sort()
-
-    const anchorIdx = dates.indexOf(ANCHOR_DATE)
-    const targetIdx = dates.indexOf(date)
-    if (anchorIdx === -1 || targetIdx === -1) return null
-
-    const offset = targetIdx - anchorIdx
-    const first = ANCHOR_FIRST_ROUND + offset * 2
-    const second = first + 1
-    if (first <= 0) return null
-    return { first, second }
-  }
-
   // ⚽ 경기 결과 모달 열기
   async function openResult(key, e) {
     if (e) e.stopPropagation() // 셀 클릭(편집) 전파 방지
@@ -441,7 +416,7 @@ function CalendarPage() {
     await fetchData()
 
     alert(
-      (isChamps ? '🏆 챔스 경기로 생성되었습니다!\n' : '') +
+      (isChamps ? '🏆 챔스 경기로 생성되었습니다!\n(라운드 계산에서 제외됩니다)\n' : '') +
       (hasHistory
         ? `순위 기반으로 6경기가 생성되었습니다!\n🥇${first} 🥈${second} 🥉${third}`
         : '6경기가 생성되었습니다! (과거 기록이 없어 기본 순서로 배정)')
@@ -738,7 +713,7 @@ function CalendarPage() {
 
       {(canEdit || canCreateMatch) && (
         <p className="text-slate-500 text-xs mb-2">
-          💡 날짜 칸을 클릭하면 일정을 추가·수정할 수 있습니다. (확정하면 노란색) · ⚽ 결과 / + 경기생성 버튼으로 경기를 관리할 수 있습니다. (🏆=챔스)
+          💡 날짜 칸을 클릭하면 일정을 추가·수정할 수 있습니다. (확정하면 노란색) · ⚽ 결과 / + 경기생성 버튼으로 경기를 관리할 수 있습니다. (🏆=챔스, 라운드 계산 제외)
         </p>
       )}
 
@@ -983,7 +958,7 @@ function CalendarPage() {
                 <span className="text-2xl">⚽</span>
                 <div>
                   <p className="text-base">리그 경기</p>
-                  <p className="text-emerald-100/80 text-xs font-normal">순위·득점왕에 반영됩니다</p>
+                  <p className="text-emerald-100/80 text-xs font-normal">순위·득점왕·라운드에 반영됩니다</p>
                 </div>
               </button>
 
@@ -999,7 +974,7 @@ function CalendarPage() {
                 <div>
                   <p className="text-base" style={{ color: '#3b2500' }}>챔피언스(챔스) 경기</p>
                   <p className="text-xs font-normal" style={{ color: '#5b3a00' }}>
-                    순위·득점왕 제외 · 경기 후 MVP 선택 가능
+                    순위·득점왕·라운드 제외 · 경기 후 MVP 선택 가능
                   </p>
                 </div>
               </button>

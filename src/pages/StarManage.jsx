@@ -45,7 +45,7 @@ function StarManage() {
   const [saving, setSaving] = useState(false)
 
   const [search, setSearch] = useState('')
-  const [viewFilter, setViewFilter] = useState('all') // all | ready | used | has | none
+  const [viewFilter, setViewFilter] = useState('all') // all | ready | has | none | used
   const [expanded, setExpanded] = useState(null)
 
   // ✏️ 편집 모드 (선수 단위)
@@ -268,15 +268,11 @@ function StarManage() {
     else fetchAll()
   }
 
-  const totalAll = stars.length
-  const totalUsed = stars.filter(s => s.used_at).length
-  const totalRemain = totalAll - totalUsed
-
-  // 👥 선수 전체 기준 집계 (별 0개인 선수도 포함)
+  // 👥 선수별 집계 — 활성 선수만 (탈퇴자 제외 · 별 0개도 포함)
   const allPlayers = (() => {
     const map = {}
 
-    // 1) 활성 선수 전원을 먼저 등록 (별 0개도 목록에 나오도록)
+    // 1) 활성 선수 전원 등록
     for (const p of players) {
       map[p.id] = {
         key: p.id,
@@ -287,19 +283,11 @@ function StarManage() {
       }
     }
 
-    // 2) 별 기록 반영 (탈퇴자 등 players 에 없는 경우는 이름 키로 추가)
+    // 2) 별 기록 반영 — 활성 선수 것만 (탈퇴자 기록은 무시)
     for (const s of stars) {
-      const key = (s.player_id && map[s.player_id]) ? s.player_id : (s.player_id || s.player_name)
-      if (!map[key]) {
-        map[key] = {
-          key,
-          name: s.player_name,
-          team: '',
-          inactive: true,
-          count: 0, used: 0, remain: 0,
-          reasons: {}, items: [], remainItems: [], usedItems: [],
-        }
-      }
+      const key = s.player_id
+      if (!key || !map[key]) continue
+
       const rk = normalizeReason(s.reason)
       map[key].count++
       if (s.used_at) { map[key].used++; map[key].usedItems.push(s) }
@@ -315,14 +303,19 @@ function StarManage() {
     }))
   })()
 
+  // 상단 통계도 활성 선수 기준
+  const totalAll = allPlayers.reduce((s, p) => s + p.count, 0)
+  const totalUsed = allPlayers.reduce((s, p) => s + p.used, 0)
+  const totalRemain = allPlayers.reduce((s, p) => s + p.remain, 0)
+
   const byPlayer = (() => {
     let list = [...allPlayers]
     const q = search.trim()
     if (q) list = list.filter(p => (p.name || '').includes(q))
     if (viewFilter === 'ready') list = list.filter(p => p.times > 0)
-    if (viewFilter === 'used') list = list.filter(p => p.used > 0)
     if (viewFilter === 'has') list = list.filter(p => p.remain > 0)
     if (viewFilter === 'none') list = list.filter(p => p.remain === 0)
+    if (viewFilter === 'used') list = list.filter(p => p.used > 0)
 
     return list.sort((a, b) => {
       if (b.times !== a.times) return b.times - a.times
@@ -470,10 +463,7 @@ function StarManage() {
                   }`}
                 >
                   <span className="text-slate-600 text-sm font-bold w-6 text-right flex-shrink-0">{idx + 1}</span>
-                  <span className="text-white text-base font-bold w-20 flex-shrink-0 truncate">
-                    {p.name}
-                    {p.inactive && <span className="text-slate-600 text-[10px] ml-1">탈퇴</span>}
-                  </span>
+                  <span className="text-white text-base font-bold w-20 flex-shrink-0 truncate">{p.name}</span>
 
                   {/* ⭐ 잔량 (별 안에 숫자) */}
                   <span className="flex items-center justify-center flex-shrink-0 w-9">

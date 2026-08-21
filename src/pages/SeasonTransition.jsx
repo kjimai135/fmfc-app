@@ -321,28 +321,32 @@ function SeasonTransition() {
       const leagueMatches = allPast.filter((m) => !m.is_champions)
       const champsMatches = allPast.filter((m) => m.is_champions)
       const allAttendance = attRes.data || []
+      const PRESENT = ['출석', '늦참', '조퇴']
 
-      const seasonDates = new Set(allPast.map((m) => m.game_date))
-      const totalGames = seasonDates.size
+      // ⚽ 리그 경기일 / 🏆 챔스 경기일 분리
+      const leagueDates = new Set(leagueMatches.map((m) => m.game_date))
+      const champsDates = new Set(champsMatches.map((m) => m.game_date))
+      const leagueGames = leagueDates.size
+      const champsGames = champsDates.size
 
-      // 출석율
+      // ⚽ 리그 출석률 (베스트 플레이어·리그우승 기준)
       const rate = {}
       for (const p of players) {
         const cnt = allAttendance.filter(
-          (a) => a.player_id === p.id && seasonDates.has(a.game_date) && ['출석', '늦참', '조퇴'].includes(a.status)
+          (a) => a.player_id === p.id && leagueDates.has(a.game_date) && PRESENT.includes(a.status)
         ).length
-        rate[p.id] = totalGames > 0 ? Math.round((cnt / totalGames) * 100) : 0
+        rate[p.id] = leagueGames > 0 ? Math.round((cnt / leagueGames) * 100) : 0
       }
 
       const standings = computeStandings(leagueMatches, teams)
       const groups = []
 
-      // 1. 리그 우승 (아카이브 값 사용)
+      // 1. 리그 우승 (아카이브 값 사용 · 리그 출석률 50%↑)
       const leagueChamp = savedArchive.league_champion || ''
       const champPlayers = leagueChamp ? players.filter((p) => p.current_team === leagueChamp) : []
       groups.push({
         reason: '리그우승',
-        note: leagueChamp ? `${leagueChamp} · 출석률 50%↑` : '우승팀 없음',
+        note: leagueChamp ? `${leagueChamp} · 리그 출석률 50%↑` : '우승팀 없음',
         candidates: champPlayers
           .map((p) => ({
             player_id: p.id, name: p.name, team: p.current_team,
@@ -362,7 +366,7 @@ function SeasonTransition() {
           : [],
       })
 
-      // 3. 베스트 플레이어 (1등 5명 / 2등 3명 / 3등 1명)
+      // 3. 베스트 플레이어 (⚽ 리그 출석률 기준 · 1등 5명 / 2등 3명 / 3등 1명)
       const quotas = [5, 3, 1]
       const bestCandidates = []
       let hasTie = false
@@ -392,22 +396,30 @@ function SeasonTransition() {
           })
         })
       })
-      groups.push({ reason: '베스트 플레이어', note: `1위 5명·2위 3명·3위 1명 (${totalGames}경기)`, tie: hasTie, candidates: bestCandidates })
+      groups.push({
+        reason: '베스트 플레이어',
+        note: `⚽ 리그 출석률 기준 · 1위 5명·2위 3명·3위 1명 (리그 ${leagueGames}경기)`,
+        tie: hasTie,
+        candidates: bestCandidates,
+      })
 
-      // 4. 챔스 우승 (아카이브 값 사용)
+      // 4. 챔스 우승 (아카이브 값 사용 · 🏆 챔스 참석 여부)
       const champsChamp = savedArchive.champs_champion || ''
-      const champsDates = [...new Set(champsMatches.map((m) => m.game_date))]
       const champsAtt = []
-      if (champsChamp && champsDates.length > 0) {
+      if (champsChamp && champsGames > 0) {
         for (const p of players) {
           const ok = allAttendance.some(
-            (a) => a.player_id === p.id && champsDates.includes(a.game_date) &&
-              ['출석', '늦참', '조퇴'].includes(a.status) && a.team === champsChamp
+            (a) => a.player_id === p.id && champsDates.has(a.game_date) &&
+              PRESENT.includes(a.status) && a.team === champsChamp
           )
           if (ok) champsAtt.push({ player_id: p.id, name: p.name, team: champsChamp, info: '참석', checked: true })
         }
       }
-      groups.push({ reason: '챔스우승', note: champsChamp ? `${champsChamp} 참석자` : '챔스 없음', candidates: champsAtt })
+      groups.push({
+        reason: '챔스우승',
+        note: champsChamp ? `${champsChamp} · 🏆 챔스 참석자` : '챔스 없음',
+        candidates: champsAtt,
+      })
 
       // 5. 챔스 MVP (아카이브 값 사용)
       const mvpName = savedArchive.champs_mvp || ''
@@ -439,7 +451,7 @@ function SeasonTransition() {
         candidates: captains.map((p) => ({ player_id: p.id, name: p.name, team: p.current_team, info: '주장', checked: true })),
       })
 
-      setStarResult({ groups, totalGames })
+      setStarResult({ groups, leagueGames, champsGames })
       // 동점 있는 그룹만 펼침
       const exp = {}
       groups.forEach((g) => { if (g.tie) exp[g.reason] = true })
@@ -778,13 +790,16 @@ function SeasonTransition() {
               <div className="p-4 bg-slate-900/40">
                 {!starResult ? (
                   <div className="text-center py-4">
-                    <div className="flex flex-wrap justify-center gap-2 mb-5">
+                    <div className="flex flex-wrap justify-center gap-2 mb-4">
                       {STAR_REASONS.map((r) => (
                         <span key={r.key} className="px-2.5 py-1 rounded-lg text-[11px] font-bold" style={{ background: `${r.color}20`, color: r.color }}>
                           {r.label}
                         </span>
                       ))}
                     </div>
+                    <p className="text-slate-500 text-xs mb-5">
+                      ⚽ 베스트 플레이어는 <b className="text-sky-400">리그 출석률</b>만 사용합니다. (🏆 챔스 제외)
+                    </p>
                     <button
                       onClick={calculateStars} disabled={starCalculating}
                       className="bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white font-bold px-6 py-3 rounded-xl transition-colors"
@@ -797,7 +812,10 @@ function SeasonTransition() {
                     <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
                       <p className="text-slate-300 text-sm">
                         총 <span className="text-amber-400 font-black text-xl">{totalStars}</span>개 지급 예정
-                        <span className="text-slate-500 text-xs ml-2">· {starResult.totalGames}경기 기준</span>
+                        <span className="text-slate-500 text-xs ml-2">
+                          · ⚽ 리그 {starResult.leagueGames}경기
+                          {starResult.champsGames > 0 && ` · 🏆 챔스 ${starResult.champsGames}경기`}
+                        </span>
                       </p>
                       <button
                         onClick={calculateStars} disabled={starCalculating}

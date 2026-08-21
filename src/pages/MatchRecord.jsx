@@ -1,10 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
-
-// 🎯 라운드 기준점: 이 날짜가 (13, 14)라운드
-const ANCHOR_DATE = '2026-08-08'
-const ANCHOR_FIRST_ROUND = 13 // 그 날의 첫 라운드 (두 번째는 +1)
+import { calcRounds } from '../lib/rounds'
 
 // ✅ 월요일 시작 요일 라벨
 const WEEK_LABELS = ['월', '화', '수', '목', '금', '토', '일']
@@ -144,28 +141,6 @@ function MatchRecord() {
     setDayInfo({ venue, time, rounds })
   }
 
-  // 🔢 라운드 자동 계산 (경기일 1일 = 2라운드, ANCHOR_DATE = 13·14 고정)
-  async function calcRounds(date) {
-    const { data } = await supabase
-      .from('matches')
-      .select('game_date')
-
-    const dates = [...new Set((data || []).map(d => d.game_date))]
-    if (!dates.includes(ANCHOR_DATE)) dates.push(ANCHOR_DATE)
-    if (!dates.includes(date)) dates.push(date)
-    dates.sort()
-
-    const anchorIdx = dates.indexOf(ANCHOR_DATE)
-    const targetIdx = dates.indexOf(date)
-    if (anchorIdx === -1 || targetIdx === -1) return null
-
-    const offset = targetIdx - anchorIdx
-    const first = ANCHOR_FIRST_ROUND + offset * 2
-    const second = first + 1
-    if (first <= 0) return null
-    return { first, second }
-  }
-
   // 🏆 이전까지의 누적 순위 계산 (오늘 날짜 제외, 챔스 경기 제외)
   async function getPreviousStandings() {
     const { data: allMatches } = await supabase
@@ -299,7 +274,7 @@ function MatchRecord() {
     fetchMatches(selectedDate)
     fetchDayInfo(selectedDate)
     alert(
-      (createAsChamps ? '🏆 챔스 경기로 생성되었습니다!\n' : '') +
+      (createAsChamps ? '🏆 챔스 경기로 생성되었습니다!\n(라운드 계산에서 제외됩니다)\n' : '') +
       (hasHistory
         ? `순위 기반으로 6경기가 생성되었습니다!\n🥇${first} 🥈${second} 🥉${third}`
         : '6경기가 생성되었습니다! (과거 기록이 없어 기본 순서로 배정)')
@@ -856,7 +831,7 @@ function MatchRecord() {
             <div>
               <p className="text-white font-bold text-sm">🏆 챔피언스(챔스) 경기로 생성</p>
               <p className="text-slate-400 text-xs mt-0.5">
-                체크 시 이 날의 6경기는 챔스로 기록됩니다. (리그 순위·득점왕 집계에서 제외 / 경기 후 MVP 선택 가능)
+                체크 시 이 날의 6경기는 챔스로 기록됩니다. (리그 순위·득점왕·<b>라운드 계산</b>에서 제외 / 경기 후 MVP 선택 가능)
               </p>
             </div>
           </label>
