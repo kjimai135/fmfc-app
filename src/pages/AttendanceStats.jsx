@@ -753,51 +753,50 @@ function AttendanceStats() {
               }}
             >
               {/* 팝업 헤더 */}
-              <div className="flex justify-between items-center px-3 py-2 border-b border-slate-700">
-                <h3 className="font-bold text-white text-sm">
-                  👤 {popupPlayer.name}
-                  {popupPlayer.team && (
-                    <span className="ml-1.5 text-xs font-normal" style={{ color: getTeamColor(popupPlayer.team) }}>
-                      · {popupPlayer.team}
-                    </span>
-                  )}
-                </h3>
-                <button
-                  onClick={() => setPopupPlayer(null)}
-                  className="text-slate-400 hover:text-white text-base leading-none"
-                >
-                  ✕
-                </button>
-              </div>
+              <div className="flex justify-center items-center px-2 py-2 border-b border-slate-700 relative">
+  <h3 className="font-bold text-white text-sm">
+    👤 {popupPlayer.name}
+    {popupPlayer.team && (
+      <span className="ml-1.5 text-xs font-normal" style={{ color: getTeamColor(popupPlayer.team) }}>
+        · {popupPlayer.team}
+      </span>
+    )}
+  </h3>
+  <button
+    onClick={() => setPopupPlayer(null)}
+    className="text-slate-400 hover:text-white text-base leading-none absolute right-2"
+  >
+    ✕
+  </button>
+</div>
 
               {/* ⚽ 리그 요약 */}
               <div className="px-3 py-2 border-b border-slate-700 bg-emerald-500/5">
-                <div className="flex items-baseline justify-between">
-                  <span className="text-emerald-300 text-xs font-bold">⚽ 리그 출석률</span>
-                  <span className={`text-xl font-black ${rateColor(popupPlayer.leagueRate)}`}>
-                    {popupPlayer.leagueRate}%
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <p className="text-slate-400 text-[10px]">
-                    {popupPlayer.leaguePresent} / {leagueGames}회 참석
-                  </p>
-                  <p className="text-slate-500 text-[10px]">
-                    ✅{popupPlayer.leagueAttended} 🕐{popupPlayer.leagueLate} 🏃{popupPlayer.leagueEarly}
-                  </p>
-                </div>
+                <div className="flex items-baseline justify-center gap-3">
+  <span className="text-emerald-300 text-xs font-bold">⚽ 리그 출석률</span>
+  <span className={`text-xl font-black ${rateColor(popupPlayer.leagueRate)}`}>
+    {popupPlayer.leagueRate}%
+  </span>
+</div>
+                <div className="flex items-center justify-center gap-4">
+  <p className="text-slate-400 text-[10px]">
+    {popupPlayer.leaguePresent} / {leagueGames}회 참석
+  </p>
+  <p className="text-slate-500 text-[10px]">
+    ✅{popupPlayer.leagueAttended} 🕐{popupPlayer.leagueLate} 🏃{popupPlayer.leagueEarly}
+  </p>
+</div>
               </div>
 
               {/* 날짜별 기록 — 매우 컴팩트 */}
               <div className="max-h-64 overflow-y-auto">
                 <table className="w-full border-collapse">
-                  
                   <thead className="sticky top-0 bg-slate-800 z-10">
                     <tr>
-  <th className="px-1.5 py-1 text-slate-500 text-[10px] font-medium text-center border-b border-slate-700">날짜</th>
-  <th className="px-1.5 py-1 text-slate-500 text-[10px] font-medium text-center border-b border-slate-700">라운드</th>
-  <th className="px-1.5 py-1 text-slate-500 text-[10px] font-medium text-center border-b border-slate-700">상태</th>
-</tr>
+                      <th className="px-1.5 py-1 text-slate-400 text-[10px] font-medium text-center border-b border-slate-700">날짜</th>
+                      <th className="px-1.5 py-1 text-slate-400 text-[10px] font-medium text-center border-b border-slate-700">라운드</th>
+                      <th className="px-1.5 py-1 text-slate-400 text-[10px] font-medium text-center border-b border-slate-700">상태</th>
+                    </tr>
                   </thead>
                   <tbody>
                     {popupRecords.map(record => {
@@ -806,22 +805,22 @@ function AttendanceStats() {
                       return (
                         <tr key={record.id} className="border-b border-slate-700/25 hover:bg-slate-700/20">
                           <td className="px-1.5 py-0.5 text-slate-200 text-[11px] whitespace-nowrap leading-tight text-center">
-  {record.game_date}
-</td>
-<td className="px-1.5 py-0.5 text-[11px] whitespace-nowrap leading-tight text-center">
-  {isChampsRec ? (
-    <span className="font-bold" style={{ color: '#fbbf24' }}>🏆챔스</span>
-  ) : roundLabel ? (
-    <span className="text-emerald-300 font-semibold">{roundLabel}</span>
-  ) : (
-    <span className="text-slate-600">-</span>
-  )}
-</td>
-<td className="px-1.5 py-0.5 text-center leading-tight">
-  <span className={`inline-block px-1 py-0 rounded text-[11px] ${statusBgColor(record.status)}`}>
-    {statusIcon(record.status)}{record.status}
-  </span>
-</td>
+                            {record.game_date}
+                          </td>
+                          <td className="px-1.5 py-0.5 text-[11px] whitespace-nowrap leading-tight text-center">
+                            {isChampsRec ? (
+                              <span className="font-bold" style={{ color: '#fbbf24' }}>🏆챔스</span>
+                            ) : roundLabel ? (
+                              <span className="text-emerald-300 font-semibold">{roundLabel}</span>
+                            ) : (
+                              <span className="text-slate-600">-</span>
+                            )}
+                          </td>
+                          <td className="px-1.5 py-0.5 text-center leading-tight">
+                            <span className={`inline-block px-1 py-0 rounded text-[11px] ${statusBgColor(record.status)}`}>
+                              {statusIcon(record.status)}{record.status}
+                            </span>
+                          </td>
                         </tr>
                       )
                     })}
