@@ -35,6 +35,88 @@ function fmtDate(ts) {
   return `${String(d.getFullYear()).slice(2)}.${pad(d.getMonth() + 1)}.${pad(d.getDate())}`
 }
 
+// 🌟 진한 노란색 별 배지 (전체 별 수용)
+function DarkStarBadge({ count = 0, size = 20, title }) {
+  const n = Number(count) || 0
+  const digits = String(n).length
+  const fontSize = digits >= 3 ? size * 0.34 : digits === 2 ? size * 0.40 : size * 0.46
+
+  return (
+    <span
+      className="relative inline-flex items-center justify-center align-middle flex-shrink-0"
+      style={{ width: size, height: size }}
+      title={title || `전체 별 ${n}개`}
+    >
+      <svg
+        viewBox="0 0 24 24"
+        width={size}
+        height={size}
+        className="absolute inset-0"
+        aria-hidden="true"
+      >
+        <path
+          d="M12 1.8l3.09 6.26 6.91 1.01-5 4.87 1.18 6.88L12 17.57l-6.18 3.25L7 13.94l-5-4.87 6.91-1.01L12 1.8z"
+          fill="#f59e0b"
+          stroke="#b45309"
+          strokeWidth="1"
+          strokeLinejoin="round"
+        />
+      </svg>
+      <span
+        className="relative font-black leading-none"
+        style={{
+          fontSize,
+          color: '#78350f',
+          marginTop: size * 0.06,
+        }}
+      >
+        {n}
+      </span>
+    </span>
+  )
+}
+
+// ⭐ 연한 노란색 별 배지 (잔여 별 수용)
+function LightStarBadge({ count = 0, size = 20, title }) {
+  const n = Number(count) || 0
+  const digits = String(n).length
+  const fontSize = digits >= 3 ? size * 0.34 : digits === 2 ? size * 0.40 : size * 0.46
+
+  return (
+    <span
+      className="relative inline-flex items-center justify-center align-middle flex-shrink-0"
+      style={{ width: size, height: size }}
+      title={title || `잔여 별 ${n}개`}
+    >
+      <svg
+        viewBox="0 0 24 24"
+        width={size}
+        height={size}
+        className="absolute inset-0"
+        aria-hidden="true"
+      >
+        <path
+          d="M12 1.8l3.09 6.26 6.91 1.01-5 4.87 1.18 6.88L12 17.57l-6.18 3.25L7 13.94l-5-4.87 6.91-1.01L12 1.8z"
+          fill="#fef08a"
+          stroke="#facc15"
+          strokeWidth="1"
+          strokeLinejoin="round"
+        />
+      </svg>
+      <span
+        className="relative font-black leading-none"
+        style={{
+          fontSize,
+          color: '#713f12',
+          marginTop: size * 0.06,
+        }}
+      >
+        {n}
+      </span>
+    </span>
+  )
+}
+
 function StarManage() {
   const { role } = useAuth()
   const canEdit = role === 'admin' || role === 'executive'
@@ -46,6 +128,7 @@ function StarManage() {
 
   const [search, setSearch] = useState('')
   const [viewFilter, setViewFilter] = useState('all') // all | ready | has | none | used
+  const [sortBy, setSortBy] = useState('total') // name | total | remain
   const [expanded, setExpanded] = useState(null)
 
   // ✏️ 편집 모드 (선수 단위)
@@ -69,7 +152,7 @@ function StarManage() {
     setExpanded(null)
     setEditMode(false)
     setEditRows({})
-  }, [search, viewFilter])
+  }, [search, viewFilter, sortBy])
 
   async function fetchAll() {
     setLoading(true)
@@ -317,12 +400,25 @@ function StarManage() {
     if (viewFilter === 'none') list = list.filter(p => p.remain === 0)
     if (viewFilter === 'used') list = list.filter(p => p.used > 0)
 
-    return list.sort((a, b) => {
-      if (b.times !== a.times) return b.times - a.times
-      if (b.remain !== a.remain) return b.remain - a.remain
-      if (b.count !== a.count) return b.count - a.count
-      return (a.name || '').localeCompare(b.name || '')
-    })
+    // 정렬
+    if (sortBy === 'name') {
+      list.sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+    } else if (sortBy === 'total') {
+      list.sort((a, b) => {
+        if (b.count !== a.count) return b.count - a.count
+        if (b.remain !== a.remain) return b.remain - a.remain
+        return (a.name || '').localeCompare(b.name || '')
+      })
+    } else if (sortBy === 'remain') {
+      list.sort((a, b) => {
+        if (b.times !== a.times) return b.times - a.times
+        if (b.remain !== a.remain) return b.remain - a.remain
+        if (b.count !== a.count) return b.count - a.count
+        return (a.name || '').localeCompare(b.name || '')
+      })
+    }
+
+    return list
   })()
 
   const inputClass =
@@ -360,8 +456,8 @@ function StarManage() {
       )}
 
       {/* 검색 + 필터 */}
-      <div className="flex gap-2 mb-4">
-        <div className="flex-1 relative">
+      <div className="flex gap-2 mb-4 flex-wrap">
+        <div className="flex-1 relative min-w-[150px]">
           <input
             type="text"
             value={search}
@@ -398,6 +494,28 @@ function StarManage() {
             {showAddForm ? '✕' : '＋ 지급'}
           </button>
         )}
+      </div>
+
+      {/* 정렬 버튼 */}
+      <div className="flex gap-2 mb-4">
+        <span className="text-slate-400 text-sm py-2">정렬:</span>
+        {[
+          { key: 'total', label: '🌟 전체 별 수' },
+          { key: 'remain', label: '⭐ 잔여 별 수' },
+          { key: 'name', label: '🔤 이름순' },
+        ].map(option => (
+          <button
+            key={option.key}
+            onClick={() => setSortBy(option.key)}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              sortBy === option.key
+                ? 'bg-emerald-500 text-white'
+                : 'bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700'
+            }`}
+          >
+            {option.label}
+          </button>
+        ))}
       </div>
 
       {/* 수동 지급 폼 */}
@@ -465,9 +583,15 @@ function StarManage() {
                   <span className="text-slate-600 text-sm font-bold w-6 text-right flex-shrink-0">{idx + 1}</span>
                   <span className="text-white text-base font-bold w-20 flex-shrink-0 truncate">{p.name}</span>
 
-                  {/* ⭐ 잔량 (별 안에 숫자) */}
-                  <span className="flex items-center justify-center flex-shrink-0 w-9">
-                    <StarBadge count={p.remain} size={34} title={`잔량 ${p.remain}개`} />
+                  {/* 전체 별 (진한 노란색) + 잔여 별 (연한 노란색) */}
+                  <span className="flex items-center gap-2 flex-shrink-0">
+                    <span className="flex items-center justify-center w-9">
+                      <DarkStarBadge count={p.count} size={34} title={`전체 별 ${p.count}개`} />
+                    </span>
+                    <span className="text-slate-600">·</span>
+                    <span className="flex items-center justify-center w-9">
+                      <LightStarBadge count={p.remain} size={34} title={`잔여 별 ${p.remain}개`} />
+                    </span>
                   </span>
 
                   {/* 진행 바 */}
