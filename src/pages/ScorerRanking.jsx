@@ -29,9 +29,9 @@ function ScorerRanking() {
   // ✅ 타이틀 자간
   const TITLE_LETTER_SPACING = '1px'
 
-  // ✅ 행 관련 조절 값 (여기 숫자만 바꾸면 간격/크기 조정됨)
-  const ROW_PADDING = '6px 3%'   // 각 행 위아래 여백 (작을수록 줄 간격 좁아짐)
-  const ROW_FONT_SIZE = '16px'   // 행 글자 크기
+  // ✅ 행 관련 조절 값
+  const ROW_PADDING = '8px 3%'   // 각 행 위아래 여백
+  const ROW_FONT_SIZE = '16px'   // 행 기본 글자 크기
   const HEADER_FONT_SIZE = '16px' // 헤더 글자 크기
 
   useEffect(() => {
@@ -195,15 +195,6 @@ function ScorerRanking() {
     })
   }
 
-  // 이름 배열을 3명씩 묶기
-  function chunkNames(names, size = 3) {
-    const rows = []
-    for (let i = 0; i < names.length; i += size) {
-      rows.push(names.slice(i, i + size))
-    }
-    return rows
-  }
-
   const groupedScorers = getGroupedScorers()
 
   const columns = '0.7fr 1.7fr 2.6fr 0.9fr'
@@ -216,13 +207,21 @@ function ScorerRanking() {
     textAlign: 'center',
   }
 
+  // ✅ 득점자 수에 따라 글자 크기 자동 조절
+  function getNameFontSize(nameCount) {
+    if (nameCount <= 3) return '16px'
+    if (nameCount <= 6) return '14px'
+    if (nameCount <= 9) return '13px'
+    return '12px'
+  }
+
   return (
     <div className="w-full">
       {/* 화면 표시용 래퍼 (축소해서 보여주기) */}
       <div ref={wrapperRef} style={{ width: '100%' }}>
         <div style={{
           width: `${CAPTURE_WIDTH}px`,
-          height: `${MIN_HEIGHT}px`,
+          minHeight: `${MIN_HEIGHT}px`,
           transform: `scale(${scale})`,
           transformOrigin: 'top left',
           marginBottom: `${MIN_HEIGHT * (scale - 1)}px`, // 축소된 만큼 아래 공간 보정
@@ -250,7 +249,7 @@ function ScorerRanking() {
                 width: '100%',
                 height: '100%',
                 objectFit: 'cover',
-                objectPosition: 'top center',
+                objectPosition: 'top left',
                 zIndex: 0,
               }}
             />
@@ -266,7 +265,7 @@ function ScorerRanking() {
                 {/* SEASON 타이틀 (고정 크기) */}
                 <div style={{
                   position: 'absolute',
-                  top: '56%',
+                  top: '63%',
                   left: 0,
                   right: 0,
                   textAlign: 'center',
@@ -315,7 +314,10 @@ function ScorerRanking() {
               ) : (
                 groupedScorers.map((group, idx) => {
                   const teamColor = getTeamColor(group.team)
-                  const nameRows = chunkNames(group.names, 3)
+                  const nameCount = group.names.length
+                  const nameFontSize = getNameFontSize(nameCount)
+                  const namesText = group.names.join(', ')
+                  
                   return (
                     <div
                       key={`${group.goals}-${group.team}-${idx}`}
@@ -334,30 +336,16 @@ function ScorerRanking() {
                       <span style={{ ...cellStyle, color: teamColor, fontWeight: '700', textShadow: '1px 1px 4px rgba(0,0,0,1)' }}>{group.team}</span>
                       <span style={{
                         ...cellStyle,
-                        flexDirection: 'column',
                         color: teamColor,
                         fontWeight: '700',
+                        fontSize: nameFontSize,
                         textShadow: '1px 1px 4px rgba(0,0,0,1)',
                         wordBreak: 'keep-all',
-                        lineHeight: 1.3,
-                        letterSpacing: '0.3px',
+                        lineHeight: 1.4,
+                        letterSpacing: '0.2px',
+                        padding: '0 4px',
                       }}>
-                        {nameRows.map((row, rowIdx) => (
-                          <span key={rowIdx} style={{ display: 'block', whiteSpace: 'nowrap' }}>
-                            {row.map((name, nameIdx) => {
-                              const isLastNameOfAll =
-                                rowIdx === nameRows.length - 1 && nameIdx === row.length - 1
-                              return (
-                                <span key={nameIdx} style={{ display: 'inline-block' }}>
-                                  {name}
-                                  {!isLastNameOfAll && (
-                                    <span style={{ display: 'inline-block', width: '0.55em' }}>,</span>
-                                  )}
-                                </span>
-                              )
-                            })}
-                          </span>
-                        ))}
+                        {namesText}
                       </span>
                       <span style={{ ...cellStyle, color: 'white', fontWeight: '600', textShadow: '1px 1px 3px rgba(0,0,0,1)' }}>{group.goals} 골</span>
                     </div>
