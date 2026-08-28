@@ -153,12 +153,26 @@ function PlayerList() {
     }
   }
 
+  // 🔍 인시공/부시공 계정(이름·아이디)에 검색어가 포함되는지 확인
+  function matchAccounts(player, key, q) {
+    const accs = getAccounts(player, key)
+    return accs.some((acc) => {
+      const name = (acc?.name || '').toString().toLowerCase()
+      const id = (acc?.id || '').toString().toLowerCase()
+      return name.includes(q) || id.includes(q)
+    })
+  }
+
   // 필터링
   const filtered = players.filter(p => {
+    const q = search.trim().toLowerCase()
     const matchSearch =
-      p.name?.includes(search) ||
-      p.address?.includes(search) ||
-      p.main_position?.includes(search)
+      !q ||
+      (p.name || '').toLowerCase().includes(q) ||
+      (p.address || '').toLowerCase().includes(q) ||
+      (p.main_position || '').toLowerCase().includes(q) ||
+      matchAccounts(p, 'incheon_accounts', q) ||
+      matchAccounts(p, 'bupyeong_accounts', q)
     const matchActive = showInactive ? true : (p.is_active !== false)
     return matchSearch && matchActive
   })
@@ -254,7 +268,7 @@ function PlayerList() {
       <div className="mb-4">
         <input
           type="text"
-          placeholder="🔍 이름, 주소, 포지션으로 검색..."
+          placeholder="🔍 이름, 주소, 포지션, 인시공/부시공 이름·아이디로 검색..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
