@@ -48,8 +48,9 @@ function CalendarPage() {
   const canEdit = role === 'admin' || role === 'executive'
   // ⚽ 경기 생성 권한: 관리자·임원·주장 (MatchRecord와 동일)
   const canCreateMatch = role === 'admin' || role === 'executive' || role === 'captain'
-  // 👀 전체 내용 열람 권한: 관리자·임원·주장(부주장)
-  const canSeeAll = role === 'admin' || role === 'executive' || role === 'captain'
+  // 👀 전체 내용 열람 권한(미확정 예약·예약자 이름·메모): 관리자·임원만
+  // ※ 주장·부주장(captain)은 정회원(member)과 동일하게 확정된 일정만 보고, 메모는 보지 않습니다.
+  const canSeeAll = role === 'admin' || role === 'executive'
 
   const today = new Date()
   const [year, setYear] = useState(today.getFullYear())
@@ -151,7 +152,7 @@ function CalendarPage() {
     const from = toKey(new Date(year, month - 1, -7))
     const to = toKey(new Date(year, month - 1, lastDay + 7))
 
-    // 일정 조회 (정회원은 확정된 것만)
+    // 일정 조회 (정회원·주장/부주장은 확정된 것만)
     let resQuery = supabase
       .from('reservations')
       .select('*')
@@ -885,7 +886,7 @@ function CalendarPage() {
 
                     {/* 일정 목록 */}
                     {dayRes.map((r, i) => {
-                      // 정회원: 구장 - 시간만 / 그 외: 구장 - 시간 - 예약자
+                      // 정회원·주장/부주장: 구장 - 시간만 / 관리자·임원: 구장 - 시간 - 예약자
                       const text = canSeeAll
                         ? [r.venue, r.time, r.reserver].filter(Boolean).join('-')
                         : [r.venue, r.time].filter(Boolean).join('-')

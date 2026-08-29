@@ -83,9 +83,11 @@ function AccountCard({ idx, acc, accent, showCitizen, clubList, onChange, onRemo
             />
           </div>
 
-          {/* 아이디 */}
+          {/* 아이디 (선택 입력) */}
           <div className="flex-1 min-w-0">
-            <label className="block text-slate-400 text-[11px] font-semibold mb-1.5">🔑 아이디</label>
+            <label className="block text-slate-400 text-[11px] font-semibold mb-1.5">
+              🔑 아이디 <span className="text-slate-500 font-normal">(선택)</span>
+            </label>
             <input
               type="text"
               value={acc.id}
