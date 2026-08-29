@@ -406,7 +406,7 @@ function PlayerList() {
                         >
                           인
                         </span>
-                        <span className={`text-[10px] font-bold tabular-nums ${citizen > 0 ? 'text-emerald-300' : 'text-slate-500'}`}>
+                        <span className="text-[10px] font-bold tabular-nums text-emerald-300">
                           {citizen}/{total}
                         </span>
                       </span>
