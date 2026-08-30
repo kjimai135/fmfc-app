@@ -196,7 +196,7 @@ function usePullToRefresh() {
   return { pullDistance, refreshing, THRESHOLD }
 }
 
-// 🔄 당김 인디케이터 UI
+// 🔄 당기는 인디케이터 UI
 function PullIndicator({ pullDistance, refreshing, threshold }) {
   if (pullDistance <= 0 && !refreshing) return null
 
@@ -270,7 +270,7 @@ function useMyStars(playerId) {
   return stars
 }
 
-// 🌟 진한 노란색 별 배지 (숫자 포함 - 네비용)
+// 🌟 진한 노란색 별 배지 (숫자 포함 - 네비용) — 글자 검정·두껍게
 function DarkStarBadge({ count = 0, size = 24 }) {
   const n = Number(count) || 0
   const digits = String(n).length
@@ -300,7 +300,7 @@ function DarkStarBadge({ count = 0, size = 24 }) {
         className="relative font-black leading-none"
         style={{
           fontSize,
-          color: '#78350f',
+          color: '#000000',
           marginTop: size * 0.06,
         }}
       >
@@ -310,7 +310,7 @@ function DarkStarBadge({ count = 0, size = 24 }) {
   )
 }
 
-// ⭐ 연한 노란색 별 배지 (숫자 포함 - 네비용)
+// ⭐ 연한 노란색 별 배지 (숫자 포함 - 네비용) — 글자 검정·두껍게
 function LightStarBadge({ count = 0, size = 24 }) {
   const n = Number(count) || 0
   const digits = String(n).length
@@ -340,7 +340,7 @@ function LightStarBadge({ count = 0, size = 24 }) {
         className="relative font-black leading-none"
         style={{
           fontSize,
-          color: '#713f12',
+          color: '#000000',
           marginTop: size * 0.06,
         }}
       >
@@ -349,7 +349,6 @@ function LightStarBadge({ count = 0, size = 24 }) {
     </span>
   )
 }
-
 // 실제 앱 내용 (로그인한 사용자만 여기 도달)
 function AppContent() {
   const [menuOpen, setMenuOpen] = useState(false)
@@ -524,7 +523,7 @@ function AppContent() {
             <Route path="/roster" element={<Protected allowed={['admin', 'executive', 'captain', 'member']}><TeamRoster /></Protected>} />
 
             <Route path="/polls" element={<Protected allowed={['admin', 'executive', 'captain', 'member']}><PollList /></Protected>} />
-            <Route path="/polls/new" element={<Protected allowed={['admin', 'executive', 'captain', 'member']}><PollCreate /></Protected>} />
+            <Route path="/polls/new" element={<Protected allowed={['admin', 'executive']}><PollCreate /></Protected>} />
             <Route path="/polls/:id" element={<Protected allowed={['admin', 'executive', 'captain', 'member']}><PollVote /></Protected>} />
 
             <Route path="/matches" element={<Protected allowed={['admin', 'executive', 'captain', 'member']}><MatchRecord /></Protected>} />
