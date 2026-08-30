@@ -368,14 +368,6 @@ function AttendanceStats() {
     }
   }
 
-  // 평균 참석률 (리그 기준만 의미 있음)
-  const avgRate = stats.length > 0
-    ? Math.round(stats.reduce((sum, s) => sum + s.leagueRate, 0) / stats.length)
-    : 0
-
-  // 챔스 출석 인원
-  const champsAttendCount = stats.filter(s => s.champsPresent).length
-
   const popupRecords = popupPlayer
     ? allAttendance
         .filter(a => a.player_id === popupPlayer.id && ['출석', '늦참', '조퇴'].includes(a.status))
@@ -447,18 +439,25 @@ function AttendanceStats() {
                         key={player.id}
                         onClick={champsView ? undefined : (e) => handleRateClick(e, player)}
                         role={champsView ? undefined : 'button'}
-                        className={`w-full flex items-center bg-slate-800/50 rounded-lg px-2 py-2 transition-colors ${
+                        className={`w-full flex items-center rounded-lg px-2 py-2 transition-colors border ${
+                          isMe
+                            ? 'bg-emerald-500/20 border-emerald-400 shadow-md shadow-emerald-500/20'
+                            : 'bg-slate-800/50 border-transparent'
+                        } ${
                           champsView ? '' : 'hover:bg-slate-700/60 cursor-pointer'
                         } ${
-                          isOpen ? 'ring-1 ring-emerald-500' : isMe ? 'ring-1 ring-sky-400/60' : ''
+                          isOpen ? 'ring-1 ring-emerald-500' : ''
                         }`}
                         title={champsView ? '' : '클릭하면 상세 기록 보기'}
                       >
                         <span style={{ width: '30px', flexShrink: 0 }} aria-hidden="true"></span>
 
                         <span
-                          className="flex-1 min-w-0 text-sm font-medium text-center truncate px-0.5"
-                          style={{ color: section.color, opacity: champsView && !player.champsPresent ? 0.5 : 1 }}
+                          className={`flex-1 min-w-0 text-sm text-center truncate px-0.5 ${isMe ? 'font-extrabold' : 'font-medium'}`}
+                          style={{
+                            color: isMe ? '#6ee7b7' : section.color,
+                            opacity: champsView && !player.champsPresent ? 0.5 : 1,
+                          }}
                         >
                           {player.name}
                         </span>
@@ -629,45 +628,6 @@ function AttendanceStats() {
 
       {/* 스와이프/드래그 힌트 */}
       <p className="text-slate-500 text-xs text-center mb-3">← 좌우로 넘기거나 드래그해서 전환 →</p>
-
-      {/* 요약 카드 */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
-        <div className="bg-slate-800 border border-slate-700 rounded-xl p-4 text-center">
-          <p className="text-2xl font-bold text-white">{stats.length}</p>
-          <p className="text-slate-400 text-sm">전체 선수</p>
-        </div>
-        <div className="bg-slate-800 border border-slate-700 rounded-xl p-4 text-center">
-          <p className="text-2xl font-bold" style={{ color: isChampsView ? '#f59e0b' : '#34d399' }}>
-            {totalGames}
-          </p>
-          <p className="text-slate-400 text-sm">{isChampsView ? '챔스 경기' : '리그 경기'}</p>
-        </div>
-        {isChampsView ? (
-          <>
-            <div className="bg-slate-800 border border-slate-700 rounded-xl p-4 text-center">
-              <p className="text-2xl font-bold text-emerald-400">{champsAttendCount}</p>
-              <p className="text-slate-400 text-sm">출석</p>
-            </div>
-            <div className="bg-slate-800 border border-slate-700 rounded-xl p-4 text-center">
-              <p className="text-2xl font-bold text-slate-500">{stats.length - champsAttendCount}</p>
-              <p className="text-slate-400 text-sm">불참</p>
-            </div>
-          </>
-        ) : (
-          <>
-            <div className="bg-slate-800 border border-slate-700 rounded-xl p-4 text-center">
-              <p className="text-2xl font-bold text-blue-400">{avgRate}%</p>
-              <p className="text-slate-400 text-sm">평균 참석률</p>
-            </div>
-            <div className="bg-slate-800 border border-slate-700 rounded-xl p-4 text-center">
-              <p className="text-2xl font-bold text-yellow-400">
-                {stats.filter(s => s.leagueRate >= 50).length}
-              </p>
-              <p className="text-slate-400 text-sm">50% 이상</p>
-            </div>
-          </>
-        )}
-      </div>
 
       {/* ✅ 정렬 버튼 */}
       <div className="flex gap-2 mb-4">
