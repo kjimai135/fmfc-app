@@ -18,7 +18,7 @@ function PollVote() {
   const [teams, setTeams] = useState([])
   const [loading, setLoading] = useState(false)
 
-  // 🗳️ 투표 모달 대상 선수
+  // 🗳️ 투표 모달 대상 선수 (다른 선수 대리 투표용)
   const [modalPlayer, setModalPlayer] = useState(null)
 
   useEffect(() => {
@@ -61,7 +61,7 @@ function PollVote() {
     return false
   }
 
-  // 🗳️ 투표하기 (모달에서 상태 선택 → 즉시 저장)
+  // 🗳️ 투표하기 (모달 또는 상단 "내 투표" 카드에서 호출)
   async function handleVote(player, response) {
     if (!player) return
     if (!canEditPlayer(player)) {
@@ -111,8 +111,13 @@ function PollVote() {
     fetchResponses()
   }
 
-  // 이름 클릭 → 권한 있으면 모달, 없으면 안내
+  // 이름 클릭 → 다른 선수는 권한 있으면 모달, 본인은 상단 카드 이용 안내
   function onClickPlayer(player) {
+    const isMe = myPlayerId && player.id === myPlayerId
+    if (isMe) {
+      // 본인은 상단 "내 투표" 카드에서만 변경 가능
+      return
+    }
     if (!canEditPlayer(player)) {
       alert('본인의 참석 여부만 변경할 수 있습니다.\n(전체 수정은 관리자·임원·주장만 가능)')
       return
@@ -143,7 +148,7 @@ function PollVote() {
     '불참': '#ef4444', // 빨강
   }
 
-  // 모달 상태 선택 버튼 정의
+  // 투표 상태 선택 버튼 정의 (모달 + 상단 카드 공용)
   const voteOptions = [
     { key: '참석', emoji: '✅', base: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30', active: 'bg-emerald-500 text-white border-emerald-400' },
     { key: '불참', emoji: '❌', base: 'bg-red-500/15 text-red-300 border-red-500/30', active: 'bg-red-500 text-white border-red-400' },
@@ -190,6 +195,10 @@ function PollVote() {
 
   // 모달 대상 선수의 현재 투표 상태
   const modalCurrentResponse = modalPlayer ? getPlayerResponse(modalPlayer.id) : null
+
+  // 🙋 내 선수 정보 + 현재 투표 상태
+  const myPlayer = myPlayerId ? players.find(p => p.id === myPlayerId) : null
+  const myResponse = myPlayer ? getPlayerResponse(myPlayer.id) : null
 
   // 🔽 선수 목록을 [참석예정(참석/조퇴/늦참) / 미투표·불참]으로 분리
   function splitByAvailability(list) {
@@ -239,20 +248,22 @@ function PollVote() {
     )
   }
 
-  // 선수 한 줄(행) 렌더링 — 이름 가운데, 램프 오른쪽 (본인은 칸 강조)
+  // 선수 한 줄(행) 렌더링 — 이름 가운데, 램프 오른쪽 (본인은 칸 강조 + 클릭 비활성)
   function renderPlayerRow(player, nameColor) {
     const resp = getPlayerResponse(player.id)
-    const editable = canEditPlayer(player)
     const isMe = myPlayerId && player.id === myPlayerId
+    // 본인은 아래 목록에서 클릭 불가(상단 "내 투표" 카드 이용), 그 외엔 기존 권한 로직 사용
+    const editable = !isMe && canEditPlayer(player)
 
     return (
       <button
         key={player.id}
         onClick={() => onClickPlayer(player)}
+        disabled={isMe}
         className={`w-full flex items-center gap-1.5 rounded-lg px-3 py-2 transition-colors ${
           editable ? 'bg-slate-800/50 hover:bg-slate-700 cursor-pointer' : 'bg-slate-800/30 cursor-default'
         } ${isMe ? 'ring-1 ring-emerald-500/50' : ''}`}
-        title={editable ? '클릭하여 참석 여부 선택' : '본인 것만 변경 가능'}
+        title={isMe ? '내 투표는 위 "내 투표" 카드에서 변경하세요' : editable ? '클릭하여 참석 여부 선택' : '본인 것만 변경 가능'}
       >
         {/* 램프 폭만큼 왼쪽 여백 (이름이 정확히 가운데 오도록) */}
         <span style={{ width: '14px', flexShrink: 0 }} aria-hidden="true"></span>
@@ -262,7 +273,7 @@ function PollVote() {
           className="flex-1 min-w-0 text-sm font-medium flex items-center justify-center"
           style={{ color: nameColor }}
         >
-          <span className="truncate">{player.name}</span>
+          <span className="truncate">{player.name}{isMe ? ' (나)' : ''}</span>
         </span>
 
         {/* 💡 상태 램프 (오른쪽) */}
@@ -299,12 +310,53 @@ function PollVote() {
         </div>
       </div>
 
+      {/* 🙋 내 투표 (맨 위, 새로 생성/변경) */}
+      {myPlayer ? (
+        <div className="bg-slate-800 border border-emerald-500/40 rounded-2xl p-5 mb-6">
+          <p className="text-slate-400 text-sm mb-1">🙋 내 투표</p>
+          <p className="text-white text-xl font-bold">{myPlayer.name}</p>
+          <p className="text-slate-400 text-sm mb-4">{myPlayer.current_team || '팀 미배정'}</p>
+
+          <div className="grid grid-cols-4 gap-2 mb-3">
+            {voteOptions.map(opt => {
+              const isActive = myResponse === opt.key
+              return (
+                <button
+                  key={opt.key}
+                  onClick={() => handleVote(myPlayer, opt.key)}
+                  disabled={loading}
+                  className={`py-4 rounded-xl font-bold text-sm border transition-colors disabled:opacity-50 ${
+                    isActive ? opt.active : opt.base
+                  }`}
+                >
+                  {opt.emoji}<br />{opt.key}
+                </button>
+              )
+            })}
+          </div>
+
+          {myResponse && (
+            <button
+              onClick={() => handleCancelVote(myPlayer)}
+              disabled={loading}
+              className="w-full bg-slate-700 hover:bg-slate-600 text-slate-200 py-2.5 rounded-xl text-sm font-medium transition-colors disabled:opacity-50"
+            >
+              ⬜ 투표 취소 (미투표로)
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="bg-sky-500/10 border border-sky-500/30 rounded-xl px-4 py-3 mb-6 text-sky-200 text-sm text-center">
+          👤 계정에 연결된 선수 정보가 없어 본인 투표를 할 수 없습니다. 관리자에게 문의해주세요.
+        </div>
+      )}
+
       {/* 안내 문구 */}
       <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl px-4 py-3 mb-4 text-emerald-200 text-sm">
         {canEditAll ? (
-          <>👑 관리자·임원·주장은 <b>모든 선수</b>의 참석 여부를 변경할 수 있습니다.</>
+          <>👑 관리자·임원·주장은 아래 목록에서 <b>다른 선수</b>의 참석 여부도 변경할 수 있습니다. (본인 것은 위 "내 투표"에서 변경)</>
         ) : (
-          <>👇 <b>본인 이름</b>을 클릭하면 참석 여부를 선택할 수 있습니다. (본인 것만 변경 가능)</>
+          <>👇 아래는 전체 <b>참석 현황</b>입니다. 본인 투표는 위 "내 투표"에서 변경해주세요.</>
         )}
       </div>
 
@@ -408,7 +460,7 @@ function PollVote() {
         </div>
       </div>
 
-      {/* 🗳️ 투표 선택 모달 */}
+      {/* 🗳️ 투표 선택 모달 (다른 선수 대리 투표용) */}
       {modalPlayer && (
         <div
           onClick={() => !loading && setModalPlayer(null)}
