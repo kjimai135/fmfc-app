@@ -248,7 +248,7 @@ function PollVote() {
     )
   }
 
-  // 선수 한 줄(행) 렌더링 — 이름 가운데, 램프 오른쪽 (본인은 칸 강조 + 클릭 비활성)
+  // 선수 한 줄(행) 렌더링 — 이름 가운데, 램프 오른쪽 (본인은 눈에 띄게 강조 + 클릭 비활성)
   function renderPlayerRow(player, nameColor) {
     const resp = getPlayerResponse(player.id)
     const isMe = myPlayerId && player.id === myPlayerId
@@ -260,9 +260,13 @@ function PollVote() {
         key={player.id}
         onClick={() => onClickPlayer(player)}
         disabled={isMe}
-        className={`w-full flex items-center gap-1.5 rounded-lg px-3 py-2 transition-colors ${
-          editable ? 'bg-slate-800/50 hover:bg-slate-700 cursor-pointer' : 'bg-slate-800/30 cursor-default'
-        } ${isMe ? 'ring-1 ring-emerald-500/50' : ''}`}
+        className={`w-full flex items-center gap-1.5 rounded-lg px-3 py-2 transition-colors border ${
+          isMe
+            ? 'bg-emerald-500/20 border-emerald-400 shadow-md shadow-emerald-500/20'
+            : editable
+            ? 'bg-slate-800/50 hover:bg-slate-700 cursor-pointer border-transparent'
+            : 'bg-slate-800/30 cursor-default border-transparent'
+        }`}
         title={isMe ? '내 투표는 위 "내 투표" 카드에서 변경하세요' : editable ? '클릭하여 참석 여부 선택' : '본인 것만 변경 가능'}
       >
         {/* 램프 폭만큼 왼쪽 여백 (이름이 정확히 가운데 오도록) */}
@@ -270,10 +274,10 @@ function PollVote() {
 
         {/* 이름 (가운데) */}
         <span
-          className="flex-1 min-w-0 text-sm font-medium flex items-center justify-center"
-          style={{ color: nameColor }}
+          className={`flex-1 min-w-0 text-sm flex items-center justify-center ${isMe ? 'font-extrabold' : 'font-medium'}`}
+          style={{ color: isMe ? '#6ee7b7' : nameColor }}
         >
-          <span className="truncate">{player.name}{isMe ? ' (나)' : ''}</span>
+          <span className="truncate">{player.name}</span>
         </span>
 
         {/* 💡 상태 램프 (오른쪽) */}
