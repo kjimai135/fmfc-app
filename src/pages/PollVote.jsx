@@ -274,7 +274,7 @@ function PollVote() {
 
         {/* 이름 (가운데) */}
         <span
-          className={`flex-1 min-w-0 text-sm flex items-center justify-center ${isMe ? 'font-extrabold' : 'font-medium'}`}
+          className={`flex-1 min-w-0 text-sm flex items-center justify-center text-center ${isMe ? 'font-extrabold' : 'font-medium'}`}
           style={{ color: isMe ? '#6ee7b7' : nameColor }}
         >
           <span className="truncate">{player.name}</span>
@@ -314,12 +314,12 @@ function PollVote() {
         </div>
       </div>
 
-      {/* 🙋 내 투표 (맨 위, 새로 생성/변경) */}
+      {/* 🙋 내 투표 (맨 위, 새로 생성/변경) — 이름/팀 가운데 정렬 */}
       {myPlayer ? (
         <div className="bg-slate-800 border border-emerald-500/40 rounded-2xl p-5 mb-6">
-          <p className="text-slate-400 text-sm mb-1">🙋 내 투표</p>
-          <p className="text-white text-xl font-bold">{myPlayer.name}</p>
-          <p className="text-slate-400 text-sm mb-4">{myPlayer.current_team || '팀 미배정'}</p>
+          <p className="text-slate-400 text-sm mb-1 text-center">🙋 내 투표</p>
+          <p className="text-white text-xl font-bold text-center">{myPlayer.name}</p>
+          <p className="text-slate-400 text-sm mb-4 text-center">{myPlayer.current_team || '팀 미배정'}</p>
 
           <div className="grid grid-cols-4 gap-2 mb-3">
             {voteOptions.map(opt => {
@@ -364,11 +364,11 @@ function PollVote() {
         )}
       </div>
 
-      {/* (빈 공백) 예전 램프 범례 자리 */}
-      <div style={{ height: '24px', width: '100%' }} aria-hidden="true"></div>
+      {/* 👥 팀별 명단 (팀 3개 + 미배정 = 가로 4칸) — 제목 가운데 정렬 */}
+      <h2 className="text-xl font-bold text-white mb-4 text-center">👥 팀별 현황</h2>
 
-      {/* 📊 전체 요약 */}
-      <div className="grid grid-cols-5 gap-3 mb-6">
+      {/* 📊 전체 요약 (팀별 현황 헤더 바로 아래로 이동) */}
+      <div className="grid grid-cols-5 gap-3 mb-4">
         <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-4 text-center">
           <p className="text-3xl font-bold text-emerald-400">{totalStats.참석}</p>
           <p className="text-slate-400 text-sm">참석</p>
@@ -392,8 +392,6 @@ function PollVote() {
         </div>
       </div>
 
-      {/* 👥 팀별 명단 (팀 3개 + 미배정 = 가로 4칸) */}
-      <h2 className="text-xl font-bold text-white mb-4">👥 팀별 현황</h2>
       <div className="grid grid-cols-4 gap-3">
         {teams.map(team => {
           const teamColor = team.color || '#1d4ed8'
