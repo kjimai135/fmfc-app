@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { useAuth } from '../contexts/AuthContext'
 
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토']
 
@@ -8,6 +9,10 @@ const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토']
 const PAST_KEEP = 4
 
 function PollList() {
+  const { role } = useAuth()
+  // 🔑 투표 생성(자동/수동) 권한: 관리자·임원만
+  const canManagePolls = role === 'admin' || role === 'executive'
+
   const [polls, setPolls] = useState([])
   const [loading, setLoading] = useState(true)
   const [generating, setGenerating] = useState(false)
@@ -60,6 +65,7 @@ function PollList() {
 
   // 📅 경기 스케쥴(확정=노란색)에 맞춰 투표 자동 생성
   async function generateFromSchedule() {
+    if (!canManagePolls) return // 🔒 관리자·임원만
     if (generating) return
     setGenerating(true)
 
@@ -350,20 +356,24 @@ function PollList() {
             >
               🗳️ 투표
             </Link>
-            <button
-              onClick={() => startEdit(poll)}
-              title="수정"
-              className="bg-slate-700 hover:bg-slate-600 text-slate-200 px-3 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap"
-            >
-              ✏️ 수정
-            </button>
-            <button
-              onClick={() => deletePoll(poll.id)}
-              title="삭제"
-              className="bg-red-500/10 hover:bg-red-500/20 text-red-400 px-2.5 py-2 rounded-lg text-sm transition-colors"
-            >
-              🗑️
-            </button>
+            {canManagePolls && (
+              <button
+                onClick={() => startEdit(poll)}
+                title="수정"
+                className="bg-slate-700 hover:bg-slate-600 text-slate-200 px-3 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap"
+              >
+                ✏️ 수정
+              </button>
+            )}
+            {canManagePolls && (
+              <button
+                onClick={() => deletePoll(poll.id)}
+                title="삭제"
+                className="bg-red-500/10 hover:bg-red-500/20 text-red-400 px-2.5 py-2 rounded-lg text-sm transition-colors"
+              >
+                🗑️
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -382,22 +392,25 @@ function PollList() {
             예정 <span className="text-emerald-400 font-semibold">{upcomingPolls.length}</span>개 · 지난 경기 <span className="text-slate-300 font-semibold">{pastPolls.length}</span>개
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <button
-            onClick={generateFromSchedule}
-            disabled={generating}
-            title="오늘부터 2주 이내에 확정(노란색)된 경기 스케쥴로 투표를 자동 생성합니다"
-            className="flex items-center gap-1.5 bg-yellow-500 hover:bg-yellow-400 text-slate-900 px-5 py-3 rounded-xl font-bold transition-colors disabled:opacity-50 shadow-lg shadow-yellow-500/20"
-          >
-            {generating ? '⏳ 생성 중...' : '📅 자동투표생성'}
-          </button>
-          <Link
-            to="/polls/new"
-            className="flex items-center gap-1.5 bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-3 rounded-xl font-semibold transition-colors shadow-lg shadow-emerald-500/20"
-          >
-            📅수동투표생성
-          </Link>
-        </div>
+        {/* 🔑 투표 생성 버튼: 관리자·임원만 */}
+        {canManagePolls && (
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={generateFromSchedule}
+              disabled={generating}
+              title="오늘부터 2주 이내에 확정(노란색)된 경기 스케쥴로 투표를 자동 생성합니다"
+              className="flex items-center gap-1.5 bg-yellow-500 hover:bg-yellow-400 text-slate-900 px-5 py-3 rounded-xl font-bold transition-colors disabled:opacity-50 shadow-lg shadow-yellow-500/20"
+            >
+              {generating ? '⏳ 생성 중...' : '📅 자동투표생성'}
+            </button>
+            <Link
+              to="/polls/new"
+              className="flex items-center gap-1.5 bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-3 rounded-xl font-semibold transition-colors shadow-lg shadow-emerald-500/20"
+            >
+              📅수동투표생성
+            </Link>
+          </div>
+        )}
       </div>
 
       {loading ? (
@@ -408,7 +421,9 @@ function PollList() {
         <div className="text-center py-20 text-slate-400 bg-slate-800/40 border border-dashed border-slate-700 rounded-2xl">
           <p className="text-5xl mb-4">🗳️</p>
           <p className="text-xl text-white font-semibold">등록된 경기가 없습니다</p>
-          <p className="mt-2 text-sm">"수동투표생성" 또는 "📅 자동투표생성" 버튼을 눌러보세요!</p>
+          {canManagePolls && (
+            <p className="mt-2 text-sm">"수동투표생성" 또는 "📅 자동투표생성" 버튼을 눌러보세요!</p>
+          )}
         </div>
       ) : (
         <>

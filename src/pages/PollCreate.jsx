@@ -1,9 +1,14 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { useAuth } from '../contexts/AuthContext'
 
 function PollCreate() {
   const navigate = useNavigate()
+  const { role } = useAuth()
+  // 🔑 수동 투표 생성 권한: 관리자·임원만
+  const canManagePolls = role === 'admin' || role === 'executive'
+
   const [gameDate, setGameDate] = useState('')
   const [gameTime, setGameTime] = useState('')
   const [location, setLocation] = useState('')
@@ -11,6 +16,7 @@ function PollCreate() {
 
   async function handleSubmit(e) {
     e.preventDefault()
+    if (!canManagePolls) return // 🔒 이중 차단
 
     if (!gameDate) {
       alert('경기 날짜를 선택해주세요!')
@@ -34,6 +40,23 @@ function PollCreate() {
     } else {
       navigate('/polls')
     }
+  }
+
+  // 🔒 권한 없는 사용자는 접근 차단
+  if (!canManagePolls) {
+    return (
+      <div className="max-w-xl mx-auto text-center py-20">
+        <p className="text-5xl mb-4">🔒</p>
+        <h2 className="text-xl font-bold text-white mb-2">접근 권한이 없습니다</h2>
+        <p className="text-slate-400 mb-6">투표 생성은 관리자·임원만 가능합니다.</p>
+        <button
+          onClick={() => navigate('/polls')}
+          className="bg-slate-700 hover:bg-slate-600 text-white px-6 py-3 rounded-xl font-semibold transition-colors"
+        >
+          ↩️ 투표 목록으로
+        </button>
+      </div>
+    )
   }
 
   const inputStyle = "w-full bg-slate-700 border border-slate-600 rounded-xl px-4 py-3 text-white placeholder-slate-400 focus:outline-none focus:border-emerald-500"
