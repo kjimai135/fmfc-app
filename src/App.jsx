@@ -337,15 +337,17 @@ function LightStarBadge({ count = 0, size = 24 }) {
         />
       </svg>
       <span
-        className="relative font-black leading-none"
-        style={{
-          fontSize,
-          color: '#000000',
-          marginTop: size * 0.06,
-        }}
-      >
-        {n}
-      </span>
+  className="relative font-black leading-none"
+  style={{
+    fontSize,
+    color: '#000000',
+    marginTop: size * 0.06,
+    forcedColorAdjust: 'none',
+    WebkitForcedColorAdjust: 'none',
+  }}
+>
+  {n}
+</span>
     </span>
   )
 }
