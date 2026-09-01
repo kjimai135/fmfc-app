@@ -131,6 +131,32 @@ function AttendanceCheck() {
     setLoading(false)
   }
 
+  // 출석 취소 (본인 전용)
+  async function cancelAttendance(player) {
+    if (!player) return
+
+    const confirmCancel = window.confirm(`${player.name}님의 출석을 취소하시겠습니까?`)
+    if (!confirmCancel) return
+
+    setLoading(true)
+
+    const { error } = await supabase
+      .from('attendance')
+      .delete()
+      .eq('player_id', player.id)
+      .eq('game_date', today)
+
+    if (error) {
+      alert('취소 중 오류가 발생했습니다: ' + error.message)
+    } else {
+      setMessage(`${player.name}님 출석이 취소되었습니다.`)
+      setMyPickup(false)
+      await fetchTodayCount()
+      setTimeout(() => setMessage(''), 3000)
+    }
+    setLoading(false)
+  }
+
   const iAmChecked = myPlayer && todayChecked.includes(myPlayer.id)
 
   const filteredPlayers = players.filter(
@@ -187,7 +213,14 @@ function AttendanceCheck() {
               {iAmChecked ? (
                 <div className="bg-emerald-500/15 border border-emerald-500/40 rounded-2xl py-6 text-center">
                   <p className="text-4xl mb-2">🎉</p>
-                  <p className="text-emerald-400 font-bold text-lg">오늘 출석 완료!</p>
+                  <p className="text-emerald-400 font-bold text-lg mb-4">오늘 출석 완료!</p>
+                  <button
+                    onClick={() => cancelAttendance(myPlayer)}
+                    disabled={loading}
+                    className="bg-red-500/80 hover:bg-red-500 disabled:opacity-30 text-white px-6 py-2.5 rounded-xl font-semibold text-sm transition-colors"
+                  >
+                    ❌ 출석 취소
+                  </button>
                 </div>
               ) : (
                 <>
