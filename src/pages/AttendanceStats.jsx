@@ -138,11 +138,13 @@ function AttendanceStats() {
     }
   }, [])
 
-  // 👆 iOS 사파리 대응: 네이티브 이벤트 리스너를 non-passive로 직접 등록
+  // 👆 터치 스와이프: 네이티브 이벤트 리스너를 non-passive로 직접 등록
   //    (React 합성 이벤트의 touchmove는 기본 passive라 preventDefault가 씹히는 경우가 있음)
-  const HORIZONTAL_DECIDE_PX = 6   // 이 정도만 가로로 움직여도 "가로 스와이프"로 빠르게 확정
-  const VERTICAL_DECIDE_PX = 6     // 이 정도 세로로 움직이면 "세로 스크롤"로 확정 (더 이상 개입 안 함)
-  const SWIPE_COMPLETE_PX = 35     // 짧게 스와이프해도 탭이 넘어가도록 임계값 완화
+  //    ⚠️ loading이 끝나야 스와이프 영역(div)이 실제로 렌더링되므로,
+  //       loading을 의존성에 넣어 데이터 로딩 완료 후 다시 el을 찾아 리스너를 등록합니다.
+  const HORIZONTAL_DECIDE_PX = 8   // 가로로 이 정도 움직이면 "가로 스와이프"로 확정
+  const VERTICAL_DECIDE_PX = 8     // 세로로 이 정도 움직이면 "세로 스크롤"로 확정 (더 이상 개입 안 함)
+  const SWIPE_COMPLETE_PX = 40     // 스와이프 완료로 인정하는 최소 이동 거리
 
   useEffect(() => {
     const el = swipeAreaRef.current
@@ -206,7 +208,7 @@ function AttendanceStats() {
     }
 
     el.addEventListener('touchstart', onTouchStart, { passive: true })
-    el.addEventListener('touchmove', onTouchMove, { passive: false }) // ⚠️ non-passive 필수
+    el.addEventListener('touchmove', onTouchMove, { passive: false }) // ⚠️ non-passive 필수 (iOS 대응)
     el.addEventListener('touchend', onTouchEnd, { passive: true })
     el.addEventListener('touchcancel', onTouchEnd, { passive: true })
 
@@ -216,7 +218,7 @@ function AttendanceStats() {
       el.removeEventListener('touchend', onTouchEnd)
       el.removeEventListener('touchcancel', onTouchEnd)
     }
-  }, [])
+  }, [loading]) // ✅ 로딩이 끝나 스와이프 div가 실제로 나타난 뒤에 다시 등록되도록 함
 
   async function fetchStats() {
     setLoading(true)
