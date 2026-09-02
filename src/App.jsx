@@ -128,7 +128,9 @@ function HomeRedirect() {
 }
 
 // 🔄 아래로 당겨서 새로고침 (Pull to Refresh)
-// ⚠️ 좌우 스와이프(가로 제스처)와 충돌하지 않도록, 가로 움직임이 감지되면 즉시 취소합니다.
+// ⚠️ 좌우 스와이프(가로 제스처)와 충돌하지 않도록,
+//    1) 가로 움직임이 감지되면 즉시 취소
+//    2) 화면에 data-swipe-view="true" 속성이 있으면 아예 동작하지 않음 (AttendanceStats 등)
 function usePullToRefresh() {
   const [pullDistance, setPullDistance] = useState(0)
   const [refreshing, setRefreshing] = useState(false)
@@ -142,7 +144,16 @@ function usePullToRefresh() {
   const HORIZONTAL_CANCEL_PX = 12 // 이 이상 가로로 움직이면 "가로 스와이프"로 판단해 취소
 
   useEffect(() => {
+    function isSwipeViewActive() {
+      return document.body.getAttribute('data-swipe-view') === 'true'
+    }
+
     function onTouchStart(e) {
+      // 🚫 자체 좌우 스와이프 화면(출석율 등)에서는 당겨서 새로고침을 아예 시작하지 않음
+      if (isSwipeViewActive()) {
+        pulling.current = false
+        return
+      }
       // 페이지 맨 위에서만 시작
       if (window.scrollY > 0) {
         pulling.current = false
@@ -156,6 +167,11 @@ function usePullToRefresh() {
 
     function onTouchMove(e) {
       if (!pulling.current || startY.current === null || refreshing) return
+      if (isSwipeViewActive()) {
+        pulling.current = false
+        setPullDistance(0)
+        return
+      }
       // 스크롤이 내려가면 취소
       if (window.scrollY > 0) {
         pulling.current = false

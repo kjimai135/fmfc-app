@@ -125,6 +125,8 @@ function AttendanceStats() {
   }, [])
 
   // 🚫 안드로이드 크롬의 "가장자리 스와이프로 뒤로가기" 제스처와 충돌 방지
+  // 🚫 이 화면에 있는 동안 App.jsx의 "당겨서 새로고침"과도 충돌하지 않도록
+  //    data-no-pull 속성을 body에 표시해 App.jsx 쪽에서 감지하도록 함
   useEffect(() => {
     const html = document.documentElement
     const body = document.body
@@ -132,9 +134,11 @@ function AttendanceStats() {
     const prevBody = body.style.overscrollBehaviorX
     html.style.overscrollBehaviorX = 'contain'
     body.style.overscrollBehaviorX = 'contain'
+    body.setAttribute('data-swipe-view', 'true')
     return () => {
       html.style.overscrollBehaviorX = prevHtml
       body.style.overscrollBehaviorX = prevBody
+      body.removeAttribute('data-swipe-view')
     }
   }, [])
 
@@ -142,9 +146,9 @@ function AttendanceStats() {
   //    (React 합성 이벤트의 touchmove는 기본 passive라 preventDefault가 씹히는 경우가 있음)
   //    ⚠️ loading이 끝나야 스와이프 영역(div)이 실제로 렌더링되므로,
   //       loading을 의존성에 넣어 데이터 로딩 완료 후 다시 el을 찾아 리스너를 등록합니다.
-  const HORIZONTAL_DECIDE_PX = 8   // 가로로 이 정도 움직이면 "가로 스와이프"로 확정
-  const VERTICAL_DECIDE_PX = 8     // 세로로 이 정도 움직이면 "세로 스크롤"로 확정 (더 이상 개입 안 함)
-  const SWIPE_COMPLETE_PX = 40     // 스와이프 완료로 인정하는 최소 이동 거리
+  const HORIZONTAL_DECIDE_PX = 4   // 가로로 이 정도만 움직여도 "가로 스와이프"로 빠르게 확정 (민감도↑)
+  const VERTICAL_DECIDE_PX = 6     // 세로로 이 정도 움직이면 "세로 스크롤"로 확정 (더 이상 개입 안 함)
+  const SWIPE_COMPLETE_PX = 24     // 짧게 스와이프해도 탭이 넘어가도록 임계값 완화 (민감도↑)
 
   useEffect(() => {
     const el = swipeAreaRef.current
