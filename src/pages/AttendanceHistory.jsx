@@ -456,8 +456,9 @@ function AttendanceHistory() {
                 <table className="w-full text-left">
                   <thead>
                     <tr className="border-b border-slate-700">
-                      <th className="px-4 py-2 text-slate-400 text-sm w-16">순서</th>
+                      <th className="pl-7 pr-4 py-2 text-slate-400 text-sm w-16">순서</th>
                       <th className="px-4 py-2 text-slate-400 text-sm">이름</th>
+                      <th className="px-2 py-2 text-slate-400 text-sm text-center w-10">픽</th>
                       <th className="px-4 py-2 text-slate-400 text-sm">상태</th>
                       <th className="px-4 py-2 text-slate-400 text-sm">시간</th>
                       {canEdit && (
@@ -477,21 +478,19 @@ function AttendanceHistory() {
                           } ${isMoving ? 'opacity-50' : ''}`}
                           style={isMe ? { boxShadow: 'inset 0 0 0 1px rgba(56,189,248,0.6)' } : undefined}
                         >
-                          <td className="px-4 py-2 text-emerald-400 font-bold">{idx + 1}</td>
-                          <td className="px-4 py-2 font-medium" style={{ color: teamColor }}>
-                            <span className="inline-flex items-center gap-1.5">
-                              {record.player_name}
-                              {record.is_pickup && (
-                                <span
-                                  className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40"
-                                  title="픽업한 선수 (1시간 일찍 온 것으로 순서 반영)"
-                                >
-                                  🚗 픽업
-                                </span>
-                              )}
-                            </span>
+                          <td className="pl-7 pr-4 py-10 text-emerald-400 font-bold">{idx + 1}</td>
+                          <td className="px-4 py-10 font-medium" style={{ color: teamColor }}>{record.player_name}</td>
+                          <td className="px-2 py-10 text-center">
+                            {record.is_pickup && (
+                              <span
+                                className="inline-flex items-center justify-center w-6 h-6 rounded-full text-[11px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40"
+                                title="픽업한 선수 (1시간 일찍 온 것으로 순서 반영)"
+                              >
+                                픽
+                              </span>
+                            )}
                           </td>
-                          <td className="px-4 py-2">
+                          <td className="px-4 py-10">
                             {canEdit ? (
                               <select
                                 value={record.status}
@@ -508,11 +507,11 @@ function AttendanceHistory() {
                               </span>
                             )}
                           </td>
-                          <td className="px-4 py-2 text-slate-400 text-sm">
+                          <td className="px-4 py-10 text-slate-400 text-sm">
                             {record.checked_at ? new Date(record.checked_at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }) : '-'}
                           </td>
                           {canEdit && (
-                            <td className="px-4 py-2">
+                            <td className="px-4 py-10">
                               <div className="flex items-center justify-center gap-1">
                                 {/* 🔼 위로 */}
                                 <button

@@ -2,9 +2,6 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 
-// 🚗 픽업 시 앞당겨지는 시간 (밀리초)
-const PICKUP_BONUS_MS = 60 * 60 * 1000 // 1시간
-
 function AttendanceCheck() {
   const { profile, role } = useAuth()
   // 관리자·임원·주장은 다른 사람 대리 체크 가능
@@ -88,35 +85,6 @@ function AttendanceCheck() {
     }
   }
 
-  // 🔀 오늘 전체 출석 기록을 "효과 시각"(픽업이면 실제 체크시각 - 1시간) 기준으로
-  //    다시 정렬해서 check_order를 1번부터 재부여
-  async function reorderTodayByEffectiveTime() {
-    const { data: dayRecords, error } = await supabase
-      .from('attendance')
-      .select('id, checked_at, is_pickup')
-      .eq('game_date', today)
-
-    if (error || !dayRecords) {
-      console.error('순서 재계산 오류:', error)
-      return
-    }
-
-    const withEffective = dayRecords.map((r) => {
-      const baseTime = r.checked_at ? new Date(r.checked_at).getTime() : Date.now()
-      const effective = r.is_pickup ? baseTime - PICKUP_BONUS_MS : baseTime
-      return { id: r.id, effective }
-    })
-
-    // 효과 시각이 빠른 순서대로 정렬 → 1번부터 순번 재부여
-    withEffective.sort((a, b) => a.effective - b.effective)
-
-    await Promise.all(
-      withEffective.map((r, i) =>
-        supabase.from('attendance').update({ check_order: i + 1 }).eq('id', r.id)
-      )
-    )
-  }
-
   // 특정 선수를 출석 처리 (본인/대리 공통)
   async function checkInPlayer(player, status, isPickup) {
     if (!hasGameToday) {
@@ -133,15 +101,15 @@ function AttendanceCheck() {
     }
 
     setLoading(true)
+    const nextOrder = todayCount + 1
 
-    // 1) 우선 출석 기록 삽입 (check_order는 임시값, checked_at은 DB 기본값으로 현재 시각 저장)
     const { error } = await supabase.from('attendance').insert([
       {
         player_id: player.id,
         player_name: player.name,
         team: player.current_team || '미배정',
         status: status,
-        check_order: todayCount + 1,
+        check_order: nextOrder,
         game_date: today,
         is_pickup: !!isPickup,
       },
@@ -150,22 +118,42 @@ function AttendanceCheck() {
     if (error) {
       alert('오류가 발생했습니다: ' + error.message)
       setMessage('')
-      setLoading(false)
-      return
+    } else {
+      setMessage(
+        `${player.name}님 ${status} 완료!${isPickup ? ' 🚗 픽업' : ''} (${player.current_team || '미배정'})`
+      )
+      setSelectedPlayer(null)
+      setSearch('')
+      setOtherPickup(false)
+      await fetchTodayCount()
+      setTimeout(() => setMessage(''), 3000)
     }
+    setLoading(false)
+  }
 
-    // 2) 픽업(1시간 일찍 온 것으로 계산)을 반영해서 오늘 전체 순서 재계산
-    await reorderTodayByEffectiveTime()
+  // 출석 취소 (본인 전용)
+  async function cancelAttendance(player) {
+    if (!player) return
 
-    setMessage(
-      `${player.name}님 ${status} 완료!${isPickup ? ' 🚗 픽업 (1시간 일찍 온 것으로 순서 반영)' : ''} (${player.current_team || '미배정'})`
-    )
-    setSelectedPlayer(null)
-    setSearch('')
-    setOtherPickup(false)
-    await fetchTodayCount()
-    setTimeout(() => setMessage(''), 3000)
+    const confirmCancel = window.confirm(`${player.name}님의 출석을 취소하시겠습니까?`)
+    if (!confirmCancel) return
 
+    setLoading(true)
+
+    const { error } = await supabase
+      .from('attendance')
+      .delete()
+      .eq('player_id', player.id)
+      .eq('game_date', today)
+
+    if (error) {
+      alert('취소 중 오류가 발생했습니다: ' + error.message)
+    } else {
+      setMessage(`${player.name}님 출석이 취소되었습니다.`)
+      setMyPickup(false)
+      await fetchTodayCount()
+      setTimeout(() => setMessage(''), 3000)
+    }
     setLoading(false)
   }
 
@@ -225,7 +213,14 @@ function AttendanceCheck() {
               {iAmChecked ? (
                 <div className="bg-emerald-500/15 border border-emerald-500/40 rounded-2xl py-6 text-center">
                   <p className="text-4xl mb-2">🎉</p>
-                  <p className="text-emerald-400 font-bold text-lg">오늘 출석 완료!</p>
+                  <p className="text-emerald-400 font-bold text-lg mb-4">오늘 출석 완료!</p>
+                  <button
+                    onClick={() => cancelAttendance(myPlayer)}
+                    disabled={loading}
+                    className="bg-red-500/80 hover:bg-red-500 disabled:opacity-30 text-white px-6 py-2.5 rounded-xl font-semibold text-sm transition-colors"
+                  >
+                    ❌ 출석 취소
+                  </button>
                 </div>
               ) : (
                 <>
