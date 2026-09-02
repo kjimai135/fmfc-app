@@ -478,7 +478,19 @@ function AttendanceHistory() {
                           style={isMe ? { boxShadow: 'inset 0 0 0 1px rgba(56,189,248,0.6)' } : undefined}
                         >
                           <td className="px-4 py-2 text-emerald-400 font-bold">{idx + 1}</td>
-                          <td className="px-4 py-2 font-medium" style={{ color: teamColor }}>{record.player_name}</td>
+                          <td className="px-4 py-2 font-medium" style={{ color: teamColor }}>
+                            <span className="inline-flex items-center gap-1.5">
+                              {record.player_name}
+                              {record.is_pickup && (
+                                <span
+                                  className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40"
+                                  title="픽업한 선수 (1시간 일찍 온 것으로 순서 반영)"
+                                >
+                                  🚗 픽업
+                                </span>
+                              )}
+                            </span>
+                          </td>
                           <td className="px-4 py-2">
                             {canEdit ? (
                               <select
