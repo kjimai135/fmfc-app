@@ -219,7 +219,9 @@ function AttendanceStats() {
   const isChampsView = index === 1
   const totalGames = isChampsView ? champsGames : leagueGames
 
-  // ── 👆 스와이프 / 드래그 (Rankings.jsx 와 동일 방식) ──
+  // ── 👆 스와이프 / 드래그 ──
+  // ⚠️ 안드로이드에서 touchAction: 'none' + JS로 세로 스크롤만 허용해서,
+  //    가로 스와이프(특히 오른쪽 방향 = 뒤로가기 제스처)가 브라우저에 가로채이지 않도록 처리합니다.
   function handleStart(x, y) {
     startX.current = x
     startY.current = y
@@ -261,7 +263,14 @@ function AttendanceStats() {
   }
 
   function onTouchStart(e) { handleStart(e.touches[0].clientX, e.touches[0].clientY) }
-  function onTouchMove(e) { handleMove(e.touches[0].clientX, e.touches[0].clientY) }
+  function onTouchMove(e) {
+    handleMove(e.touches[0].clientX, e.touches[0].clientY)
+    // 🚫 가로 방향으로 판정되면, 브라우저의 기본 제스처(뒤로가기 등)를 막고
+    //    우리 스와이프 로직만 동작하도록 합니다. (touchAction: 'none' 이라 여기서 세로 스크롤도 직접 처리)
+    if (decidedHorizontal.current) {
+      e.preventDefault()
+    }
+  }
   function onTouchEnd(e) { handleEnd(e.changedTouches[0].clientX, e.changedTouches[0].clientY) }
   function onMouseDown(e) { handleStart(e.clientX, e.clientY) }
   function onMouseMove(e) {
@@ -659,7 +668,7 @@ function AttendanceStats() {
         <div className="relative stats-container">
           <div
             className="overflow-hidden select-none"
-            style={{ cursor: 'grab', touchAction: 'pan-y' }}
+            style={{ cursor: 'grab', touchAction: 'none' }}
             onTouchStart={onTouchStart}
             onTouchMove={onTouchMove}
             onTouchEnd={onTouchEnd}

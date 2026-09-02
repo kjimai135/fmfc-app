@@ -128,14 +128,18 @@ function HomeRedirect() {
 }
 
 // 🔄 아래로 당겨서 새로고침 (Pull to Refresh)
+// ⚠️ 좌우 스와이프(가로 제스처)와 충돌하지 않도록, 가로 움직임이 감지되면 즉시 취소합니다.
 function usePullToRefresh() {
   const [pullDistance, setPullDistance] = useState(0)
   const [refreshing, setRefreshing] = useState(false)
   const startY = useRef(null)
+  const startX = useRef(null)
   const pulling = useRef(false)
+  const horizontalCanceled = useRef(false)
 
   const THRESHOLD = 80 // 이 이상 당기면 새로고침
   const MAX_PULL = 120 // 최대 당김 표시 거리
+  const HORIZONTAL_CANCEL_PX = 12 // 이 이상 가로로 움직이면 "가로 스와이프"로 판단해 취소
 
   useEffect(() => {
     function onTouchStart(e) {
@@ -145,7 +149,9 @@ function usePullToRefresh() {
         return
       }
       startY.current = e.touches[0].clientY
+      startX.current = e.touches[0].clientX
       pulling.current = true
+      horizontalCanceled.current = false
     }
 
     function onTouchMove(e) {
@@ -156,7 +162,20 @@ function usePullToRefresh() {
         setPullDistance(0)
         return
       }
+
       const dy = e.touches[0].clientY - startY.current
+      const dx = e.touches[0].clientX - startX.current
+
+      // 🚫 가로 스와이프로 판단되면 당겨서 새로고침을 즉시 취소
+      //    (출석율/순위 등 좌우 스와이프 화면과의 충돌 방지)
+      if (!horizontalCanceled.current && Math.abs(dx) > HORIZONTAL_CANCEL_PX && Math.abs(dx) > Math.abs(dy)) {
+        horizontalCanceled.current = true
+        pulling.current = false
+        setPullDistance(0)
+        return
+      }
+      if (horizontalCanceled.current) return
+
       if (dy > 0) {
         // 저항감 있게 (당길수록 덜 움직임)
         const dist = Math.min(MAX_PULL, dy * 0.5)
@@ -180,6 +199,7 @@ function usePullToRefresh() {
       }
       pulling.current = false
       startY.current = null
+      startX.current = null
     }
 
     window.addEventListener('touchstart', onTouchStart, { passive: true })
@@ -270,7 +290,7 @@ function useMyStars(playerId) {
   return stars
 }
 
-// 🌟 진한 노란색 별 배지 (숫자 포함 - 네비용) — 글자 검정·두껍게
+// 🌟 진한 노란색 별 배지 (숫자 포함 - 네비용)
 function DarkStarBadge({ count = 0, size = 24 }) {
   const n = Number(count) || 0
   const digits = String(n).length
@@ -300,7 +320,7 @@ function DarkStarBadge({ count = 0, size = 24 }) {
         className="relative font-black leading-none"
         style={{
           fontSize,
-          color: '#000000',
+          color: '#78350f',
           marginTop: size * 0.06,
         }}
       >
@@ -310,7 +330,7 @@ function DarkStarBadge({ count = 0, size = 24 }) {
   )
 }
 
-// ⭐ 연한 노란색 별 배지 (숫자 포함 - 네비용) — 글자 검정·두껍게
+// ⭐ 연한 노란색 별 배지 (숫자 포함 - 네비용)
 function LightStarBadge({ count = 0, size = 24 }) {
   const n = Number(count) || 0
   const digits = String(n).length
@@ -337,20 +357,19 @@ function LightStarBadge({ count = 0, size = 24 }) {
         />
       </svg>
       <span
-  className="relative font-black leading-none"
-  style={{
-    fontSize,
-    color: '#000000',
-    marginTop: size * 0.06,
-    forcedColorAdjust: 'none',
-    WebkitForcedColorAdjust: 'none',
-  }}
->
-  {n}
-</span>
+        className="relative font-black leading-none"
+        style={{
+          fontSize,
+          color: '#713f12',
+          marginTop: size * 0.06,
+        }}
+      >
+        {n}
+      </span>
     </span>
   )
 }
+
 // 실제 앱 내용 (로그인한 사용자만 여기 도달)
 function AppContent() {
   const [menuOpen, setMenuOpen] = useState(false)
