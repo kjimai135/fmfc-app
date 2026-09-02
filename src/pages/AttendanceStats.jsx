@@ -97,6 +97,13 @@ function AttendanceStats() {
   const startY = useRef(null)
   const dragging = useRef(false)
   const decidedHorizontal = useRef(false)
+  const decidedVertical = useRef(false)
+  const swipeAreaRef = useRef(null)
+  const indexRef = useRef(0) // 네이티브 이벤트 리스너 안에서 최신 index를 읽기 위한 ref
+
+  useEffect(() => {
+    indexRef.current = index
+  }, [index])
 
   // 📅 날짜 입력 ref (클릭 시 달력 열기용)
   const startInputRef = useRef(null)
@@ -115,6 +122,100 @@ function AttendanceStats() {
     }
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  // 🚫 안드로이드 크롬의 "가장자리 스와이프로 뒤로가기" 제스처와 충돌 방지
+  useEffect(() => {
+    const html = document.documentElement
+    const body = document.body
+    const prevHtml = html.style.overscrollBehaviorX
+    const prevBody = body.style.overscrollBehaviorX
+    html.style.overscrollBehaviorX = 'contain'
+    body.style.overscrollBehaviorX = 'contain'
+    return () => {
+      html.style.overscrollBehaviorX = prevHtml
+      body.style.overscrollBehaviorX = prevBody
+    }
+  }, [])
+
+  // 👆 iOS 사파리 대응: 네이티브 이벤트 리스너를 non-passive로 직접 등록
+  //    (React 합성 이벤트의 touchmove는 기본 passive라 preventDefault가 씹히는 경우가 있음)
+  const HORIZONTAL_DECIDE_PX = 6   // 이 정도만 가로로 움직여도 "가로 스와이프"로 빠르게 확정
+  const VERTICAL_DECIDE_PX = 6     // 이 정도 세로로 움직이면 "세로 스크롤"로 확정 (더 이상 개입 안 함)
+  const SWIPE_COMPLETE_PX = 35     // 짧게 스와이프해도 탭이 넘어가도록 임계값 완화
+
+  useEffect(() => {
+    const el = swipeAreaRef.current
+    if (!el) return
+
+    function onTouchStart(e) {
+      const t = e.touches[0]
+      startX.current = t.clientX
+      startY.current = t.clientY
+      dragging.current = true
+      decidedHorizontal.current = false
+      decidedVertical.current = false
+    }
+
+    function onTouchMove(e) {
+      if (!dragging.current || startX.current === null) return
+      const t = e.touches[0]
+      const dx = t.clientX - startX.current
+      const dy = t.clientY - startY.current
+
+      if (!decidedHorizontal.current && !decidedVertical.current) {
+        if (Math.abs(dx) > HORIZONTAL_DECIDE_PX && Math.abs(dx) > Math.abs(dy)) {
+          decidedHorizontal.current = true
+        } else if (Math.abs(dy) > VERTICAL_DECIDE_PX && Math.abs(dy) >= Math.abs(dx)) {
+          decidedVertical.current = true
+        }
+      }
+
+      // 🚫 가로 스와이프로 확정되면, 브라우저의 세로 스크롤/뒤로가기 제스처를 막고
+      //    우리 스와이프 로직만 동작하도록 함 (non-passive 리스너라 preventDefault가 실제로 먹힘)
+      if (decidedHorizontal.current) {
+        e.preventDefault()
+      }
+    }
+
+    function onTouchEnd(e) {
+      if (!dragging.current || startX.current === null) {
+        dragging.current = false
+        return
+      }
+      const t = e.changedTouches[0]
+      const dx = t.clientX - startX.current
+      const dy = t.clientY - startY.current
+
+      if (decidedHorizontal.current && Math.abs(dx) > SWIPE_COMPLETE_PX) {
+        const currentIndex = indexRef.current
+        if (dx < 0 && currentIndex < TABS.length - 1) {
+          setIndex(currentIndex + 1)
+          setPopupPlayer(null)
+        } else if (dx > 0 && currentIndex > 0) {
+          setIndex(currentIndex - 1)
+          setPopupPlayer(null)
+        }
+      }
+
+      startX.current = null
+      startY.current = null
+      dragging.current = false
+      decidedHorizontal.current = false
+      decidedVertical.current = false
+    }
+
+    el.addEventListener('touchstart', onTouchStart, { passive: true })
+    el.addEventListener('touchmove', onTouchMove, { passive: false }) // ⚠️ non-passive 필수
+    el.addEventListener('touchend', onTouchEnd, { passive: true })
+    el.addEventListener('touchcancel', onTouchEnd, { passive: true })
+
+    return () => {
+      el.removeEventListener('touchstart', onTouchStart)
+      el.removeEventListener('touchmove', onTouchMove)
+      el.removeEventListener('touchend', onTouchEnd)
+      el.removeEventListener('touchcancel', onTouchEnd)
+    }
   }, [])
 
   async function fetchStats() {
@@ -219,17 +320,15 @@ function AttendanceStats() {
   const isChampsView = index === 1
   const totalGames = isChampsView ? champsGames : leagueGames
 
-  // ── 👆 스와이프 / 드래그 ──
-  // ⚠️ 안드로이드에서 touchAction: 'none' + JS로 세로 스크롤만 허용해서,
-  //    가로 스와이프(특히 오른쪽 방향 = 뒤로가기 제스처)가 브라우저에 가로채이지 않도록 처리합니다.
-  function handleStart(x, y) {
+  // ── 🖱️ PC 마우스 드래그 (터치와 별개로 유지) ──
+  function handleMouseStart(x, y) {
     startX.current = x
     startY.current = y
     dragging.current = true
     decidedHorizontal.current = false
   }
 
-  function handleMove(x, y) {
+  function handleMouseMove(x, y) {
     if (!dragging.current || startX.current === null) return
     const dx = x - startX.current
     const dy = y - startY.current
@@ -238,7 +337,7 @@ function AttendanceStats() {
     }
   }
 
-  function handleEnd(x, y) {
+  function handleMouseEnd(x, y) {
     if (!dragging.current || startX.current === null) {
       dragging.current = false
       return
@@ -262,24 +361,14 @@ function AttendanceStats() {
     decidedHorizontal.current = false
   }
 
-  function onTouchStart(e) { handleStart(e.touches[0].clientX, e.touches[0].clientY) }
-  function onTouchMove(e) {
-    handleMove(e.touches[0].clientX, e.touches[0].clientY)
-    // 🚫 가로 방향으로 판정되면, 브라우저의 기본 제스처(뒤로가기 등)를 막고
-    //    우리 스와이프 로직만 동작하도록 합니다. (touchAction: 'none' 이라 여기서 세로 스크롤도 직접 처리)
-    if (decidedHorizontal.current) {
-      e.preventDefault()
-    }
-  }
-  function onTouchEnd(e) { handleEnd(e.changedTouches[0].clientX, e.changedTouches[0].clientY) }
-  function onMouseDown(e) { handleStart(e.clientX, e.clientY) }
+  function onMouseDown(e) { handleMouseStart(e.clientX, e.clientY) }
   function onMouseMove(e) {
     if (!dragging.current) return
-    handleMove(e.clientX, e.clientY)
+    handleMouseMove(e.clientX, e.clientY)
     if (decidedHorizontal.current) e.preventDefault()
   }
-  function onMouseUp(e) { handleEnd(e.clientX, e.clientY) }
-  function onMouseLeave(e) { if (dragging.current) handleEnd(e.clientX, e.clientY) }
+  function onMouseUp(e) { handleMouseEnd(e.clientX, e.clientY) }
+  function onMouseLeave(e) { if (dragging.current) handleMouseEnd(e.clientX, e.clientY) }
 
   // 📅 날짜 표시용 (2026. 08. 04.)
   function formatDate(d) {
@@ -667,11 +756,9 @@ function AttendanceStats() {
       ) : (
         <div className="relative stats-container">
           <div
+            ref={swipeAreaRef}
             className="overflow-hidden select-none"
-            style={{ cursor: 'grab', touchAction: 'none' }}
-            onTouchStart={onTouchStart}
-            onTouchMove={onTouchMove}
-            onTouchEnd={onTouchEnd}
+            style={{ cursor: 'grab', touchAction: 'pan-y', overscrollBehaviorX: 'contain' }}
             onMouseDown={onMouseDown}
             onMouseMove={onMouseMove}
             onMouseUp={onMouseUp}
