@@ -14,14 +14,15 @@ function normalizeSeason(label) {
   return `${m[1]}-${String(parseInt(m[2], 10)).padStart(2, '0')}`;
 }
 
-function compareSeasons(a, b) {
+// ⬇️ 최신 시즌이 먼저 오도록 내림차순 정렬
+function compareSeasonsDesc(a, b) {
   const pa = String(a).match(/^(\d{4})-(\d{1,2})$/);
   const pb = String(b).match(/^(\d{4})-(\d{1,2})$/);
-  if (!pa || !pb) return String(a).localeCompare(String(b));
+  if (!pa || !pb) return String(b).localeCompare(String(a));
   const ay = parseInt(pa[1], 10), an = parseInt(pa[2], 10);
   const by = parseInt(pb[1], 10), bn = parseInt(pb[2], 10);
-  if (ay !== by) return ay - by;
-  return an - bn;
+  if (ay !== by) return by - ay;
+  return bn - an;
 }
 
 function isSpecialGoal(g) {
@@ -266,7 +267,7 @@ function DetailPopup({ player, seasons, anchor, onClose }) {
           </div>
         </div>
 
-        {/* 시즌별 상세 */}
+        {/* 시즌별 상세 (최신 시즌이 위) */}
         <div className="overflow-y-auto" style={{ maxHeight: POPUP_MAX_HEIGHT - 150 }}>
           <table className="w-full text-sm">
             <thead className="sticky top-0 bg-slate-800 z-10">
@@ -341,6 +342,23 @@ export default function PersonalRecord() {
   useEffect(() => {
     fetchData();
   }, []);
+
+  // 📜 스크롤·리사이즈 시 팝업 닫기 (위치가 어긋나는 것 방지)
+  useEffect(() => {
+    if (!selectedPlayer) return;
+
+    function closePopup() {
+      setSelectedPlayer(null);
+      setAnchor(null);
+    }
+
+    window.addEventListener('scroll', closePopup, { passive: true });
+    window.addEventListener('resize', closePopup);
+    return () => {
+      window.removeEventListener('scroll', closePopup);
+      window.removeEventListener('resize', closePopup);
+    };
+  }, [selectedPlayer]);
 
   async function fetchData() {
     setLoading(true);
@@ -472,7 +490,8 @@ export default function PersonalRecord() {
         });
       });
 
-      setSeasons(Array.from(seasonSet).sort(compareSeasons));
+      // ⬇️ 최신 시즌이 맨 위로 오도록 내림차순 정렬
+      setSeasons(Array.from(seasonSet).sort(compareSeasonsDesc));
       setRawRows(Object.values(agg));
     } catch (e) {
       console.error('[PersonalRecord] fetchData 전체 실패:', e);
