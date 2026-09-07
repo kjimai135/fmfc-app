@@ -105,9 +105,12 @@ function reasonInfo(reason) {
   return { icon: '⭐', color: '#fbbf24', label: reason };
 }
 
-// 📐 팝업 크기 (여기 숫자만 바꾸면 크기 조절 가능)
-const POPUP_WIDTH = 440;
-const POPUP_MAX_HEIGHT = 560;
+// 📐 팝업 크기 (AttendanceStats.jsx 팝업과 동일 기준)
+const POPUP_WIDTH = 320;
+const POPUP_NEED_HEIGHT = 300;
+
+// ⭐ 출석율 색상 규칙 (AttendanceStats.jsx와 동일: 50% 기준)
+const rateColor = (rate) => (rate >= 50 ? 'text-emerald-400' : 'text-red-400');
 
 // ⭐ 별 상세 내역 미니 팝업 (모바일에서도 눌러서 볼 수 있도록)
 function StarDetailPopup({ data, onClose }) {
@@ -132,20 +135,20 @@ function StarDetailPopup({ data, onClose }) {
 
   if (!data) return null;
 
-  const W = 220;
+  const W = 200;
   const margin = 8;
   let left = data.x - W / 2;
   if (left + W > window.innerWidth - margin) left = window.innerWidth - W - margin;
   if (left < margin) left = margin;
 
   const spaceBelow = window.innerHeight - data.y;
-  const placeAbove = spaceBelow < 200;
-  const top = placeAbove ? data.y - 28 : data.y + 8;
+  const placeAbove = spaceBelow < 180;
+  const top = placeAbove ? data.y - 26 : data.y + 6;
 
   return (
     <div
       ref={ref}
-      className="fixed z-[60] bg-slate-800 border border-yellow-500/50 rounded-lg shadow-2xl shadow-black/70 overflow-hidden"
+      className="fixed z-[60] bg-slate-800 border border-yellow-500/50 rounded-xl shadow-2xl shadow-black/50 overflow-hidden"
       style={{
         left,
         top,
@@ -153,26 +156,23 @@ function StarDetailPopup({ data, onClose }) {
         transform: placeAbove ? 'translateY(-100%)' : 'none',
       }}
     >
-      <div className="px-3 py-1.5 bg-yellow-500/15 border-b border-slate-700 flex items-center justify-between">
-        <span className="text-yellow-300 text-xs font-bold">⭐ {data.season} 별 내역</span>
+      <div className="flex justify-center items-center px-2 py-1.5 border-b border-slate-700 relative bg-yellow-500/10">
+        <span className="text-yellow-300 text-[11px] font-bold">⭐ {data.season}</span>
         <button
           onClick={onClose}
-          className="text-slate-400 hover:text-white text-xs px-1"
+          className="text-slate-400 hover:text-white text-xs leading-none absolute right-2"
           aria-label="닫기"
         >
           ✕
         </button>
       </div>
-      <div className="p-2 space-y-1 max-h-52 overflow-y-auto">
+      <div className="p-1.5 space-y-1 max-h-48 overflow-y-auto">
         {data.list.map((x, i) => {
           const info = reasonInfo(x.reason);
           return (
-            <div
-              key={i}
-              className="flex items-center gap-2 px-2 py-1.5 rounded bg-slate-900/60"
-            >
-              <span className="text-sm flex-shrink-0">{info.icon}</span>
-              <span className="text-xs font-semibold truncate" style={{ color: info.color }}>
+            <div key={i} className="flex items-center gap-1.5 px-2 py-1 rounded bg-slate-900/60">
+              <span className="text-xs flex-shrink-0">{info.icon}</span>
+              <span className="text-[11px] font-semibold truncate" style={{ color: info.color }}>
                 {x.reason || info.label}
               </span>
             </div>
@@ -183,32 +183,36 @@ function StarDetailPopup({ data, onClose }) {
   );
 }
 
-// ⭐ 선수 상세 팝업 (클릭한 행 기준 아래/위 배치)
+// ⭐ 선수 상세 팝업 (AttendanceStats.jsx 팝업 스타일 준용)
 function DetailPopup({ player, seasons, anchor, onClose }) {
   const ref = useRef(null);
   const [starDetail, setStarDetail] = useState(null);
 
+  // 🖱️ 바깥 클릭 / 터치 / ESC 시 닫기 (AttendanceStats.jsx와 동일 동작)
   useEffect(() => {
-    function onKey(e) {
-      if (e.key === 'Escape' && !starDetail) onClose();
-    }
     function onClickOutside(e) {
       if (ref.current && !ref.current.contains(e.target)) onClose();
     }
-    document.addEventListener('keydown', onKey);
+    function onKey(e) {
+      if (e.key === 'Escape') onClose();
+    }
     document.addEventListener('mousedown', onClickOutside);
+    document.addEventListener('touchstart', onClickOutside);
+    document.addEventListener('keydown', onKey);
     return () => {
-      document.removeEventListener('keydown', onKey);
       document.removeEventListener('mousedown', onClickOutside);
+      document.removeEventListener('touchstart', onClickOutside);
+      document.removeEventListener('keydown', onKey);
     };
-  }, [onClose, starDetail]);
+  }, [onClose]);
 
   if (!player || !anchor) return null;
 
   const gap = 6;
-  const margin = 8;
+  const margin = 12;
   const spaceBelow = window.innerHeight - anchor.bottom;
-  const placeAbove = spaceBelow < POPUP_MAX_HEIGHT && anchor.top > spaceBelow;
+  const spaceAbove = anchor.top;
+  const placeAbove = spaceBelow < POPUP_NEED_HEIGHT && spaceAbove > spaceBelow;
 
   let left = anchor.left;
   if (left + POPUP_WIDTH > window.innerWidth - margin) {
@@ -235,46 +239,48 @@ function DetailPopup({ player, seasons, anchor, onClose }) {
     <>
       <div
         ref={ref}
-        className="fixed z-50 bg-slate-900 border border-amber-500/40 rounded-xl shadow-2xl shadow-black/60 overflow-hidden"
-        style={{ ...style, width: POPUP_WIDTH, maxWidth: '95vw' }}
+        className="fixed z-50 bg-slate-800 border border-emerald-500/50 rounded-xl shadow-2xl shadow-black/50 w-[320px] max-w-[92vw] overflow-hidden"
+        style={style}
       >
-        {/* 헤더 */}
-        <div className="bg-gradient-to-r from-amber-500/25 to-orange-500/10 px-4 py-2.5 border-b border-slate-700 flex items-center justify-between">
-          <div className="text-white font-bold text-base">👤 {player.name}</div>
+        {/* 팝업 헤더 */}
+        <div className="flex justify-center items-center px-2 py-2 border-b border-slate-700 relative">
+          <h3 className="font-bold text-white text-sm">👤 {player.name}</h3>
           <button
             onClick={onClose}
-            className="text-slate-400 hover:text-white text-base leading-none px-1.5 py-0.5 rounded hover:bg-slate-700 transition-colors"
+            className="text-slate-400 hover:text-white text-base leading-none absolute right-2"
             aria-label="닫기"
           >
             ✕
           </button>
         </div>
 
-        {/* 통산 요약 (칩) */}
-        <div className="grid grid-cols-3 gap-2 px-4 py-3 bg-slate-800/40 border-b border-slate-700">
-          <div className="text-center rounded-lg bg-amber-500/10 border border-amber-500/30 py-1.5">
-            <div className="text-[11px] text-amber-200/70">통산 득점</div>
-            <div className="text-amber-300 font-black text-lg">⚽ {player.totalGoals}</div>
+        {/* 통산 요약 */}
+        <div className="px-3 py-2 border-b border-slate-700 bg-emerald-500/5">
+          <div className="flex items-baseline justify-center gap-4">
+            <span className="text-amber-300 text-xs font-bold">
+              ⚽ <span className="text-base font-black">{player.totalGoals}</span>
+            </span>
+            <span className="text-yellow-300 text-xs font-bold">
+              ⭐ <span className="text-base font-black">{player.starCount}</span>
+            </span>
+            <span className="text-sky-300 text-xs font-bold">
+              📊 <span className={`text-base font-black ${rateColor(player.attendanceRate)}`}>
+                {player.attendanceRate}%
+              </span>
+            </span>
           </div>
-          <div className="text-center rounded-lg bg-yellow-500/10 border border-yellow-500/30 py-1.5">
-            <div className="text-[11px] text-yellow-200/70">누적 별</div>
-            <div className="text-yellow-300 font-black text-lg">⭐ {player.starCount}</div>
-          </div>
-          <div className="text-center rounded-lg bg-sky-500/10 border border-sky-500/30 py-1.5">
-            <div className="text-[11px] text-sky-200/70">통산 출석</div>
-            <div className="text-sky-300 font-black text-lg">{player.attendanceRate}%</div>
-          </div>
+          <p className="text-slate-500 text-[10px] text-center mt-0.5">창단 이후 통산 기록</p>
         </div>
 
-        {/* 시즌별 상세 */}
-        <div className="overflow-y-auto" style={{ maxHeight: POPUP_MAX_HEIGHT - 150 }}>
-          <table className="w-full text-sm">
+        {/* 시즌별 기록 — 컴팩트 */}
+        <div className="max-h-64 overflow-y-auto">
+          <table className="w-full border-collapse">
             <thead className="sticky top-0 bg-slate-800 z-10">
               <tr>
-                <th className="text-left text-slate-400 font-medium px-3 py-2">시즌</th>
-                <th className="text-center text-amber-300 font-medium px-3 py-2 w-14">⚽</th>
-                <th className="text-center text-yellow-300 font-medium px-3 py-2">⭐</th>
-                <th className="text-center text-sky-300 font-medium px-3 py-2 w-16">출석</th>
+                <th className="px-1.5 py-1 text-slate-400 text-[10px] font-medium text-center border-b border-slate-700">시즌</th>
+                <th className="px-1.5 py-1 text-amber-300 text-[10px] font-medium text-center border-b border-slate-700">⚽</th>
+                <th className="px-1.5 py-1 text-yellow-300 text-[10px] font-medium text-center border-b border-slate-700">⭐</th>
+                <th className="px-1.5 py-1 text-sky-300 text-[10px] font-medium text-center border-b border-slate-700">출석</th>
               </tr>
             </thead>
             <tbody>
@@ -283,34 +289,36 @@ function DetailPopup({ player, seasons, anchor, onClose }) {
                 const starList = player.starsBySeason?.[s] || [];
                 const att = player.attendanceBySeason?.[s];
                 return (
-                  <tr key={s} className="border-b border-slate-800/70 hover:bg-slate-800/40">
-                    <td className="px-3 py-2 text-slate-300 whitespace-nowrap">{s}</td>
-                    <td className={`px-3 py-2 text-center font-bold ${goals > 0 ? 'text-amber-300' : 'text-slate-600'}`}>
+                  <tr key={s} className="border-b border-slate-700/25 hover:bg-slate-700/20">
+                    <td className="px-1.5 py-0.5 text-slate-200 text-[11px] whitespace-nowrap leading-tight text-center">
+                      {s}
+                    </td>
+                    <td className={`px-1.5 py-0.5 text-[11px] font-bold leading-tight text-center ${goals > 0 ? 'text-amber-300' : 'text-slate-600'}`}>
                       {goals}
                     </td>
-                    <td className="px-3 py-2 text-center">
+                    <td className="px-1.5 py-0.5 leading-tight text-center">
                       {starList.length > 0 ? (
                         <button
                           onClick={(e) => handleStarClick(e, s, starList)}
-                          className="text-yellow-300 font-bold whitespace-nowrap px-2 py-1 rounded-md hover:bg-yellow-500/20 active:bg-yellow-500/30 transition-colors cursor-pointer"
+                          className="inline-block px-1.5 py-0 rounded text-[11px] font-bold text-yellow-300 bg-yellow-500/10 hover:bg-yellow-500/25 active:bg-yellow-500/35 transition-colors whitespace-nowrap"
                           title="눌러서 상세 보기"
                         >
                           {starList.map((x, i) => (
                             <span key={i}>{reasonInfo(x.reason).icon}</span>
                           ))}
-                          <span className="ml-1">{starList.length}</span>
+                          <span className="ml-0.5">{starList.length}</span>
                         </button>
                       ) : (
-                        <span className="text-slate-600">-</span>
+                        <span className="text-slate-600 text-[11px]">-</span>
                       )}
                     </td>
-                    <td className="px-3 py-2 text-center">
+                    <td className="px-1.5 py-0.5 leading-tight text-center">
                       {att && att.total > 0 ? (
-                        <span className={`font-bold ${att.rate >= 50 ? 'text-emerald-400' : 'text-red-400'}`}>
+                        <span className={`text-[11px] font-bold ${rateColor(att.rate)}`}>
                           {att.rate}%
                         </span>
                       ) : (
-                        <span className="text-slate-600">-</span>
+                        <span className="text-slate-600 text-[11px]">-</span>
                       )}
                     </td>
                   </tr>
@@ -318,6 +326,9 @@ function DetailPopup({ player, seasons, anchor, onClose }) {
               })}
             </tbody>
           </table>
+          {seasons.length === 0 && (
+            <p className="text-center text-slate-400 py-3 text-xs">기록 없음</p>
+          )}
         </div>
       </div>
 
@@ -627,7 +638,7 @@ export default function PersonalRecord() {
                   key={r.id}
                   onClick={(e) => handleRowClick(e, r)}
                   className={`cursor-pointer transition-colors hover:bg-slate-700/50 ${
-                    selectedPlayer?.id === r.id ? 'ring-1 ring-amber-500 bg-slate-700/40' : ''
+                    selectedPlayer?.id === r.id ? 'ring-1 ring-emerald-500 bg-slate-700/40' : ''
                   } ${idx % 2 === 0 ? 'bg-slate-900/40' : 'bg-slate-900/20'}`}
                 >
                   <td className="px-2 py-1 text-center font-semibold text-slate-300 text-sm">
