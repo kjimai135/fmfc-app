@@ -93,27 +93,104 @@ const SORT_OPTIONS = [
   { key: 'attendance', label: '📊 출석율순' },
 ];
 
-// ⭐ 별 사유별 아이콘 (StarManage.jsx 표기와 유사하게)
-function reasonIcon(reason) {
-  if (!reason) return '⭐';
-  if (reason.includes('챔스')) return '👑';
-  if (reason.includes('리그')) return '🏆';
-  if (reason.includes('베스트')) return '📊';
-  if (reason.includes('주장')) return '🎖️';
-  return '⭐';
+// ⭐ 별 사유별 아이콘·색상
+function reasonInfo(reason) {
+  if (!reason) return { icon: '⭐', color: '#fbbf24', label: '별' };
+  if (reason.includes('챔스') && reason.includes('MVP')) return { icon: '⭐', color: '#a78bfa', label: '챔스 MVP' };
+  if (reason.includes('챔스')) return { icon: '👑', color: '#f59e0b', label: '챔스 우승' };
+  if (reason.includes('리그')) return { icon: '🏆', color: '#fbbf24', label: '리그 우승' };
+  if (reason.includes('득점왕')) return { icon: '👟', color: '#10b981', label: '득점왕' };
+  if (reason.includes('베스트')) return { icon: '📊', color: '#60a5fa', label: '베스트 플레이어' };
+  if (reason.includes('주장')) return { icon: '🎖️', color: '#f472b6', label: '주장' };
+  return { icon: '⭐', color: '#fbbf24', label: reason };
 }
 
 // 📐 팝업 크기 (여기 숫자만 바꾸면 크기 조절 가능)
 const POPUP_WIDTH = 440;
 const POPUP_MAX_HEIGHT = 560;
 
-// ⭐ 상세 팝업 (클릭한 행 기준 아래/위 배치)
-function DetailPopup({ player, seasons, anchor, onClose }) {
+// ⭐ 별 상세 내역 미니 팝업 (모바일에서도 눌러서 볼 수 있도록)
+function StarDetailPopup({ data, onClose }) {
   const ref = useRef(null);
 
   useEffect(() => {
+    function onClickOutside(e) {
+      if (ref.current && !ref.current.contains(e.target)) onClose();
+    }
     function onKey(e) {
       if (e.key === 'Escape') onClose();
+    }
+    document.addEventListener('mousedown', onClickOutside);
+    document.addEventListener('touchstart', onClickOutside);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onClickOutside);
+      document.removeEventListener('touchstart', onClickOutside);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [onClose]);
+
+  if (!data) return null;
+
+  const W = 220;
+  const margin = 8;
+  let left = data.x - W / 2;
+  if (left + W > window.innerWidth - margin) left = window.innerWidth - W - margin;
+  if (left < margin) left = margin;
+
+  const spaceBelow = window.innerHeight - data.y;
+  const placeAbove = spaceBelow < 200;
+  const top = placeAbove ? data.y - 28 : data.y + 8;
+
+  return (
+    <div
+      ref={ref}
+      className="fixed z-[60] bg-slate-800 border border-yellow-500/50 rounded-lg shadow-2xl shadow-black/70 overflow-hidden"
+      style={{
+        left,
+        top,
+        width: W,
+        transform: placeAbove ? 'translateY(-100%)' : 'none',
+      }}
+    >
+      <div className="px-3 py-1.5 bg-yellow-500/15 border-b border-slate-700 flex items-center justify-between">
+        <span className="text-yellow-300 text-xs font-bold">⭐ {data.season} 별 내역</span>
+        <button
+          onClick={onClose}
+          className="text-slate-400 hover:text-white text-xs px-1"
+          aria-label="닫기"
+        >
+          ✕
+        </button>
+      </div>
+      <div className="p-2 space-y-1 max-h-52 overflow-y-auto">
+        {data.list.map((x, i) => {
+          const info = reasonInfo(x.reason);
+          return (
+            <div
+              key={i}
+              className="flex items-center gap-2 px-2 py-1.5 rounded bg-slate-900/60"
+            >
+              <span className="text-sm flex-shrink-0">{info.icon}</span>
+              <span className="text-xs font-semibold truncate" style={{ color: info.color }}>
+                {x.reason || info.label}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ⭐ 선수 상세 팝업 (클릭한 행 기준 아래/위 배치)
+function DetailPopup({ player, seasons, anchor, onClose }) {
+  const ref = useRef(null);
+  const [starDetail, setStarDetail] = useState(null);
+
+  useEffect(() => {
+    function onKey(e) {
+      if (e.key === 'Escape' && !starDetail) onClose();
     }
     function onClickOutside(e) {
       if (ref.current && !ref.current.contains(e.target)) onClose();
@@ -124,7 +201,7 @@ function DetailPopup({ player, seasons, anchor, onClose }) {
       document.removeEventListener('keydown', onKey);
       document.removeEventListener('mousedown', onClickOutside);
     };
-  }, [onClose]);
+  }, [onClose, starDetail]);
 
   if (!player || !anchor) return null;
 
@@ -143,93 +220,110 @@ function DetailPopup({ player, seasons, anchor, onClose }) {
     ? { left, top: anchor.top - gap, transform: 'translateY(-100%)' }
     : { left, top: anchor.bottom + gap };
 
+  function handleStarClick(e, season, list) {
+    e.stopPropagation();
+    const rect = e.currentTarget.getBoundingClientRect();
+    setStarDetail({
+      season,
+      list,
+      x: rect.left + rect.width / 2,
+      y: rect.bottom,
+    });
+  }
+
   return (
-    <div
-      ref={ref}
-      className="fixed z-50 bg-slate-900 border border-amber-500/40 rounded-xl shadow-2xl shadow-black/60 overflow-hidden"
-      style={{ ...style, width: POPUP_WIDTH, maxWidth: '95vw' }}
-    >
-      {/* 헤더 */}
-      <div className="bg-gradient-to-r from-amber-500/25 to-orange-500/10 px-4 py-2.5 border-b border-slate-700 flex items-center justify-between">
-        <div className="text-white font-bold text-base">👤 {player.name}</div>
-        <button
-          onClick={onClose}
-          className="text-slate-400 hover:text-white text-base leading-none px-1.5 py-0.5 rounded hover:bg-slate-700 transition-colors"
-          aria-label="닫기"
-        >
-          ✕
-        </button>
+    <>
+      <div
+        ref={ref}
+        className="fixed z-50 bg-slate-900 border border-amber-500/40 rounded-xl shadow-2xl shadow-black/60 overflow-hidden"
+        style={{ ...style, width: POPUP_WIDTH, maxWidth: '95vw' }}
+      >
+        {/* 헤더 */}
+        <div className="bg-gradient-to-r from-amber-500/25 to-orange-500/10 px-4 py-2.5 border-b border-slate-700 flex items-center justify-between">
+          <div className="text-white font-bold text-base">👤 {player.name}</div>
+          <button
+            onClick={onClose}
+            className="text-slate-400 hover:text-white text-base leading-none px-1.5 py-0.5 rounded hover:bg-slate-700 transition-colors"
+            aria-label="닫기"
+          >
+            ✕
+          </button>
+        </div>
+
+        {/* 통산 요약 (칩) */}
+        <div className="grid grid-cols-3 gap-2 px-4 py-3 bg-slate-800/40 border-b border-slate-700">
+          <div className="text-center rounded-lg bg-amber-500/10 border border-amber-500/30 py-1.5">
+            <div className="text-[11px] text-amber-200/70">통산 득점</div>
+            <div className="text-amber-300 font-black text-lg">⚽ {player.totalGoals}</div>
+          </div>
+          <div className="text-center rounded-lg bg-yellow-500/10 border border-yellow-500/30 py-1.5">
+            <div className="text-[11px] text-yellow-200/70">누적 별</div>
+            <div className="text-yellow-300 font-black text-lg">⭐ {player.starCount}</div>
+          </div>
+          <div className="text-center rounded-lg bg-sky-500/10 border border-sky-500/30 py-1.5">
+            <div className="text-[11px] text-sky-200/70">통산 출석</div>
+            <div className="text-sky-300 font-black text-lg">{player.attendanceRate}%</div>
+          </div>
+        </div>
+
+        {/* 시즌별 상세 */}
+        <div className="overflow-y-auto" style={{ maxHeight: POPUP_MAX_HEIGHT - 150 }}>
+          <table className="w-full text-sm">
+            <thead className="sticky top-0 bg-slate-800 z-10">
+              <tr>
+                <th className="text-left text-slate-400 font-medium px-3 py-2">시즌</th>
+                <th className="text-center text-amber-300 font-medium px-3 py-2 w-14">⚽</th>
+                <th className="text-center text-yellow-300 font-medium px-3 py-2">⭐</th>
+                <th className="text-center text-sky-300 font-medium px-3 py-2 w-16">출석</th>
+              </tr>
+            </thead>
+            <tbody>
+              {seasons.map((s) => {
+                const goals = player.bySeason[s] || 0;
+                const starList = player.starsBySeason?.[s] || [];
+                const att = player.attendanceBySeason?.[s];
+                return (
+                  <tr key={s} className="border-b border-slate-800/70 hover:bg-slate-800/40">
+                    <td className="px-3 py-2 text-slate-300 whitespace-nowrap">{s}</td>
+                    <td className={`px-3 py-2 text-center font-bold ${goals > 0 ? 'text-amber-300' : 'text-slate-600'}`}>
+                      {goals}
+                    </td>
+                    <td className="px-3 py-2 text-center">
+                      {starList.length > 0 ? (
+                        <button
+                          onClick={(e) => handleStarClick(e, s, starList)}
+                          className="text-yellow-300 font-bold whitespace-nowrap px-2 py-1 rounded-md hover:bg-yellow-500/20 active:bg-yellow-500/30 transition-colors cursor-pointer"
+                          title="눌러서 상세 보기"
+                        >
+                          {starList.map((x, i) => (
+                            <span key={i}>{reasonInfo(x.reason).icon}</span>
+                          ))}
+                          <span className="ml-1">{starList.length}</span>
+                        </button>
+                      ) : (
+                        <span className="text-slate-600">-</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-center">
+                      {att && att.total > 0 ? (
+                        <span className={`font-bold ${att.rate >= 50 ? 'text-emerald-400' : 'text-red-400'}`}>
+                          {att.rate}%
+                        </span>
+                      ) : (
+                        <span className="text-slate-600">-</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </div>
 
-      {/* 통산 요약 (칩) */}
-      <div className="grid grid-cols-3 gap-2 px-4 py-3 bg-slate-800/40 border-b border-slate-700">
-        <div className="text-center rounded-lg bg-amber-500/10 border border-amber-500/30 py-1.5">
-          <div className="text-[11px] text-amber-200/70">통산 득점</div>
-          <div className="text-amber-300 font-black text-lg">⚽ {player.totalGoals}</div>
-        </div>
-        <div className="text-center rounded-lg bg-yellow-500/10 border border-yellow-500/30 py-1.5">
-          <div className="text-[11px] text-yellow-200/70">누적 별</div>
-          <div className="text-yellow-300 font-black text-lg">⭐ {player.starCount}</div>
-        </div>
-        <div className="text-center rounded-lg bg-sky-500/10 border border-sky-500/30 py-1.5">
-          <div className="text-[11px] text-sky-200/70">통산 출석</div>
-          <div className="text-sky-300 font-black text-lg">{player.attendanceRate}%</div>
-        </div>
-      </div>
-
-      {/* 시즌별 상세 */}
-      <div className="overflow-y-auto" style={{ maxHeight: POPUP_MAX_HEIGHT - 150 }}>
-        <table className="w-full text-sm">
-          <thead className="sticky top-0 bg-slate-800 z-10">
-            <tr>
-              <th className="text-left text-slate-400 font-medium px-3 py-2">시즌</th>
-              <th className="text-center text-amber-300 font-medium px-3 py-2 w-14">⚽</th>
-              <th className="text-center text-yellow-300 font-medium px-3 py-2">⭐</th>
-              <th className="text-center text-sky-300 font-medium px-3 py-2 w-16">출석</th>
-            </tr>
-          </thead>
-          <tbody>
-            {seasons.map((s) => {
-              const goals = player.bySeason[s] || 0;
-              const starList = player.starsBySeason?.[s] || [];
-              const att = player.attendanceBySeason?.[s];
-              return (
-                <tr key={s} className="border-b border-slate-800/70 hover:bg-slate-800/40">
-                  <td className="px-3 py-2 text-slate-300 whitespace-nowrap">{s}</td>
-                  <td className={`px-3 py-2 text-center font-bold ${goals > 0 ? 'text-amber-300' : 'text-slate-600'}`}>
-                    {goals}
-                  </td>
-                  <td className="px-3 py-2 text-center">
-                    {starList.length > 0 ? (
-                      <span
-                        className="text-yellow-300 font-bold whitespace-nowrap"
-                        title={starList.map((x) => x.reason + (x.note ? `(${x.note})` : '')).join(', ')}
-                      >
-                        {starList.map((x, i) => (
-                          <span key={i}>{reasonIcon(x.reason)}</span>
-                        ))}
-                        <span className="ml-1">{starList.length}</span>
-                      </span>
-                    ) : (
-                      <span className="text-slate-600">-</span>
-                    )}
-                  </td>
-                  <td className="px-3 py-2 text-center">
-                    {att && att.total > 0 ? (
-                      <span className={`font-bold ${att.rate >= 50 ? 'text-emerald-400' : 'text-red-400'}`}>
-                        {att.rate}%
-                      </span>
-                    ) : (
-                      <span className="text-slate-600">-</span>
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-    </div>
+      {/* ⭐ 별 상세 미니 팝업 */}
+      <StarDetailPopup data={starDetail} onClose={() => setStarDetail(null)} />
+    </>
   );
 }
 
