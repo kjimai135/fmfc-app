@@ -30,6 +30,7 @@ import NoticeBoard from './pages/NoticeBoard'
 import NoticeDetail from './pages/NoticeDetail'
 import LetterBoard from './pages/LetterBoard'
 import CalendarPage from './pages/CalendarPage'
+import PersonalRecord from './pages/PersonalRecord'
 import NoticeTicker from './components/NoticeTicker'
 import logoImg from './assets/logo.png'
 import './App.css'
@@ -56,12 +57,13 @@ const allMenu = [
   { to: '/roster', label: '📋 팀명단', roles: ['admin', 'executive', 'captain', 'member'], group: 'general' },
   { to: '/rankings', label: '🏆 순위 (팀·득점)', roles: ['admin', 'executive', 'captain', 'member'], group: 'general' },
   { to: '/attendance/stats', label: '📊 출석율', roles: ['admin', 'executive', 'captain', 'member'], group: 'general' },
-  { to: '/stars', label: '⭐ 별 현황', roles: ['admin', 'executive', 'captain', 'member'], group: 'general' },
+  { to: '/personal-record', label: '📋 개인 기록', roles: ['admin', 'executive', 'captain', 'member'], group: 'general' },
   { to: '/notices', label: '📢 공지', roles: ['admin', 'executive', 'captain', 'member'], group: 'general' },
   { to: '/letter', label: '💌 마음의 편지', roles: ['admin', 'executive', 'captain', 'member'], group: 'general' },
 
   // 🔧 관리
   { to: '/matches', label: '⚽ 경기 생성 및 기록', roles: ['admin', 'executive', 'captain'], group: 'manage' },
+  { to: '/stars', label: '⭐ 별 사용 및 잔여현황', roles: ['admin', 'executive'], group: 'manage' },
   { to: '/archive', label: '🗂️ 아카이브', roles: ['admin', 'executive'], group: 'manage' },
   { to: '/players', label: '🧑 회원관리', roles: ['admin', 'executive'], group: 'manage' },
   { to: '/member-roles', label: '🔑 권한관리', roles: ['admin', 'executive'], group: 'manage' },
@@ -465,12 +467,12 @@ function AppContent() {
                 </Link>
               )}
 
-              {/* ⭐ 내 별 개수 (전체 + 잔여) → 별 현황으로 이동 */}
+              {/* ⭐ 내 별 개수 (전체 + 잔여) → 별 사용 및 잔여현황으로 이동 */}
               {profile?.player_id && role !== 'associate' && (
                 <Link
                   to="/stars"
                   onClick={() => setMenuOpen(false)}
-                  title={`전체 별 ${myStars.total}개 · 잔여 별 ${myStars.remain}개 → 별 현황 보기`}
+                  title={`전체 별 ${myStars.total}개 · 잔여 별 ${myStars.remain}개 → 별 사용 및 잔여현황 보기`}
                   className="flex items-center gap-1.5 hover:scale-105 transition-transform"
                 >
                   <DarkStarBadge count={myStars.total} size={24} />
@@ -576,8 +578,12 @@ function AppContent() {
             {/* 🏆 팀 아카이브 - 관리자·임원만 */}
             <Route path="/archive" element={<Protected allowed={['admin', 'executive']}><SeasonArchive /></Protected>} />
 
-            {/* ⭐ 별 현황 - 전 회원 조회 가능 (수정은 화면 내부에서 admin/executive만) */}
+            {/* ⭐ 별 사용 및 잔여현황 - 메뉴는 관리 그룹(admin/executive)이지만,
+                상단 네비 별 배지 클릭 동선을 위해 라우트는 정회원 이상 허용 (수정은 화면 내부에서 admin/executive만) */}
             <Route path="/stars" element={<Protected allowed={['admin', 'executive', 'captain', 'member']}><StarManage /></Protected>} />
+
+            {/* 📋 개인 기록 - 통산 득점·별·출석율 (정회원 이상 조회 가능) */}
+            <Route path="/personal-record" element={<Protected allowed={['admin', 'executive', 'captain', 'member']}><PersonalRecord /></Protected>} />
 
             {/* 🔄 시즌 전환 - 라우트는 admin/executive 통과, 실제 실행은 페이지에서 admin/회장만 */}
             <Route path="/season-transition" element={<Protected allowed={['admin', 'executive']}><SeasonTransition /></Protected>} />
