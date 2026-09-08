@@ -1,679 +1,579 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
-import { supabase } from '../lib/supabase';
+import { useState, useEffect, useRef } from 'react'
+import { supabase } from '../lib/supabase'
+import { useAuth } from '../contexts/AuthContext'
 
-// ⏱️ 경기 소요 시간 (AttendanceStats.jsx와 동일 기준)
-const MATCH_DURATION_HOURS = 2;
-const PRESENT_STATUSES = ['출석', '늦참', '조퇴'];
+function AttendanceHistory() {
+  const { role, profile } = useAuth()
+  // ✅ 수정 권한: 관리자·임원·주장/부주장
+  const canEdit = role === 'admin' || role === 'executive' || role === 'captain'
+  // 🙋 본인 선수 id
+  const myPlayerId = profile?.player_id || null
 
-// 🗓️ 시즌 값 정규화: "2025-1" / "2025-01" → 모두 "2025-01"로 통일
-// ⚠️ goals는 '2025-1', player_stars는 '2025-01' 형식이라 반드시 맞춰줘야 매칭됨
-function normalizeSeason(label) {
-  if (!label) return null;
-  const m = String(label).trim().match(/^(\d{4})-(\d{1,2})$/);
-  if (!m) return String(label).trim();
-  return `${m[1]}-${String(parseInt(m[2], 10)).padStart(2, '0')}`;
-}
+  const [attendance, setAttendance] = useState([])
+  const [teams, setTeams] = useState([])
+  const [players, setPlayers] = useState([])
+  const [selectedDate, setSelectedDate] = useState(
+    new Date(new Date().getTime() + 9 * 60 * 60 * 1000).toISOString().split('T')[0]
+  )
+  const [availableDates, setAvailableDates] = useState([])
+  const [loading, setLoading] = useState(true)
 
-function compareSeasons(a, b) {
-  const pa = String(a).match(/^(\d{4})-(\d{1,2})$/);
-  const pb = String(b).match(/^(\d{4})-(\d{1,2})$/);
-  if (!pa || !pb) return String(a).localeCompare(String(b));
-  const ay = parseInt(pa[1], 10), an = parseInt(pa[2], 10);
-  const by = parseInt(pb[1], 10), bn = parseInt(pb[2], 10);
-  if (ay !== by) return ay - by;
-  return an - bn;
-}
+  // 📅 최근 경기 드롭다운
+  const [dateMenuOpen, setDateMenuOpen] = useState(false)
+  const dateMenuRef = useRef(null)
 
-function isSpecialGoal(g) {
-  if (!g.player_id) return true;
-  const name = g.player_name;
-  if (name === 'PK(핸디캡)' || name === 'PK' || name === '자책골') return true;
-  return false;
-}
+  // 수동 추가 폼 상태
+  const [showAddForm, setShowAddForm] = useState(false)
+  const [addPlayerId, setAddPlayerId] = useState('')
+  const [addTeam, setAddTeam] = useState('')
+  const [addStatus, setAddStatus] = useState('출석')
+  const [saving, setSaving] = useState(false)
 
-function parseStartHour(timeStr) {
-  if (!timeStr) return null;
-  const m = String(timeStr).match(/\d{1,2}/);
-  if (!m) return null;
-  const h = parseInt(m[0], 10);
-  if (isNaN(h) || h < 0 || h > 23) return null;
-  return h;
-}
+  // 🔀 순서 변경 중 표시
+  const [movingId, setMovingId] = useState(null)
 
-function makeIsFinished(resvData) {
-  const now = new Date();
-  const pad = (n) => String(n).padStart(2, '0');
-  const todayKey = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
-  const safeList = Array.isArray(resvData) ? resvData : [];
+  useEffect(() => {
+    fetchAvailableDates()
+    fetchTeams()
+    if (canEdit) fetchPlayers()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
-  const startHourByDate = {};
-  for (const r of safeList) {
-    if (startHourByDate[r.date] === undefined || r.is_confirmed) {
-      const h = parseStartHour(r.time);
-      if (h !== null) startHourByDate[r.date] = h;
+  useEffect(() => {
+    if (selectedDate) {
+      fetchAttendance(selectedDate)
     }
-  }
+  }, [selectedDate])
 
-  return (d) => {
-    if (d < todayKey) return true;
-    if (d > todayKey) return false;
-    const sh = startHourByDate[d];
-    if (sh === undefined || sh === null) return true;
-    return now.getHours() >= sh + MATCH_DURATION_HOURS;
-  };
-}
-
-async function fetchAllRows(table, columns) {
-  const PAGE_SIZE = 1000;
-  let from = 0;
-  let all = [];
-  try {
-    while (true) {
-      const { data, error } = await supabase
-        .from(table)
-        .select(columns)
-        .range(from, from + PAGE_SIZE - 1);
-      if (error) {
-        console.error(`[PersonalRecord] ${table} 조회 실패:`, error.message || error);
-        break;
+  // 📅 드롭다운 바깥 클릭 시 닫기
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (dateMenuRef.current && !dateMenuRef.current.contains(e.target)) {
+        setDateMenuOpen(false)
       }
-      all = all.concat(data || []);
-      if (!data || data.length < PAGE_SIZE) break;
-      from += PAGE_SIZE;
     }
-  } catch (e) {
-    console.error(`[PersonalRecord] ${table} 조회 중 예외:`, e);
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  async function fetchTeams() {
+    const { data } = await supabase
+      .from('teams')
+      .select('*')
+      .order('display_order')
+    setTeams(data || [])
   }
-  return all;
-}
 
-const SORT_OPTIONS = [
-  { key: 'goals', label: '⚽ 득점순' },
-  { key: 'star', label: '⭐ 별순' },
-  { key: 'attendance', label: '📊 출석율순' },
-];
+  async function fetchPlayers() {
+    const { data } = await supabase
+      .from('players')
+      .select('id, name, current_team, is_active')
+      .order('name')
+    setPlayers((data || []).filter(p => p.is_active !== false))
+  }
 
-// ⭐ 별 사유별 아이콘·색상
-function reasonInfo(reason) {
-  if (!reason) return { icon: '⭐', color: '#fbbf24', label: '별' };
-  if (reason.includes('챔스') && reason.includes('MVP')) return { icon: '⭐', color: '#a78bfa', label: '챔스 MVP' };
-  if (reason.includes('챔스')) return { icon: '👑', color: '#f59e0b', label: '챔스 우승' };
-  if (reason.includes('리그')) return { icon: '🏆', color: '#fbbf24', label: '리그 우승' };
-  if (reason.includes('득점왕')) return { icon: '👟', color: '#10b981', label: '득점왕' };
-  if (reason.includes('베스트')) return { icon: '📊', color: '#60a5fa', label: '베스트 플레이어' };
-  if (reason.includes('주장')) return { icon: '🎖️', color: '#f472b6', label: '주장' };
-  return { icon: '⭐', color: '#fbbf24', label: reason };
-}
+  async function fetchAvailableDates() {
+    const { data } = await supabase
+      .from('attendance')
+      .select('game_date')
+      .order('game_date', { ascending: false })
 
-// 📐 팝업 크기 (AttendanceStats.jsx 팝업과 동일 기준)
-const POPUP_WIDTH = 320;
-const POPUP_NEED_HEIGHT = 300;
-
-// ⭐ 출석율 색상 규칙 (AttendanceStats.jsx와 동일: 50% 기준)
-const rateColor = (rate) => (rate >= 50 ? 'text-emerald-400' : 'text-red-400');
-
-// ⭐ 별 상세 내역 미니 팝업 (모바일에서도 눌러서 볼 수 있도록)
-function StarDetailPopup({ data, onClose }) {
-  const ref = useRef(null);
-
-  useEffect(() => {
-    function onClickOutside(e) {
-      if (ref.current && !ref.current.contains(e.target)) onClose();
+    if (data) {
+      const unique = [...new Set(data.map(d => d.game_date))]
+      setAvailableDates(unique)
+      if (unique.length > 0 && !unique.includes(selectedDate)) {
+        setSelectedDate(unique[0])
+      }
     }
-    function onKey(e) {
-      if (e.key === 'Escape') onClose();
+  }
+
+  async function fetchAttendance(date) {
+    setLoading(true)
+    const { data } = await supabase
+      .from('attendance')
+      .select('*')
+      .eq('game_date', date)
+      .order('check_order')
+
+    setAttendance(data || [])
+    setLoading(false)
+  }
+
+  // ✅ 개별 선수 상태 수정
+  async function updateStatus(recordId, newStatus) {
+    if (!canEdit) return
+    await supabase
+      .from('attendance')
+      .update({ status: newStatus })
+      .eq('id', recordId)
+    fetchAttendance(selectedDate)
+  }
+
+  // ✅ 개별 선수 기록 삭제
+  async function deleteRecord(recordId, playerName) {
+    if (!canEdit) return
+    if (!window.confirm(`${playerName} 선수의 출석 기록을 삭제(불참 처리)할까요?`)) return
+    await supabase
+      .from('attendance')
+      .delete()
+      .eq('id', recordId)
+    fetchAttendance(selectedDate)
+  }
+
+  // 🔀 순서 변경 (같은 팀 안에서 위/아래로 이동)
+  async function moveRecord(teamName, idx, direction) {
+    if (!canEdit) return
+
+    const list = attendance
+      .filter(a => a.team === teamName)
+      .sort((a, b) => (a.check_order || 0) - (b.check_order || 0))
+
+    const targetIdx = direction === 'up' ? idx - 1 : idx + 1
+    if (targetIdx < 0 || targetIdx >= list.length) return
+
+    setMovingId(list[idx].id)
+
+    // 배열에서 위치 교환
+    const reordered = [...list]
+    const tmp = reordered[idx]
+    reordered[idx] = reordered[targetIdx]
+    reordered[targetIdx] = tmp
+
+    // 1..n 으로 순서 재부여
+    for (let i = 0; i < reordered.length; i++) {
+      await supabase
+        .from('attendance')
+        .update({ check_order: i + 1 })
+        .eq('id', reordered[i].id)
     }
-    document.addEventListener('mousedown', onClickOutside);
-    document.addEventListener('touchstart', onClickOutside);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onClickOutside);
-      document.removeEventListener('touchstart', onClickOutside);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [onClose]);
 
-  if (!data) return null;
+    await fetchAttendance(selectedDate)
+    setMovingId(null)
+  }
 
-  const W = 200;
-  const margin = 8;
-  let left = data.x - W / 2;
-  if (left + W > window.innerWidth - margin) left = window.innerWidth - W - margin;
-  if (left < margin) left = margin;
+  // ✅ 선택한 날짜 전체 삭제 — 2단계 재확인
+  async function deleteAllForDate() {
+    if (!canEdit) return
+    const count = attendance.length
+    if (!window.confirm(`⚠️ ${selectedDate} 날짜의 출석 기록 ${count}건을 전부 삭제할까요?\n(복구할 수 없습니다!)`)) return
+    if (!window.confirm(`정말 삭제하시겠습니까?\n${selectedDate} · 총 ${count}건이 영구 삭제됩니다.`)) return
 
-  const spaceBelow = window.innerHeight - data.y;
-  const placeAbove = spaceBelow < 180;
-  const top = placeAbove ? data.y - 26 : data.y + 6;
+    await supabase
+      .from('attendance')
+      .delete()
+      .eq('game_date', selectedDate)
+    await fetchAvailableDates()
+    fetchAttendance(selectedDate)
+  }
+
+  // 🧑 선수 선택 시 → 소속팀 자동 채움 (수정 가능)
+  function handleSelectPlayer(playerId) {
+    setAddPlayerId(playerId)
+    const p = players.find(x => x.id === playerId)
+    if (p) {
+      setAddTeam(p.current_team || '')
+    }
+  }
+
+  // ✅ 선수 수동 추가
+  async function addAttendance() {
+    if (!canEdit) return
+    if (!addPlayerId) {
+      alert('선수를 선택해 주세요.')
+      return
+    }
+    if (!addTeam) {
+      alert('팀을 선택해 주세요.')
+      return
+    }
+
+    const player = players.find(p => p.id === addPlayerId)
+    if (!player) return
+
+    setSaving(true)
+
+    const sameTeam = attendance.filter(a => a.team === addTeam)
+    const nextOrder = sameTeam.length > 0
+      ? Math.max(...sameTeam.map(a => a.check_order || 0)) + 1
+      : 1
+
+    const { error } = await supabase
+      .from('attendance')
+      .insert({
+        player_id: player.id,
+        player_name: player.name,
+        team: addTeam,
+        status: addStatus,
+        game_date: selectedDate,
+        check_order: nextOrder,
+        checked_at: new Date().toISOString(),
+      })
+
+    if (error) {
+      console.error('출석 추가 오류:', error)
+      alert('출석 추가에 실패했습니다.')
+    } else {
+      setAddPlayerId('')
+      setAddTeam('')
+      await fetchAvailableDates()
+      await fetchAttendance(selectedDate)
+    }
+    setSaving(false)
+  }
+
+  const statusIcon = (s) => {
+    switch(s) {
+      case '출석': return '✅'
+      case '늦참': return '🕐'
+      case '조퇴': return '🏃'
+      default: return ''
+    }
+  }
+
+  function getTeamColor(teamName) {
+    const team = teams.find(t => t.name === teamName)
+    const color = team?.color || '#ffffff'
+    const c = color.toLowerCase()
+    if (c === '#1d4ed8' || c === '#2563eb' || c === '#1e40af' || c === '#1e3a8a') {
+      return '#60a5fa'
+    }
+    return color
+  }
+
+  // 📅 날짜에 요일 붙이기
+  function fmtDateLabel(dateStr) {
+    if (!dateStr) return ''
+    const d = new Date(dateStr + 'T00:00:00')
+    if (isNaN(d)) return dateStr
+    const days = ['일', '월', '화', '수', '목', '금', '토']
+    return `${dateStr} (${days[d.getDay()]})`
+  }
+
+  const recordedTeams = [...new Set(attendance.map(a => a.team))]
+  const statusOptions = ['출석', '늦참', '조퇴']
+
+  const alreadyIds = new Set(attendance.map(a => a.player_id).filter(Boolean))
+  const selectablePlayers = players.filter(p => !alreadyIds.has(p.id))
+
+  // 선택된 선수 정보 (미배정 안내용)
+  const selectedPlayerObj = players.find(p => p.id === addPlayerId)
+  const isUnassignedPlayer = !!addPlayerId && !selectedPlayerObj?.current_team
 
   return (
-    <div
-      ref={ref}
-      className="fixed z-[60] bg-slate-800 border border-yellow-500/50 rounded-xl shadow-2xl shadow-black/50 overflow-hidden"
-      style={{
-        left,
-        top,
-        width: W,
-        transform: placeAbove ? 'translateY(-100%)' : 'none',
-      }}
-    >
-      <div className="flex justify-center items-center px-2 py-1.5 border-b border-slate-700 relative bg-yellow-500/10">
-        <span className="text-yellow-300 text-[11px] font-bold">⭐ {data.season}</span>
-        <button
-          onClick={onClose}
-          className="text-slate-400 hover:text-white text-xs leading-none absolute right-2"
-          aria-label="닫기"
-        >
-          ✕
-        </button>
-      </div>
-      <div className="p-1.5 space-y-1 max-h-48 overflow-y-auto">
-        {data.list.map((x, i) => {
-          const info = reasonInfo(x.reason);
-          return (
-            <div key={i} className="flex items-center gap-1.5 px-2 py-1 rounded bg-slate-900/60">
-              <span className="text-xs flex-shrink-0">{info.icon}</span>
-              <span className="text-[11px] font-semibold truncate" style={{ color: info.color }}>
-                {x.reason || info.label}
-              </span>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
+    <div>
+      <h1 className="text-3xl font-bold text-white mb-6">📋 출석현황</h1>
 
-// ⭐ 선수 상세 팝업 (AttendanceStats.jsx 팝업 스타일 준용)
-function DetailPopup({ player, seasons, anchor, onClose }) {
-  const ref = useRef(null);
-  const [starDetail, setStarDetail] = useState(null);
+      {/* 🔒 읽기 전용 안내 */}
+      {!canEdit && (
+        <div className="bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 mb-6 text-slate-400 text-sm flex items-center gap-2">
+          <span>🔒</span>
+          <span>출석 기록 <b>조회만 가능</b>합니다. 수정·삭제·추가는 관리자·임원·주장단만 할 수 있어요.</span>
+        </div>
+      )}
 
-  // 🖱️ 바깥 클릭 / 터치 / ESC 시 닫기 (AttendanceStats.jsx와 동일 동작)
-  useEffect(() => {
-    function onClickOutside(e) {
-      if (ref.current && !ref.current.contains(e.target)) onClose();
-    }
-    function onKey(e) {
-      if (e.key === 'Escape') onClose();
-    }
-    document.addEventListener('mousedown', onClickOutside);
-    document.addEventListener('touchstart', onClickOutside);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onClickOutside);
-      document.removeEventListener('touchstart', onClickOutside);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [onClose]);
+      {/* 날짜 선택 */}
+      <div className="flex flex-wrap items-end gap-3 mb-6">
+        <div>
+          <label className="block text-slate-300 text-sm font-medium mb-2">날짜 선택</label>
+          <input
+            type="date"
+            value={selectedDate}
+            onChange={(e) => setSelectedDate(e.target.value)}
+            className="bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-emerald-500"
+          />
+        </div>
 
-  if (!player || !anchor) return null;
-
-  const gap = 6;
-  const margin = 12;
-  const spaceBelow = window.innerHeight - anchor.bottom;
-  const spaceAbove = anchor.top;
-  const placeAbove = spaceBelow < POPUP_NEED_HEIGHT && spaceAbove > spaceBelow;
-
-  let left = anchor.left;
-  if (left + POPUP_WIDTH > window.innerWidth - margin) {
-    left = window.innerWidth - POPUP_WIDTH - margin;
-  }
-  if (left < margin) left = margin;
-
-  const style = placeAbove
-    ? { left, top: anchor.top - gap, transform: 'translateY(-100%)' }
-    : { left, top: anchor.bottom + gap };
-
-  function handleStarClick(e, season, list) {
-    e.stopPropagation();
-    const rect = e.currentTarget.getBoundingClientRect();
-    setStarDetail({
-      season,
-      list,
-      x: rect.left + rect.width / 2,
-      y: rect.bottom,
-    });
-  }
-
-  return (
-    <>
-      <div
-        ref={ref}
-        className="fixed z-50 bg-slate-800 border border-emerald-500/50 rounded-xl shadow-2xl shadow-black/50 w-[320px] max-w-[92vw] overflow-hidden"
-        style={style}
-      >
-        {/* 팝업 헤더 */}
-        <div className="flex justify-center items-center px-2 py-2 border-b border-slate-700 relative">
-          <h3 className="font-bold text-white text-sm">👤 {player.name}</h3>
+        {/* 📅 최근 경기 — 드롭다운 */}
+        <div className="relative" ref={dateMenuRef}>
+          <label className="block text-slate-300 text-sm font-medium mb-2">최근 경기</label>
           <button
-            onClick={onClose}
-            className="text-slate-400 hover:text-white text-base leading-none absolute right-2"
-            aria-label="닫기"
+            onClick={() => setDateMenuOpen(v => !v)}
+            className={`flex items-center gap-2 min-w-[200px] bg-slate-800 border rounded-xl px-4 py-3 text-white transition-colors ${
+              dateMenuOpen ? 'border-emerald-500' : 'border-slate-700 hover:border-slate-600'
+            }`}
           >
-            ✕
+            <span className="text-base">📅</span>
+            <span className="font-medium">{fmtDateLabel(selectedDate)}</span>
+            <span className="ml-auto text-slate-400 text-xs">{dateMenuOpen ? '▲' : '▼'}</span>
           </button>
-        </div>
 
-        {/* 통산 요약 */}
-        <div className="px-3 py-2 border-b border-slate-700 bg-emerald-500/5">
-          <div className="flex items-baseline justify-center gap-4">
-            <span className="text-amber-300 text-xs font-bold">
-              ⚽ <span className="text-base font-black">{player.totalGoals}</span>
-            </span>
-            <span className="text-yellow-300 text-xs font-bold">
-              ⭐ <span className="text-base font-black">{player.starCount}</span>
-            </span>
-            <span className="text-sky-300 text-xs font-bold">
-              📊 <span className={`text-base font-black ${rateColor(player.attendanceRate)}`}>
-                {player.attendanceRate}%
-              </span>
-            </span>
-          </div>
-          <p className="text-slate-500 text-[10px] text-center mt-0.5">창단 이후 통산 기록</p>
-        </div>
-
-        {/* 시즌별 기록 — 컴팩트 */}
-        <div className="max-h-64 overflow-y-auto">
-          <table className="w-full border-collapse">
-            <thead className="sticky top-0 bg-slate-800 z-10">
-              <tr>
-                <th className="px-1.5 py-1 text-slate-400 text-[10px] font-medium text-center border-b border-slate-700">시즌</th>
-                <th className="px-1.5 py-1 text-amber-300 text-[10px] font-medium text-center border-b border-slate-700">⚽</th>
-                <th className="px-1.5 py-1 text-yellow-300 text-[10px] font-medium text-center border-b border-slate-700">⭐</th>
-                <th className="px-1.5 py-1 text-sky-300 text-[10px] font-medium text-center border-b border-slate-700">출석</th>
-              </tr>
-            </thead>
-            <tbody>
-              {seasons.map((s) => {
-                const goals = player.bySeason[s] || 0;
-                const starList = player.starsBySeason?.[s] || [];
-                const att = player.attendanceBySeason?.[s];
-                return (
-                  <tr key={s} className="border-b border-slate-700/25 hover:bg-slate-700/20">
-                    <td className="px-1.5 py-0.5 text-slate-200 text-[11px] whitespace-nowrap leading-tight text-center">
-                      {s}
-                    </td>
-                    <td className={`px-1.5 py-0.5 text-[11px] font-bold leading-tight text-center ${goals > 0 ? 'text-amber-300' : 'text-slate-600'}`}>
-                      {goals}
-                    </td>
-                    <td className="px-1.5 py-0.5 leading-tight text-center">
-                      {starList.length > 0 ? (
-                        <button
-                          onClick={(e) => handleStarClick(e, s, starList)}
-                          className="inline-block px-1.5 py-0 rounded text-[11px] font-bold text-yellow-300 bg-yellow-500/10 hover:bg-yellow-500/25 active:bg-yellow-500/35 transition-colors whitespace-nowrap"
-                          title="눌러서 상세 보기"
-                        >
-                          {starList.map((x, i) => (
-                            <span key={i}>{reasonInfo(x.reason).icon}</span>
-                          ))}
-                          <span className="ml-0.5">{starList.length}</span>
-                        </button>
-                      ) : (
-                        <span className="text-slate-600 text-[11px]">-</span>
-                      )}
-                    </td>
-                    <td className="px-1.5 py-0.5 leading-tight text-center">
-                      {att && att.total > 0 ? (
-                        <span className={`text-[11px] font-bold ${rateColor(att.rate)}`}>
-                          {att.rate}%
-                        </span>
-                      ) : (
-                        <span className="text-slate-600 text-[11px]">-</span>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-          {seasons.length === 0 && (
-            <p className="text-center text-slate-400 py-3 text-xs">기록 없음</p>
+          {dateMenuOpen && (
+            <div className="absolute left-0 top-full mt-1.5 z-40 w-full min-w-[200px] bg-slate-800 border border-slate-600 rounded-xl shadow-2xl shadow-black/50 overflow-hidden">
+              <div className="px-3 py-2 border-b border-slate-700 flex items-center justify-between">
+                <span className="text-slate-400 text-xs">기록 있는 날짜</span>
+                <span className="text-slate-500 text-xs">{availableDates.length}건</span>
+              </div>
+              <div className="max-h-72 overflow-y-auto py-1">
+                {availableDates.length === 0 ? (
+                  <p className="px-4 py-3 text-slate-500 text-sm text-center">기록 없음</p>
+                ) : (
+                  availableDates.map(date => {
+                    const active = selectedDate === date
+                    return (
+                      <button
+                        key={date}
+                        onClick={() => {
+                          setSelectedDate(date)
+                          setDateMenuOpen(false)
+                        }}
+                        className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm text-left transition-colors ${
+                          active
+                            ? 'bg-emerald-500/20 text-emerald-300 font-bold'
+                            : 'text-slate-300 hover:bg-slate-700'
+                        }`}
+                      >
+                        <span className="w-3 flex-shrink-0">{active ? '✓' : ''}</span>
+                        <span>{fmtDateLabel(date)}</span>
+                      </button>
+                    )
+                  })
+                )}
+              </div>
+            </div>
           )}
         </div>
       </div>
 
-      {/* ⭐ 별 상세 미니 팝업 */}
-      <StarDetailPopup data={starDetail} onClose={() => setStarDetail(null)} />
-    </>
-  );
-}
-
-export default function PersonalRecord() {
-  const [search, setSearch] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState('');
-  const [rawRows, setRawRows] = useState([]);
-  const [seasons, setSeasons] = useState([]);
-  const [hideZero, setHideZero] = useState(false);
-  const [sortKey, setSortKey] = useState('goals');
-  const [selectedPlayer, setSelectedPlayer] = useState(null);
-  const [anchor, setAnchor] = useState(null);
-
-  useEffect(() => {
-    fetchData();
-  }, []);
-
-  async function fetchData() {
-    setLoading(true);
-    setLoadError('');
-
-    try {
-      const playerRes = await supabase.from('players').select('id, name, is_active');
-      const goalData = await fetchAllRows('goals', 'player_id, player_name, season, match_id');
-      const matchRes = await supabase.from('matches').select('id, game_date, season, is_champions');
-      const starData = await fetchAllRows('player_stars', 'player_id, season, reason, note, used_at');
-      const attendanceData = await fetchAllRows('attendance', 'player_id, game_date, status');
-      const resvRes = await supabase.from('reservations').select('date, time, is_confirmed');
-
-      if (playerRes.error) console.error('[PersonalRecord] players 조회 실패:', playerRes.error.message);
-      if (matchRes.error) console.error('[PersonalRecord] matches 조회 실패:', matchRes.error.message);
-      if (resvRes.error) console.error('[PersonalRecord] reservations 조회 실패:', resvRes.error.message);
-
-      const playerData = Array.isArray(playerRes.data) ? playerRes.data : [];
-      const matchData = Array.isArray(matchRes.data) ? matchRes.data : [];
-      const reservationData = Array.isArray(resvRes.data) ? resvRes.data : [];
-      const stars = Array.isArray(starData) ? starData : [];
-      const attendances = Array.isArray(attendanceData) ? attendanceData : [];
-
-      const activePlayers = playerData.filter((p) => p.is_active !== false);
-      const champsMatchIds = new Set(matchData.filter((m) => m.is_champions).map((m) => m.id));
-
-      // ── 📊 출석: 날짜 → 시즌 매핑 + 시즌별 총 경기 수 (리그·종료 경기만) ──
-      const isFinished = makeIsFinished(reservationData);
-      const dateToSeason = {};
-      const seasonGameCount = {};
-      const leagueDateSet = new Set();
-
-      matchData.forEach((m) => {
-        if (m.is_champions) return;
-        if (!isFinished(m.game_date)) return;
-        if (leagueDateSet.has(m.game_date)) return;
-        leagueDateSet.add(m.game_date);
-        const s = normalizeSeason(m.season);
-        if (s) {
-          dateToSeason[m.game_date] = s;
-          seasonGameCount[s] = (seasonGameCount[s] || 0) + 1;
-        }
-      });
-      const totalLeagueGames = leagueDateSet.size;
-
-      const attTotalByPlayer = {};
-      const attBySeasonByPlayer = {};
-      attendances.forEach((a) => {
-        if (!leagueDateSet.has(a.game_date)) return;
-        if (!PRESENT_STATUSES.includes(a.status)) return;
-        attTotalByPlayer[a.player_id] = (attTotalByPlayer[a.player_id] || 0) + 1;
-        const s = dateToSeason[a.game_date];
-        if (s) {
-          if (!attBySeasonByPlayer[a.player_id]) attBySeasonByPlayer[a.player_id] = {};
-          attBySeasonByPlayer[a.player_id][s] = (attBySeasonByPlayer[a.player_id][s] || 0) + 1;
-        }
-      });
-
-      // ── ⭐ 별: 통산 개수 + 시즌별 목록(사유 포함) ──
-      const starTotalByPlayer = {};
-      const starBySeasonByPlayer = {};
-      const starSeasonSet = new Set();
-      stars.forEach((s) => {
-        starTotalByPlayer[s.player_id] = (starTotalByPlayer[s.player_id] || 0) + 1;
-        const season = normalizeSeason(s.season);
-        if (season) {
-          starSeasonSet.add(season);
-          if (!starBySeasonByPlayer[s.player_id]) starBySeasonByPlayer[s.player_id] = {};
-          if (!starBySeasonByPlayer[s.player_id][season]) starBySeasonByPlayer[s.player_id][season] = [];
-          starBySeasonByPlayer[s.player_id][season].push({ reason: s.reason, note: s.note });
-        }
-      });
-
-      // ── 골격 생성 ──
-      const agg = {};
-      activePlayers.forEach((p) => {
-        const present = attTotalByPlayer[p.id] || 0;
-        agg[p.id] = {
-          id: p.id,
-          name: p.name,
-          bySeason: {},
-          starsBySeason: starBySeasonByPlayer[p.id] || {},
-          attendanceBySeason: {},
-          totalGoals: 0,
-          starCount: starTotalByPlayer[p.id] || 0,
-          attendanceRate: totalLeagueGames > 0 ? Math.round((present / totalLeagueGames) * 100) : 0,
-        };
-      });
-
-      // 시즌 목록: 경기 + 별 + 골에 등장한 모든 시즌 통합
-      const seasonSet = new Set([...Object.keys(seasonGameCount), ...starSeasonSet]);
-
-      for (const g of goalData) {
-        if (isSpecialGoal(g)) continue;
-        if (g.match_id && champsMatchIds.has(g.match_id)) continue;
-        const season = normalizeSeason(g.season);
-        if (!season) continue;
-
-        seasonSet.add(season);
-        const pid = g.player_id;
-        if (!agg[pid]) {
-          const present = attTotalByPlayer[pid] || 0;
-          agg[pid] = {
-            id: pid,
-            name: g.player_name || '알 수 없음',
-            bySeason: {},
-            starsBySeason: starBySeasonByPlayer[pid] || {},
-            attendanceBySeason: {},
-            totalGoals: 0,
-            starCount: starTotalByPlayer[pid] || 0,
-            attendanceRate: totalLeagueGames > 0 ? Math.round((present / totalLeagueGames) * 100) : 0,
-          };
-        }
-        agg[pid].bySeason[season] = (agg[pid].bySeason[season] || 0) + 1;
-        agg[pid].totalGoals += 1;
-      }
-
-      // 시즌별 출석율 채우기
-      Object.values(agg).forEach((row) => {
-        const mine = attBySeasonByPlayer[row.id] || {};
-        Object.keys(seasonGameCount).forEach((s) => {
-          const total = seasonGameCount[s] || 0;
-          const present = mine[s] || 0;
-          row.attendanceBySeason[s] = {
-            present,
-            total,
-            rate: total > 0 ? Math.round((present / total) * 100) : 0,
-          };
-        });
-      });
-
-      setSeasons(Array.from(seasonSet).sort(compareSeasons));
-      setRawRows(Object.values(agg));
-    } catch (e) {
-      console.error('[PersonalRecord] fetchData 전체 실패:', e);
-      setLoadError('데이터를 불러오는 중 오류가 발생했습니다. 콘솔(F12)을 확인해주세요.');
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  const rankedRows = useMemo(() => {
-    const metricOf = (r) => {
-      if (sortKey === 'star') return r.starCount;
-      if (sortKey === 'attendance') return r.attendanceRate;
-      return r.totalGoals;
-    };
-
-    const sorted = [...rawRows].sort((a, b) => {
-      const diff = metricOf(b) - metricOf(a);
-      if (diff !== 0) return diff;
-      return a.name.localeCompare(b.name, 'ko');
-    });
-
-    let lastVal = null;
-    let lastRank = 0;
-    sorted.forEach((r, idx) => {
-      const val = metricOf(r);
-      if (val <= 0) {
-        r.rank = null;
-        return;
-      }
-      if (val !== lastVal) {
-        lastRank = idx + 1;
-        lastVal = val;
-      }
-      r.rank = lastRank;
-    });
-
-    return sorted;
-  }, [rawRows, sortKey]);
-
-  const filtered = useMemo(() => {
-    let list = rankedRows;
-    if (hideZero) {
-      list = list.filter((r) =>
-        sortKey === 'star' ? r.starCount > 0 : sortKey === 'attendance' ? r.attendanceRate > 0 : r.totalGoals > 0
-      );
-    }
-    const keyword = search.trim();
-    if (keyword) list = list.filter((r) => r.name.includes(keyword));
-    return list;
-  }, [rankedRows, search, hideZero, sortKey]);
-
-  function handleRowClick(e, row) {
-    if (selectedPlayer?.id === row.id) {
-      setSelectedPlayer(null);
-      setAnchor(null);
-      return;
-    }
-    const rect = e.currentTarget.getBoundingClientRect();
-    setAnchor({ top: rect.top, bottom: rect.bottom, left: rect.left });
-    setSelectedPlayer(row);
-  }
-
-  return (
-    <div className="w-full">
-      {/* 헤더 카드 */}
-      <div className="bg-gradient-to-r from-amber-500/20 to-orange-500/10 border border-amber-500/30 rounded-xl px-3 py-2 mb-2">
-        <h1 className="text-base font-bold text-white flex items-center gap-1.5">📋 개인 기록</h1>
-        <p className="text-slate-400 text-xs mt-0.5">
-          창단 이후 전체 통산 기록입니다. 이름을 누르면 시즌별 상세 기록을 볼 수 있습니다.
-        </p>
-      </div>
-
-      {/* 정렬 버튼 */}
-      <div className="flex gap-1.5 mb-2">
-        {SORT_OPTIONS.map((opt) => (
+      {/* 상단 버튼 */}
+      {canEdit && (
+        <div className="flex flex-wrap items-center gap-2 mb-4">
           <button
-            key={opt.key}
-            onClick={() => setSortKey(opt.key)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-              sortKey === opt.key
-                ? 'bg-amber-500 text-slate-900'
-                : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-            }`}
+            onClick={() => setShowAddForm(!showAddForm)}
+            className="bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
           >
-            {opt.label}
+            {showAddForm ? '✕ 닫기' : '+ 선수 수동 추가'}
           </button>
-        ))}
-      </div>
-
-      {/* 검색창 + 필터 */}
-      <div className="flex flex-col sm:flex-row gap-1.5 mb-2">
-        <input
-          type="text"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="🔍 선수 이름 검색"
-          className="flex-1 px-3 py-1.5 rounded-lg bg-slate-900/80 border border-slate-600 text-white text-sm placeholder-slate-500 focus:outline-none focus:border-amber-500"
-        />
-        <label className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900/80 border border-slate-600 text-slate-300 text-xs cursor-pointer whitespace-nowrap">
-          <input
-            type="checkbox"
-            checked={hideZero}
-            onChange={(e) => setHideZero(e.target.checked)}
-            className="w-3.5 h-3.5 accent-amber-500"
-          />
-          기록 있는 선수만
-        </label>
-      </div>
-
-      {loadError && (
-        <div className="mb-2 px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/40 text-red-300 text-xs">
-          ⚠️ {loadError}
         </div>
       )}
 
-      {/* 목록 */}
-      <div className="bg-slate-900/60 border border-slate-700 rounded-xl overflow-hidden">
-        <table className="border-collapse" style={{ tableLayout: 'fixed', width: '100%', maxWidth: '440px' }}>
-          <colgroup>
-            <col style={{ width: '48px' }} />
-            <col />
-            <col style={{ width: '56px' }} />
-            <col style={{ width: '56px' }} />
-            <col style={{ width: '64px' }} />
-          </colgroup>
-          <thead>
-            <tr className="bg-slate-800/80">
-              <th className="text-slate-300 font-semibold px-2 py-1.5 text-center text-xs">순위</th>
-              <th className="text-slate-300 font-semibold px-2 py-1.5 text-left text-xs">이름</th>
-              <th className="text-amber-300 font-bold px-2 py-1.5 text-center text-xs">득점</th>
-              <th className="text-yellow-300 font-bold px-2 py-1.5 text-center text-xs">별</th>
-              <th className="text-sky-300 font-bold px-2 py-1.5 text-center text-xs">출석율</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr>
-                <td colSpan={5} className="text-center text-slate-400 py-8 text-sm">
-                  ⏳ 불러오는 중...
-                </td>
-              </tr>
-            ) : filtered.length === 0 ? (
-              <tr>
-                <td colSpan={5} className="text-center text-slate-500 py-8 text-sm">
-                  {search ? `'${search}' 검색 결과가 없습니다.` : '표시할 회원이 없습니다.'}
-                </td>
-              </tr>
-            ) : (
-              filtered.map((r, idx) => (
-                <tr
-                  key={r.id}
-                  onClick={(e) => handleRowClick(e, r)}
-                  className={`cursor-pointer transition-colors hover:bg-slate-700/50 ${
-                    selectedPlayer?.id === r.id ? 'ring-1 ring-emerald-500 bg-slate-700/40' : ''
-                  } ${idx % 2 === 0 ? 'bg-slate-900/40' : 'bg-slate-900/20'}`}
-                >
-                  <td className="px-2 py-1 text-center font-semibold text-slate-300 text-sm">
-                    {r.rank ? r.rank : '-'}
-                  </td>
-                  <td className="px-2 py-1 font-medium text-white truncate text-sm">{r.name}</td>
-                  <td className="px-2 py-1 text-center font-bold text-amber-300 bg-slate-800/40">
-                    <span className="text-sm">⚽ {r.totalGoals}</span>
-                  </td>
-                  <td className="px-2 py-1 text-center font-bold text-yellow-300">
-                    <span className="text-sm">⭐ {r.starCount}</span>
-                  </td>
-                  <td className="px-2 py-1 text-center font-bold text-sky-300">
-                    <span className="text-sm">{r.attendanceRate}%</span>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+      {/* ✅ 수동 추가 폼 (팀 자동 채움 · 수정 가능) */}
+      {canEdit && showAddForm && (
+        <div className="bg-slate-800 border border-emerald-500/40 rounded-xl p-4 mb-6">
+          <p className="text-slate-300 text-sm mb-3">
+            <b>{selectedDate}</b> 날짜에 선수를 수동으로 추가합니다.
+            <span className="text-slate-500 text-xs ml-2">선수를 고르면 소속팀이 자동 선택됩니다. (변경 가능)</span>
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+            <div className="sm:col-span-2">
+              <label className="block text-slate-400 text-xs mb-1">선수</label>
+              <select
+                value={addPlayerId}
+                onChange={(e) => handleSelectPlayer(e.target.value)}
+                className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-emerald-500"
+              >
+                <option value="">— 선수 선택 —</option>
+                {selectablePlayers.map(p => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}{p.current_team ? ` (${p.current_team})` : ' (미배정)'}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-      {/* 상세 팝업 */}
-      <DetailPopup
-        player={selectedPlayer}
-        seasons={seasons}
-        anchor={anchor}
-        onClose={() => {
-          setSelectedPlayer(null);
-          setAnchor(null);
-        }}
-      />
+            <div>
+              <label className="block text-slate-400 text-xs mb-1">
+                팀
+                {isUnassignedPlayer && <span className="text-amber-400 ml-1">· 선택 필요</span>}
+              </label>
+              <select
+                value={addTeam}
+                onChange={(e) => setAddTeam(e.target.value)}
+                className={`w-full bg-slate-700 border rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-emerald-500 ${
+                  isUnassignedPlayer && !addTeam ? 'border-amber-500/60' : 'border-slate-600'
+                }`}
+              >
+                <option value="">— 팀 선택 —</option>
+                {teams.map(t => (
+                  <option key={t.id} value={t.name}>{t.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-slate-400 text-xs mb-1">상태</label>
+              <select
+                value={addStatus}
+                onChange={(e) => setAddStatus(e.target.value)}
+                className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-emerald-500"
+              >
+                {statusOptions.map(s => (
+                  <option key={s} value={s}>{statusIcon(s)} {s}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {isUnassignedPlayer && (
+            <p className="text-amber-400/90 text-xs mt-2.5">
+              ⚠️ 미배정 선수입니다. 임시로 배정할 팀을 직접 선택해 주세요.
+            </p>
+          )}
+
+          <div className="flex justify-end mt-3">
+            <button
+              onClick={addAttendance}
+              disabled={saving}
+              className="bg-emerald-500 hover:bg-emerald-600 disabled:opacity-60 text-white text-sm font-medium px-5 py-2 rounded-lg transition-colors"
+            >
+              {saving ? '추가 중...' : '추가하기'}
+            </button>
+          </div>
+
+          {selectablePlayers.length === 0 && (
+            <p className="text-slate-500 text-xs mt-2">추가할 수 있는 선수가 없습니다. (이미 모두 등록됨 또는 활성 선수 없음)</p>
+          )}
+        </div>
+      )}
+
+      {/* 팀별 출석 현황 */}
+      {loading ? (
+        <div className="text-center py-20 text-slate-400">
+          <p className="text-xl">⏳ 로딩 중...</p>
+        </div>
+      ) : attendance.length === 0 ? (
+        <div className="text-center py-20 text-slate-400">
+          <p className="text-4xl mb-4">📋</p>
+          <p className="text-xl">해당 날짜의 출석 기록이 없습니다</p>
+          {canEdit && (
+            <p className="mt-2 text-sm">위의 "+ 선수 수동 추가"로 기록을 입력할 수 있습니다.</p>
+          )}
+        </div>
+      ) : (
+        recordedTeams.map(teamName => {
+          const teamAttendance = attendance
+            .filter(a => a.team === teamName)
+            .sort((a, b) => (a.check_order || 0) - (b.check_order || 0))
+          if (teamAttendance.length === 0) return null
+          const teamColor = getTeamColor(teamName)
+
+          return (
+            <div key={teamName} className="mb-6 rounded-xl border overflow-hidden" style={{ borderColor: `${teamColor}66` }}>
+              <div className="px-4 py-3 font-bold text-lg flex items-center gap-2" style={{ background: `${teamColor}1a` }}>
+                <span className="inline-block w-4 h-4 rounded-full flex-shrink-0" style={{ background: teamColor, border: '1px solid rgba(255,255,255,0.3)' }}></span>
+                <span style={{ color: teamColor }}>{teamName} ({teamAttendance.length}명)</span>
+              </div>
+              <div className="bg-slate-800">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="border-b border-slate-700">
+                      <th className="pl-7 pr-4 py-2 text-slate-400 text-sm w-16">순서</th>
+                      <th className="px-4 py-2 text-slate-400 text-sm">이름</th>
+                      <th className="px-2 py-2 text-slate-400 text-sm text-center w-10"></th>
+                      <th className="px-4 py-2 text-slate-400 text-sm">상태</th>
+                      <th className="px-4 py-2 text-slate-400 text-sm">시간</th>
+                      {canEdit && (
+                        <th className="px-4 py-2 text-slate-400 text-sm text-center">관리</th>
+                      )}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {teamAttendance.map((record, idx) => {
+                      const isMe = myPlayerId && record.player_id === myPlayerId
+                      const isMoving = movingId === record.id
+                      return (
+                        <tr
+                          key={record.id}
+                          className={`border-b border-slate-700/50 hover:bg-slate-700/30 ${
+                            isMe ? 'bg-sky-500/5' : ''
+                          } ${isMoving ? 'opacity-50' : ''}`}
+                          style={isMe ? { boxShadow: 'inset 0 0 0 1px rgba(56,189,248,0.6)' } : undefined}
+                        >
+                          <td className="pl-7 pr-4 py-14 text-emerald-400 font-bold">{idx + 1}</td>
+                          <td className="px-4 py-14 font-medium" style={{ color: teamColor }}>{record.player_name}</td>
+                          <td className="px-2 py-14 text-center">
+                            {record.is_pickup && (
+                              <span
+                                className="inline-flex items-center justify-center w-6 h-6 rounded-full text-[11px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40"
+                                title="픽업한 선수 (1시간 일찍 온 것으로 순서 반영)"
+                              >
+                                픽
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-4 py-14">
+                            {canEdit ? (
+                              <select
+                                value={record.status}
+                                onChange={(e) => updateStatus(record.id, e.target.value)}
+                                className="bg-slate-700 border border-slate-600 rounded-lg px-2 py-1 text-white text-sm focus:outline-none focus:border-emerald-500"
+                              >
+                                {statusOptions.map(s => (
+                                  <option key={s} value={s}>{statusIcon(s)} {s}</option>
+                                ))}
+                              </select>
+                            ) : (
+                              <span className="text-slate-200 text-sm">
+                                {statusIcon(record.status)} {record.status}
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-4 py-14 text-slate-400 text-sm">
+                            {record.checked_at ? new Date(record.checked_at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }) : '-'}
+                          </td>
+                          {canEdit && (
+                            <td className="px-4 py-14">
+                              <div className="flex items-center justify-center gap-1">
+                                {/* 🔼 위로 */}
+                                <button
+                                  onClick={() => moveRecord(teamName, idx, 'up')}
+                                  disabled={idx === 0 || isMoving}
+                                  className="text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10 disabled:opacity-25 disabled:hover:bg-transparent disabled:hover:text-slate-400 rounded px-1.5 py-1 text-sm transition-colors"
+                                  title="위로"
+                                >
+                                  ▲
+                                </button>
+                                {/* 🔽 아래로 */}
+                                <button
+                                  onClick={() => moveRecord(teamName, idx, 'down')}
+                                  disabled={idx === teamAttendance.length - 1 || isMoving}
+                                  className="text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10 disabled:opacity-25 disabled:hover:bg-transparent disabled:hover:text-slate-400 rounded px-1.5 py-1 text-sm transition-colors"
+                                  title="아래로"
+                                >
+                                  ▼
+                                </button>
+                                {/* 🗑️ 삭제 */}
+                                <button
+                                  onClick={() => deleteRecord(record.id, record.player_name)}
+                                  className="text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded px-1.5 py-1 text-sm transition-colors ml-1"
+                                  title="삭제 (불참 처리)"
+                                >
+                                  🗑️
+                                </button>
+                              </div>
+                            </td>
+                          )}
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )
+        })
+      )}
+
+      {/* ⬇️ 기록 전체 삭제 */}
+      {canEdit && attendance.length > 0 && !loading && (
+        <div style={{ marginTop: '80px', paddingTop: '28px', borderTop: '1px solid rgba(71,85,105,0.4)' }}>
+          <div className="flex justify-center">
+            <button
+              onClick={deleteAllForDate}
+              className="bg-red-600 hover:bg-red-700 text-white text-sm font-bold px-6 py-3 rounded-xl shadow-lg shadow-red-600/20 transition-colors"
+            >
+              🗑️ {selectedDate} 기록 전체 삭제
+            </button>
+          </div>
+          <p className="text-slate-500 text-xs text-center mt-3">
+            ※ 이 날짜의 모든 출석 기록이 영구 삭제됩니다. (되돌릴 수 없음)
+          </p>
+        </div>
+      )}
 
       {/* 하단 여백 */}
-      <div style={{ height: '70px', width: '100%' }} aria-hidden="true"></div>
+      <div style={{ height: '60px', width: '100%' }} aria-hidden="true"></div>
     </div>
-  );
+  )
 }
+
+export default AttendanceHistory
