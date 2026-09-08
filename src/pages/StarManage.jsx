@@ -118,9 +118,9 @@ function LightStarBadge({ count = 0, size = 20, title }) {
 }
 
 function StarManage() {
-  const { role, isPresident } = useAuth()
-  // 🔒 별 현황 수정 권한: 관리자 또는 회장만
-  const canEdit = role === 'admin' || isPresident
+  const { role, isPresident, isStarManager } = useAuth()
+  // 🔒 별 현황 수정 권한: 관리자 · 회장 · 별 담당자
+  const canEdit = role === 'admin' || isPresident || isStarManager
 
   const [stars, setStars] = useState([])
   const [players, setPlayers] = useState([])
@@ -446,7 +446,7 @@ function StarManage() {
 
       {!canEdit && (
         <p className="bg-sky-500/10 border border-sky-500/30 rounded-lg px-4 py-2.5 mb-4 text-sky-200 text-sm">
-          👀 열람 전용 · 지급·교환·수정은 관리자·회장만 가능합니다.
+          👀 열람 전용 · 지급·교환·수정은 관리자·회장·별 담당자만 가능합니다.
         </p>
       )}
 
@@ -606,7 +606,7 @@ function StarManage() {
                     <span className="text-slate-500 text-xs w-9 flex-shrink-0">{p.progress}/{EXCHANGE_UNIT}</span>
                   </span>
 
-                  {/* 🎁 교환 배지 (관리자/회장은 클릭 = 교환 처리) */}
+                  {/* 🎁 교환 배지 (관리자/회장/별 담당자는 클릭 = 교환 처리) */}
                   <span className="ml-auto flex items-center gap-2 flex-shrink-0">
                     {ready && (
                       canEdit && !editing ? (

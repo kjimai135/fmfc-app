@@ -174,6 +174,69 @@ function MemberRoles() {
     setSavingId(null)
   }
 
+  // ⭐ 별 담당 지정/해제 (별 담당자는 한 명만 유지 → 새로 지정 시 기존 담당자 자동 해제)
+  async function toggleStarManager(profile) {
+    if (!canEdit) {
+      alert('⚠️ 별 담당 지정은 관리자와 회장만 할 수 있습니다.')
+      return
+    }
+
+    const makeStarManager = !profile.is_star_manager
+
+    if (makeStarManager) {
+      const ok = confirm(
+        `'${profile.name || profile.email}' 님을 별 담당자로 지정하시겠습니까?\n\n` +
+        `· 별 담당자는 '별 현황' 화면을 수정할 수 있습니다. (권한 등급은 그대로 유지)\n` +
+        `· 기존 별 담당자가 있으면 자동으로 해제됩니다.`
+      )
+      if (!ok) return
+    } else {
+      const ok = confirm('별 담당 지정을 해제하시겠습니까?')
+      if (!ok) return
+    }
+
+    setSavingId(profile.id)
+
+    // 지정하는 경우: 먼저 기존 별 담당자 전부 해제
+    if (makeStarManager) {
+      const { error: clearErr } = await supabase
+        .from('profiles')
+        .update({ is_star_manager: false })
+        .eq('is_star_manager', true)
+
+      if (clearErr) {
+        console.error('기존 별 담당자 해제 오류:', clearErr)
+        alert('기존 별 담당자 해제에 실패했습니다.')
+        setSavingId(null)
+        return
+      }
+    }
+
+    // 대상 회원 별 담당 값 변경
+    const { error } = await supabase
+      .from('profiles')
+      .update({ is_star_manager: makeStarManager })
+      .eq('id', profile.id)
+
+    if (error) {
+      console.error('별 담당 지정 변경 오류:', error)
+      alert('별 담당 지정 변경에 실패했습니다.')
+      setSavingId(null)
+      return
+    }
+
+    // 로컬 상태 갱신: 새로 지정 시 나머지는 false, 대상만 true
+    setProfiles((prev) =>
+      prev.map((p) => {
+        if (makeStarManager) {
+          return { ...p, is_star_manager: p.id === profile.id }
+        }
+        return p.id === profile.id ? { ...p, is_star_manager: false } : p
+      })
+    )
+    setSavingId(null)
+  }
+
   // 🗑️ 계정 삭제 (profiles만 삭제, 선수·기록은 유지)
   async function deleteAccount(profile) {
     if (!canEdit) return
@@ -250,7 +313,7 @@ function MemberRoles() {
       {/* 👀 열람 전용 배너 (임원 등) */}
       {!canEdit && (
         <div className="mb-5 bg-sky-500/10 border border-sky-500/40 text-sky-200 rounded-xl px-4 py-3 text-sm">
-          👀 <b>열람 전용</b> — 회원 권한 변경·선수 연결·회장 지정은 <b>관리자와 회장</b>만 가능합니다.
+          👀 <b>열람 전용</b> — 회원 권한 변경·선수 연결·회장 지정·별 담당 지정은 <b>관리자와 회장</b>만 가능합니다.
         </div>
       )}
 
@@ -306,12 +369,14 @@ function MemberRoles() {
                 className={`bg-slate-800 border rounded-xl px-4 py-3 ${
                   p.is_president
                     ? 'border-indigo-500/60'
+                    : p.is_star_manager
+                    ? 'border-amber-500/60'
                     : isRequesting
                     ? 'border-amber-500/50'
                     : 'border-slate-700'
                 }`}
               >
-                {/* 상단: 이름 + 권한 뱃지 + 회장 뱃지 + 요청 뱃지 */}
+                {/* 상단: 이름 + 권한 뱃지 + 회장 뱃지 + 별 담당 뱃지 + 요청 뱃지 */}
                 <div className="flex items-center gap-2 flex-wrap mb-3">
                   <span className="text-white font-medium">{p.name || '(이름 없음)'}</span>
                   <span className={`text-[11px] px-2 py-0.5 rounded-full border ${ROLE_COLORS[p.role] || ''}`}>
@@ -320,6 +385,11 @@ function MemberRoles() {
                   {p.is_president && (
                     <span className="text-[11px] px-2 py-0.5 rounded-full border bg-indigo-500/20 text-indigo-300 border-indigo-500/40">
                       👑 회장
+                    </span>
+                  )}
+                  {p.is_star_manager && (
+                    <span className="text-[11px] px-2 py-0.5 rounded-full border bg-amber-500/20 text-amber-300 border-amber-500/40">
+                      ⭐ 별 담당
                     </span>
                   )}
                   {isRequesting && (
@@ -387,9 +457,9 @@ function MemberRoles() {
                   </div>
                 </div>
 
-                {/* 👑 회장 지정 + 🗑️ 계정 삭제 (수정 권한 있을 때만 노출) */}
+                {/* 👑 회장 지정 · ⭐ 별 담당 지정 · 🗑️ 계정 삭제 (수정 권한 있을 때만 노출) */}
                 {canEdit && (
-                  <div className="mt-3 pt-3 border-t border-slate-700/50 flex items-center justify-between gap-2">
+                  <div className="mt-3 pt-3 border-t border-slate-700/50 flex flex-wrap items-center gap-2">
                     {/* 회장 지정/해제 버튼 */}
                     <button
                       onClick={() => togglePresident(p)}
@@ -403,12 +473,25 @@ function MemberRoles() {
                       {p.is_president ? '👑 회장 해제' : '회장 지정'}
                     </button>
 
+                    {/* 별 담당 지정/해제 버튼 */}
+                    <button
+                      onClick={() => toggleStarManager(p)}
+                      disabled={savingId === p.id}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors disabled:opacity-50 border ${
+                        p.is_star_manager
+                          ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 hover:bg-amber-500/30'
+                          : 'bg-slate-700/50 text-slate-300 border-slate-600 hover:bg-slate-700'
+                      }`}
+                    >
+                      {p.is_star_manager ? '⭐ 별 담당 해제' : '별 담당 지정'}
+                    </button>
+
                     {/* 계정 삭제 버튼 (본인은 숨김) */}
                     {!isMe && (
                       <button
                         onClick={() => deleteAccount(p)}
                         disabled={savingId === p.id}
-                        className="bg-red-500/10 hover:bg-red-500/20 text-red-400 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors disabled:opacity-50"
+                        className="ml-auto bg-red-500/10 hover:bg-red-500/20 text-red-400 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors disabled:opacity-50"
                       >
                         🗑️ 계정 삭제
                       </button>
