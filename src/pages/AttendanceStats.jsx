@@ -45,21 +45,31 @@ function makeIsFinished(resvData) {
   }
 }
 
-// 🔢 날짜별 라운드 라벨 맵 (리그 경기일만 · 챔스 제외)
+// 🔢 날짜별 라운드 라벨 맵 (시즌별로 1·2R부터 시작 · 챔스 제외)
+// 🔥 allMatches는 season 정보를 포함해야 함 (game_date, is_champions, season)
 function buildRoundMap(allMatches) {
   const champs = new Set(allMatches.filter(m => m.is_champions).map(m => m.game_date))
-  const dates = [...new Set(allMatches.map(m => m.game_date))].filter(d => !champs.has(d))
-  if (!dates.includes(ANCHOR_DATE)) dates.push(ANCHOR_DATE)
-  dates.sort()
 
-  const anchorIdx = dates.indexOf(ANCHOR_DATE)
-  const map = {}
-  if (anchorIdx === -1) return map
-
-  dates.forEach((d, i) => {
-    const first = ANCHOR_FIRST_ROUND + (i - anchorIdx) * 2
-    if (first > 0) map[d] = `${first}·${first + 1}R`
+  // 🔥 시즌별로 그룹화
+  const bySeasonDates = {}
+  allMatches.forEach(m => {
+    if (champs.has(m.game_date)) return // 챔스 제외
+    const season = m.season || '_none'
+    if (!bySeasonDates[season]) bySeasonDates[season] = new Set()
+    bySeasonDates[season].add(m.game_date)
   })
+
+  const map = {}
+
+  // 🔥 각 시즌마다 첫 경기일 = 1·2R부터 계산
+  Object.values(bySeasonDates).forEach(dateSet => {
+    const dates = [...dateSet].sort()
+    dates.forEach((d, i) => {
+      const first = 1 + i * 2 // 0번째 = 1R, 1번째 = 3R, ...
+      map[d] = `${first}·${first + 1}R`
+    })
+  })
+
   return map
 }
 

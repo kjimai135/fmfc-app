@@ -430,11 +430,15 @@ function renderPollCard(poll) {
     )
   }
 
-  /* 📋 일반 보기 모드 */
+  /*   /* 📋 일반 보기 모드 */
   return (
     <div
       key={poll.id}
-      className="group relative bg-slate-800/80 hover:bg-slate-800 rounded-2xl border border-slate-700 hover:border-emerald-500/50 transition-all duration-200 overflow-hidden"
+      className={`group relative bg-slate-800/80 hover:bg-slate-800 rounded-2xl border transition-all duration-200 overflow-hidden ${
+        myResponse && isWithinWeek
+          ? 'border-emerald-500/40 shadow-lg shadow-emerald-500/5'
+          : 'border-slate-700 hover:border-emerald-500/50'
+      }`}
     >
       {/* 왼쪽 강조 바 */}
       <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${
@@ -510,44 +514,38 @@ function renderPollCard(poll) {
         {/* 🔥 D-7 이하: 출석체크 버튼 (항상 표시, 선택 시 강조) */}
         {isWithinWeek && (
           <div>
-            {/* 4개 버튼 (PollVote의 "내 투표" 카드와 동일) */}
-            <div className="grid grid-cols-4 gap-2 mb-2">
+            {/* 4개 버튼 (선택 시 또렷하게 강조) */}
+            <div className="grid grid-cols-4 gap-2 mb-2.5">
               {voteOptions.map(opt => {
                 const isActive = myResponse === opt.key
                 return (
                   <button
                     key={opt.key}
                     onClick={() => handleQuickAttendance(poll.id, opt.key)}
-                    className={`py-4 rounded-xl font-bold text-sm border-2 transition-all ${
+                    className={`relative py-3.5 rounded-xl font-bold text-sm border transition-all duration-150 ${
                       isActive
-                        ? `${opt.active} shadow-lg scale-[1.02]`
-                        : `${opt.base} opacity-70 hover:opacity-100`
+                        ? `${opt.active} shadow-lg scale-[1.03] ring-2 ring-white/20`
+                        : `${opt.base} opacity-45 hover:opacity-90 hover:scale-[1.01]`
                     }`}
                   >
-                    {opt.emoji}<br />{opt.key}
+                    {/* 선택 시 체크 배지 */}
+                    {isActive && (
+                      <span className="absolute top-1 right-1.5 text-[10px]">✔</span>
+                    )}
+                    <span className="text-lg block leading-none mb-1">{opt.emoji}</span>
+                    <span className="text-xs">{opt.key}</span>
                   </button>
                 )
               })}
             </div>
 
-{/* 취소 + 현황 보기 */}
-<div className="flex items-center gap-2 mt-2">
- {myResponse && (
-  <button
-    onClick={() => handleQuickAttendance(poll.id, myResponse)}
-    title="투표 취소"
-    className="bg-slate-700/60 hover:bg-slate-600 text-slate-400 hover:text-white px-4 h-11 rounded-xl text-sm font-semibold transition-colors flex items-center justify-center flex-shrink-0 whitespace-nowrap"
-  >
-    &nbsp;&nbsp;투표취소
-  </button>
-)}
-  <Link
-    to={`/polls/${poll.id}`}
-    className="flex-1 flex items-center justify-center gap-2 bg-sky-500 hover:bg-sky-600 text-white text-center py-3 rounded-xl text-base font-bold transition-colors"
-  >
-    👥 현황 보기
-  </Link>
-</div>
+{/* 현황 보기 */}
+<Link
+  to={`/polls/${poll.id}`}
+  className="flex items-center justify-center gap-2 w-full bg-sky-500 hover:bg-sky-600 text-white text-center h-11 rounded-lg text-sm font-semibold transition-colors shadow-md shadow-sky-500/20"
+>
+  👥 현황 보기
+</Link>
           </div>
         )}
 
@@ -555,7 +553,7 @@ function renderPollCard(poll) {
         {!isWithinWeek && (
           <Link
             to={`/polls/${poll.id}`}
-            className="block w-full bg-emerald-500 hover:bg-emerald-600 text-white text-center py-4 rounded-xl font-bold text-base transition-colors"
+            className="flex items-center justify-center gap-2 w-full bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white text-center py-4 rounded-xl font-bold text-base transition-all shadow-md shadow-emerald-500/20"
           >
             🗳️ 투표하기
           </Link>
