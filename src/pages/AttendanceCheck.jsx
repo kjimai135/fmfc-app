@@ -2,6 +2,16 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 
+// 🕐 "7시", "20시-22시", "오후 2시" 등에서 시작 시각(시)만 추출
+function parseStartHour(timeStr) {
+  if (!timeStr) return null
+  const m = String(timeStr).match(/\d{1,2}/)
+  if (!m) return null
+  const h = parseInt(m[0], 10)
+  if (isNaN(h) || h < 0 || h > 23) return null
+  return h
+}
+
 function AttendanceCheck() {
   const { profile, role } = useAuth()
   // 관리자·임원·주장은 다른 사람 대리 체크 가능
@@ -129,6 +139,14 @@ function AttendanceCheck() {
     }
   }
 
+  // 🕐 경기 시작 시간이 지났는지 판정
+  function isGameStarted() {
+    const startHour = parseStartHour(todayGameInfo?.time)
+    if (startHour === null) return false // 시간 정보 없으면 판정 불가
+    const now = new Date(new Date().getTime() + 9 * 60 * 60 * 1000) // KST
+    return now.getHours() >= startHour
+  }
+
   // 특정 선수를 출석 처리 (본인/대리 공통)
   async function checkInPlayer(player, status, isPickup) {
     if (!hasGameToday) {
@@ -152,6 +170,18 @@ function AttendanceCheck() {
       return
     }
 
+    // 🔥 "출석"인데 경기 시작 시간이 지났으면 → 알림 후 "늦참"으로 변경
+    let finalStatus = status
+    if (status === '출석' && isGameStarted()) {
+      const startHour = parseStartHour(todayGameInfo?.time)
+      const confirmed = window.confirm(
+        `⏰ 경기 시작 시간(${startHour}시)이 이미 지났습니다.\n` +
+        `"늦참"으로 기록됩니다. 계속하시겠습니까?`
+      )
+      if (!confirmed) return
+      finalStatus = '늦참'
+    }
+
     setLoading(true)
     const nextOrder = todayCount + 1
 
@@ -160,7 +190,7 @@ function AttendanceCheck() {
         player_id: player.id,
         player_name: player.name,
         team: player.current_team || '미배정',
-        status: status,
+        status: finalStatus, // 🔥 변경된 상태 사용
         check_order: nextOrder,
         game_date: today,
         is_pickup: !!isPickup,
@@ -173,7 +203,7 @@ function AttendanceCheck() {
       setMessage('')
     } else {
       setMessage(
-        `${player.name}님 ${status} 완료!${isPickup ? ' 🚗 픽업' : ''} (${player.current_team || '미배정'})`
+        `${player.name}님 ${finalStatus} 완료!${isPickup ? ' 🚗 픽업' : ''} (${player.current_team || '미배정'})`
       )
       setSelectedPlayer(null)
       setSearch('')
@@ -216,6 +246,9 @@ function AttendanceCheck() {
   const filteredPlayers = players.filter(
     (p) => p.name?.includes(search) && !todayChecked.includes(p.id)
   )
+
+  // 🔥 경기 시작 여부 (버튼 안내 문구용)
+  const gameStarted = hasGameToday && isGameStarted()
 
   return (
     <div className="max-w-lg mx-auto">
@@ -269,6 +302,13 @@ function AttendanceCheck() {
               ⚽ 오늘 경기
               {todayGameInfo.time && <span className="ml-2">⏰ {todayGameInfo.time}</span>}
               {todayGameInfo.venue && <span className="ml-2">📍 {todayGameInfo.venue}</span>}
+            </div>
+          )}
+
+          {/* 🔥 경기 시작 후 안내 */}
+          {gameStarted && (
+            <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl px-4 py-3 mb-6 text-center text-blue-200 text-sm">
+              🕐 경기가 시작되었습니다. 지금 "출석"을 누르면 <b>늦참</b>으로 기록됩니다.
             </div>
           )}
 
