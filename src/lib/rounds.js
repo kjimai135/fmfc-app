@@ -5,7 +5,7 @@ export const ANCHOR_DATE = '2026-08-08'
 export const ANCHOR_FIRST_ROUND = 13
 
 /**
- * 🔢 라운드 자동 계산 (시즌별로 1·2R부터 시작)
+ * 🔢 라운드 자동 계산 (해당 날짜가 속한 시즌 기준으로 1·2R부터)
  */
 export async function calcRounds(date) {
   // 1) 현재 시즌 조회
@@ -16,75 +16,75 @@ export async function calcRounds(date) {
     .single()
   const currentSeason = seasonRow?.value || null
 
-  // 2) 현재 시즌의 경기 조회
-  let matchQuery = supabase
+  // 🔥 2) 이 날짜(date)가 실제로 어느 시즌인지 확인
+  //    - matches에 있으면 그 경기의 season 사용
+  //    - 없으면 현재 시즌으로 간주 (미래 예약)
+  const { data: dayMatch } = await supabase
+    .from('matches')
+    .select('season, is_champions')
+    .eq('game_date', date)
+    .limit(1)
+
+  let targetSeason = currentSeason
+  if (dayMatch && dayMatch.length > 0) {
+    targetSeason = dayMatch[0].season || currentSeason
+    // 🏆 챔스면 라운드 없음
+    if (dayMatch[0].is_champions) return null
+  }
+
+  // 3) 🔥 targetSeason의 경기 조회 (해당 날짜가 속한 시즌)
+  const { data: matchData } = await supabase
     .from('matches')
     .select('game_date, is_champions, season')
-  if (currentSeason) {
-    matchQuery = matchQuery.eq('season', currentSeason)
-  }
-  const { data: matchData } = await matchQuery
+    .eq('season', targetSeason)
+
   const matchRows = matchData || []
 
   // 🏆 챔스 날짜 수집
   const champsDates = new Set(matchRows.filter(r => r.is_champions).map(r => r.game_date))
-
-  // 선택한 날이 챔스면 라운드 없음
   if (champsDates.has(date)) return null
 
-  // 🔥 3) 현재 시즌의 "시작 기준 날짜" 결정
-  //    - 현재 시즌 matches가 있으면 그 중 가장 빠른 날짜
-  //    - 없으면 → 이전 시즌 마지막 경기 이후부터 (오늘 기준)
-  let seasonStartDate = null
+  // 4) 🔥 targetSeason의 날짜 범위 결정
+  const matchDates = matchRows.map(r => r.game_date).sort()
+  const seasonStartDate = matchDates.length > 0 ? matchDates[0] : null
 
-  if (matchRows.length > 0) {
-    // 현재 시즌 경기 중 가장 빠른 날
-    const matchDates = matchRows.map(r => r.game_date).sort()
-    seasonStartDate = matchDates[0]
-  } else {
-    // 🔥 현재 시즌 경기가 아직 없으면 → 이전 시즌 마지막 날짜 다음부터
-    const { data: prevData } = await supabase
-      .from('matches')
-      .select('game_date')
-      .neq('season', currentSeason)
-      .order('game_date', { ascending: false })
-      .limit(1)
+  // 5) 확정 예약 날짜 (해당 시즌 범위만)
+  //    현재 시즌이고, 경기가 아직 없거나 미래 예약을 포함해야 할 때만 reservations 사용
+  let allDatesSet = new Set(matchRows.map(r => r.game_date))
 
-    if (prevData && prevData.length > 0) {
-      seasonStartDate = prevData[0].game_date // 이 날짜 "초과"부터 현재 시즌
+  if (targetSeason === currentSeason) {
+    // 현재 시즌: 미래 예약도 포함
+    let resQuery = supabase
+      .from('reservations')
+      .select('date')
+      .eq('is_confirmed', true)
+
+    if (seasonStartDate) {
+      // 현재 시즌 시작일 이후 예약만
+      resQuery = resQuery.gte('date', seasonStartDate)
+    } else {
+      // 현재 시즌 경기가 없으면 → 이전 시즌 마지막 이후 예약만
+      const { data: prevData } = await supabase
+        .from('matches')
+        .select('game_date')
+        .neq('season', currentSeason)
+        .order('game_date', { ascending: false })
+        .limit(1)
+      if (prevData && prevData.length > 0) {
+        resQuery = resQuery.gt('date', prevData[0].game_date)
+      }
     }
+
+    const { data: resData } = await resQuery
+    ;(resData || []).forEach(r => allDatesSet.add(r.date))
   }
 
-  // 🔥 4) 확정 예약 날짜 (현재 시즌 범위만)
-  let resQuery = supabase
-    .from('reservations')
-    .select('date')
-    .eq('is_confirmed', true)
-
-  // 이전 시즌 마지막 경기 "이후" 예약만 (현재 시즌 경기가 없을 때)
-  if (matchRows.length === 0 && seasonStartDate) {
-    resQuery = resQuery.gt('date', seasonStartDate)
-  } else if (matchRows.length > 0 && seasonStartDate) {
-    // 현재 시즌 시작일 이상 예약만
-    resQuery = resQuery.gte('date', seasonStartDate)
-  }
-
-  const { data: resData } = await resQuery
-  const resDates = (resData || []).map(r => r.date)
-
-  // 5) matches + reservations 날짜 합치기 (챔스 제외)
-  const allDates = new Set([
-    ...matchRows.map(r => r.game_date),
-    ...resDates,
-  ])
-
-  const dates = [...allDates].filter(d => !champsDates.has(d))
-
-  // 선택한 날짜가 목록에 없으면 추가
+  // 6) 챔스 제외 + 정렬
+  const dates = [...allDatesSet].filter(d => !champsDates.has(d))
   if (!dates.includes(date)) dates.push(date)
   dates.sort()
 
-  // 6) 시즌 첫 경기일 = 1·2R부터
+  // 7) 시즌 첫 경기일 = 1·2R부터
   const targetIdx = dates.indexOf(date)
   if (targetIdx === -1) return null
 

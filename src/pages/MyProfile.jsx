@@ -351,16 +351,20 @@ function MyProfile() {
                 />
               </div>
 
-              {/* 주 포지션 */}
+                           {/* 주 포지션 */}
               <div className="mb-1">
                 <label className="block text-slate-400 text-xs font-medium mb-1">주 포지션</label>
-                <input
-                  type="text"
+                <select
                   value={mainPosition}
                   onChange={(e) => setMainPosition(e.target.value)}
-                  placeholder="예: 공격수 / 미드필더 / 수비수 / 골키퍼"
-                  className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
-                />
+                  className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2.5 text-white focus:outline-none focus:border-emerald-500"
+                >
+                  <option value="">— 포지션 선택 —</option>
+                  <option value="FW">FW (공격수)</option>
+                  <option value="MF">MF (미드필더)</option>
+                  <option value="DF">DF (수비수)</option>
+                  <option value="GK">GK (골키퍼)</option>
+                </select>
               </div>
             </div>
           </div>
