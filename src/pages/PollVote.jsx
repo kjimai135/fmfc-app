@@ -23,10 +23,16 @@ function PollVote() {
 
   useEffect(() => {
     fetchPoll()
-    fetchResponses()
     fetchPlayers()
     fetchTeams()
   }, [id])
+
+  // poll이 로드된 후 responses 조회 (poll.season 필요)
+  useEffect(() => {
+    if (poll?.season) {
+      fetchResponses()
+    }
+  }, [poll])
 
   async function fetchPoll() {
     const { data } = await supabase.from('polls').select('*').eq('id', id).single()
@@ -34,6 +40,8 @@ function PollVote() {
   }
 
   async function fetchResponses() {
+    if (!poll?.season) return
+
     const { data } = await supabase
       .from('poll_responses')
       .select('*')
@@ -63,7 +71,7 @@ function PollVote() {
 
   // 🗳️ 투표하기 (모달 또는 상단 "내 투표" 카드에서 호출)
   async function handleVote(player, response) {
-    if (!player) return
+    if (!player || !poll) return
     if (!canEditPlayer(player)) {
       alert('본인의 참석 여부만 변경할 수 있습니다.')
       return
@@ -84,6 +92,7 @@ function PollVote() {
         player_name: player.name,
         team: player.current_team || null,
         response,
+        season: poll.season, // 🔥 poll의 시즌 추가
       }])
     }
 

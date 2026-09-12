@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
@@ -14,12 +14,34 @@ function PollCreate() {
   const [location, setLocation] = useState('')
   const [loading, setLoading] = useState(false)
 
+  // 🔄 현재 시즌
+  const [currentSeason, setCurrentSeason] = useState('')
+
+  useEffect(() => {
+    fetchSeason()
+  }, [])
+
+  // 🔄 현재 시즌 조회
+  async function fetchSeason() {
+    const { data } = await supabase
+      .from('app_settings')
+      .select('value')
+      .eq('key', 'season_label')
+      .single()
+    setCurrentSeason(data?.value || '')
+  }
+
   async function handleSubmit(e) {
     e.preventDefault()
     if (!canManagePolls) return // 🔒 이중 차단
 
     if (!gameDate) {
       alert('경기 날짜를 선택해주세요!')
+      return
+    }
+
+    if (!currentSeason) {
+      alert('현재 시즌 정보를 불러올 수 없습니다.')
       return
     }
 
@@ -31,6 +53,7 @@ function PollCreate() {
         game_date: gameDate,
         game_time: gameTime,
         location: location,
+        season: currentSeason, // 🔥 시즌 추가
       }])
 
     setLoading(false)
@@ -104,6 +127,15 @@ function PollCreate() {
               className={inputStyle}
             />
           </div>
+
+          {/* 현재 시즌 표시 */}
+          {currentSeason && (
+            <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl px-4 py-3">
+              <p className="text-emerald-200 text-sm">
+                🗓️ 현재 시즌: <span className="font-bold">{currentSeason}</span>
+              </p>
+            </div>
+          )}
         </div>
 
         {/* 버튼 */}

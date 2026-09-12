@@ -82,7 +82,7 @@ function AttendanceStats() {
   const [roundMap, setRoundMap] = useState({})
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
-  // 🗓️ 기본값: 현 시즌
+  // 🗓️ 기본값: 시즌별
   const [filterMode, setFilterMode] = useState('season')
   // 📊 보기 기준: 0 = 리그, 1 = 챔스
   const [index, setIndex] = useState(0)
@@ -91,6 +91,10 @@ function AttendanceStats() {
   // placement: 'below' | 'above'
   const [popupPosition, setPopupPosition] = useState({ top: 0, left: 0, placement: 'below' })
   const popupRef = useRef(null)
+
+  // 🔄 시즌 선택
+  const [availableSeasons, setAvailableSeasons] = useState([])
+  const [selectedSeason, setSelectedSeason] = useState('')
 
   // 👆 스와이프 / 드래그
   const startX = useRef(null)
@@ -110,9 +114,16 @@ function AttendanceStats() {
   const endInputRef = useRef(null)
 
   useEffect(() => {
-    fetchStats()
+    fetchSeasons()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filterMode, startDate, endDate])
+  }, [])
+
+  useEffect(() => {
+    if (selectedSeason) {
+      fetchStats()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterMode, startDate, endDate, selectedSeason])
 
   useEffect(() => {
     function handleClickOutside(e) {
@@ -125,8 +136,6 @@ function AttendanceStats() {
   }, [])
 
   // 🚫 안드로이드 크롬의 "가장자리 스와이프로 뒤로가기" 제스처와 충돌 방지
-  // 🚫 이 화면에 있는 동안 App.jsx의 "당겨서 새로고침"과도 충돌하지 않도록
-  //    data-no-pull 속성을 body에 표시해 App.jsx 쪽에서 감지하도록 함
   useEffect(() => {
     const html = document.documentElement
     const body = document.body
@@ -143,9 +152,6 @@ function AttendanceStats() {
   }, [])
 
   // 👆 터치 스와이프: 네이티브 이벤트 리스너를 non-passive로 직접 등록
-  //    (React 합성 이벤트의 touchmove는 기본 passive라 preventDefault가 씹히는 경우가 있음)
-  //    ⚠️ loading이 끝나야 스와이프 영역(div)이 실제로 렌더링되므로,
-  //       loading을 의존성에 넣어 데이터 로딩 완료 후 다시 el을 찾아 리스너를 등록합니다.
   const HORIZONTAL_DECIDE_PX = 4   // 가로로 이 정도만 움직여도 "가로 스와이프"로 빠르게 확정 (민감도↑)
   const VERTICAL_DECIDE_PX = 6     // 세로로 이 정도 움직이면 "세로 스크롤"로 확정 (더 이상 개입 안 함)
   const SWIPE_COMPLETE_PX = 24     // 짧게 스와이프해도 탭이 넘어가도록 임계값 완화 (민감도↑)
@@ -177,8 +183,6 @@ function AttendanceStats() {
         }
       }
 
-      // 🚫 가로 스와이프로 확정되면, 브라우저의 세로 스크롤/뒤로가기 제스처를 막고
-      //    우리 스와이프 로직만 동작하도록 함 (non-passive 리스너라 preventDefault가 실제로 먹힘)
       if (decidedHorizontal.current) {
         e.preventDefault()
       }
@@ -212,7 +216,7 @@ function AttendanceStats() {
     }
 
     el.addEventListener('touchstart', onTouchStart, { passive: true })
-    el.addEventListener('touchmove', onTouchMove, { passive: false }) // ⚠️ non-passive 필수 (iOS 대응)
+    el.addEventListener('touchmove', onTouchMove, { passive: false })
     el.addEventListener('touchend', onTouchEnd, { passive: true })
     el.addEventListener('touchcancel', onTouchEnd, { passive: true })
 
@@ -222,34 +226,50 @@ function AttendanceStats() {
       el.removeEventListener('touchend', onTouchEnd)
       el.removeEventListener('touchcancel', onTouchEnd)
     }
-  }, [loading]) // ✅ 로딩이 끝나 스와이프 div가 실제로 나타난 뒤에 다시 등록되도록 함
+  }, [loading])
 
-  async function fetchStats() {
-    setLoading(true)
-
-    // 🗓️ 현재 시즌 라벨 조회
+  // 🔄 시즌 목록 조회 (DB에 있는 모든 시즌)
+  async function fetchSeasons() {
+    // 1) 현재 시즌 조회
     const { data: seasonRow } = await supabase
       .from('app_settings')
       .select('value')
       .eq('key', 'season_label')
       .single()
-    const season = seasonRow?.value || ''
-    setSeasonLabel(season)
+    const currentSeason = seasonRow?.value || ''
+    setSeasonLabel(currentSeason)
 
-    const [attRes, playerRes, teamRes, matchRes, resvRes] = await Promise.all([
+    // 2) attendance 테이블에서 모든 시즌 목록 조회
+    const { data: seasonData } = await supabase
+      .from('attendance')
+      .select('season')
+
+    if (seasonData) {
+      const seasonsFromAttendance = [...new Set(seasonData.map(a => a.season).filter(Boolean))]
+      
+      // 🔥 현재 시즌이 목록에 없으면 추가 (아직 출석 데이터가 없어도 표시)
+      const allSeasons = new Set([...seasonsFromAttendance, currentSeason])
+      const uniqueSeasons = [...allSeasons].filter(Boolean).sort().reverse()
+      
+      setAvailableSeasons(uniqueSeasons)
+      
+      // 🔥 기본값: 현재 시즌 (app_settings의 season_label)
+      setSelectedSeason(currentSeason)
+    }
+  }
+
+  async function fetchStats() {
+    setLoading(true)
+
+    // 🔥 기본 데이터 조회 (경기/출석/예약)
+    const [attRes, matchRes, resvRes] = await Promise.all([
       supabase.from('attendance').select('*').order('game_date', { ascending: false }),
-      supabase.from('players').select('*'),
-      supabase.from('teams').select('*').order('display_order'),
       supabase.from('matches').select('game_date, season, is_champions'),
       supabase.from('reservations').select('date, time, is_confirmed'),
     ])
 
-    const attendance = attRes.data || []
-    const players = playerRes.data || []
-    setTeams(teamRes.data || [])
+    const allAttendanceData = attRes.data || []
     const allMatches = matchRes.data || []
-
-    setAllAttendance(attendance)
 
     // 🔢 라운드 맵 (전체 경기 기준)
     setRoundMap(buildRoundMap(allMatches))
@@ -261,11 +281,98 @@ function AttendanceStats() {
     const allChampsDates = new Set(allMatches.filter(m => m.is_champions).map(m => m.game_date))
     setChampsDateSet(allChampsDates)
 
+    // ── 🔥 시즌별 팀/선수 데이터 결정 ──
+    let teams = []
+    let players = [] // 🔥 선수 목록 추가
+    let playerTeamMap = {} // player_id → team_name
+
+    if (filterMode === 'season' && selectedSeason) {
+      if (selectedSeason === seasonLabel) {
+        // 🔥 현재 시즌 → 현재 teams/players 테이블 사용
+        const [teamRes, playerRes] = await Promise.all([
+          supabase.from('teams').select('*').order('display_order'),
+          supabase.from('players').select('id, name, current_team').neq('is_active', false),
+        ])
+        teams = teamRes.data || []
+        players = playerRes.data || []
+        
+        players.forEach(p => {
+          playerTeamMap[p.id] = p.current_team
+        })
+      } else {
+        // 🔥 과거 시즌 → season_archives의 roster_records에서 가져오기
+        const { data: archiveData } = await supabase
+          .from('season_archives')
+          .select('roster_records')
+          .eq('season', selectedSeason)
+          .single()
+
+        if (archiveData?.roster_records) {
+          const roster = archiveData.roster_records
+
+          // 🔥 과거 시즌 팀은 회색으로 통일
+          teams = roster.map((teamData, idx) => ({
+            id: `legacy-team-${idx}`,
+            name: teamData.team,
+            color: '#94a3b8', // 🔥 회색으로 통일
+            display_order: idx + 1,
+          }))
+
+          // 🔥 선수명 → 팀명 매핑
+          const playerNameToTeam = {}
+          roster.forEach(teamData => {
+            teamData.players.forEach(playerName => {
+              playerNameToTeam[playerName] = teamData.team
+            })
+          })
+
+          // 🔥 전체 선수 목록 가져오기
+          const { data: allPlayers } = await supabase
+            .from('players')
+            .select('id, name')
+          
+          if (allPlayers) {
+            // 🔥 과거 시즌 roster에 있는 선수만 필터링
+            const rosterPlayerNames = new Set()
+            roster.forEach(teamData => {
+              teamData.players.forEach(name => rosterPlayerNames.add(name))
+            })
+
+            players = allPlayers
+              .filter(p => rosterPlayerNames.has(p.name))
+              .map(p => ({
+                id: p.id,
+                name: p.name,
+                current_team: playerNameToTeam[p.name] || '미배정'
+              }))
+
+            players.forEach(p => {
+              playerTeamMap[p.id] = p.current_team
+            })
+          }
+        }
+      }
+    } else {
+      // filterMode가 'all' 또는 'range'인 경우 → 현재 팀/선수 사용
+      const [teamRes, playerRes] = await Promise.all([
+        supabase.from('teams').select('*').order('display_order'),
+        supabase.from('players').select('id, name, current_team').neq('is_active', false),
+      ])
+      teams = teamRes.data || []
+      players = playerRes.data || []
+      
+      players.forEach(p => {
+        playerTeamMap[p.id] = p.current_team
+      })
+    }
+
+    setTeams(teams)
+
     // ── 기간 필터에 해당하는 경기 목록 추리기 ──
     let scopedMatches = allMatches
 
     if (filterMode === 'season') {
-      scopedMatches = season ? allMatches.filter(m => m.season === season) : []
+      scopedMatches = selectedSeason ? allMatches.filter(m => m.season === selectedSeason) : []
     } else if (filterMode === 'range') {
       scopedMatches = (startDate && endDate)
         ? allMatches.filter(m => m.game_date >= startDate && m.game_date <= endDate)
@@ -283,40 +390,72 @@ function AttendanceStats() {
     setLeagueGames(leagueDates.size)
     setChampsGames(champsDates.size)
 
-    // ✅ 탈퇴한 선수(is_active === false) 제외
-    const activePlayers = players.filter(p => p.is_active !== false)
+    // 🔥 출석 데이터도 같은 기간으로 필터링
+    let attendance = allAttendanceData
+    if (filterMode === 'season' && selectedSeason) {
+      attendance = allAttendanceData.filter(a => a.season === selectedSeason)
+    } else if (filterMode === 'range' && startDate && endDate) {
+      attendance = allAttendanceData.filter(a => a.game_date >= startDate && a.game_date <= endDate)
+    }
+
+    setAllAttendance(attendance)
+
+    // ✅ 선수별 통계 계산 (모든 선수 포함)
     const PRESENT = ['출석', '늦참', '조퇴']
+    const playerStatsMap = {}
 
-    const playerStats = activePlayers.map(player => {
-      const myRecords = attendance.filter(a => a.player_id === player.id)
-
-      // ⚽ 리그 — 출석률(%)
-      const lg = myRecords.filter(a => leagueDates.has(a.game_date))
-      const lgAttended = lg.filter(a => a.status === '출석').length
-      const lgLate = lg.filter(a => a.status === '늦참').length
-      const lgEarly = lg.filter(a => a.status === '조퇴').length
-      const lgPresent = lg.filter(a => PRESENT.includes(a.status)).length
-      const leagueRate = leagueDates.size > 0 ? Math.round((lgPresent / leagueDates.size) * 100) : 0
-
-      // 🏆 챔스 — 출석 / 불참만
-      const champsPresent = myRecords.some(
-        a => champsDates.has(a.game_date) && PRESENT.includes(a.status)
-      )
-
-      return {
-        id: player.id,
-        name: player.name,
-        team: player.current_team,
-        // 리그
-        leagueAttended: lgAttended,
-        leagueLate: lgLate,
-        leagueEarly: lgEarly,
-        leaguePresent: lgPresent,
-        leagueRate,
-        // 챔스
-        champsPresent,
+    // 🔥 먼저 모든 선수를 기본값으로 추가
+    players.forEach(p => {
+      playerStatsMap[p.id] = {
+        id: p.id,
+        name: p.name,
+        team: playerTeamMap[p.id] || '미배정',
+        leagueAttended: 0,
+        leagueLate: 0,
+        leagueEarly: 0,
+        leaguePresent: 0,
+        champsPresent: false,
       }
     })
+
+    // 🔥 출석 데이터 반영
+    attendance.forEach(record => {
+      const pid = record.player_id
+      if (!pid) return
+
+      // 혹시 출석 기록에는 있지만 players 목록에 없는 경우 (탈퇴자 등)
+      if (!playerStatsMap[pid]) {
+        playerStatsMap[pid] = {
+          id: pid,
+          name: record.player_name,
+          team: playerTeamMap[pid] || '미배정',
+          leagueAttended: 0,
+          leagueLate: 0,
+          leagueEarly: 0,
+          leaguePresent: 0,
+          champsPresent: false,
+        }
+      }
+
+      const isLeague = leagueDates.has(record.game_date)
+      const isChamps = champsDates.has(record.game_date)
+
+      if (isLeague && PRESENT.includes(record.status)) {
+        playerStatsMap[pid].leaguePresent++
+        if (record.status === '출석') playerStatsMap[pid].leagueAttended++
+        if (record.status === '늦참') playerStatsMap[pid].leagueLate++
+        if (record.status === '조퇴') playerStatsMap[pid].leagueEarly++
+      }
+
+      if (isChamps && PRESENT.includes(record.status)) {
+        playerStatsMap[pid].champsPresent = true
+      }
+    })
+
+    const playerStats = Object.values(playerStatsMap).map(p => ({
+      ...p,
+      leagueRate: leagueDates.size > 0 ? Math.round((p.leaguePresent / leagueDates.size) * 100) : 0,
+    }))
 
     setStats(playerStats)
     setLoading(false)
@@ -600,17 +739,17 @@ function AttendanceStats() {
       <h1 className="text-3xl font-bold text-white mb-2">📊 출석율</h1>
       <p className="text-slate-400 mb-4">
         {isChampsView ? '🏆 챔스' : '⚽ 리그'} 총 {totalGames}회 경기 기준
-        {filterMode === 'season' && seasonLabel && (
-          <span className="ml-2 text-emerald-400 font-semibold">· 시즌 {seasonLabel}</span>
+        {filterMode === 'season' && selectedSeason && (
+          <span className="ml-2 text-emerald-400 font-semibold">· 시즌 {selectedSeason}</span>
         )}
       </p>
 
       {/* 기간 필터 */}
       <div className="bg-slate-800 rounded-xl p-4 border border-slate-700 mb-4">
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2 mb-3">
           {[
             { key: 'all', label: '전체' },
-            { key: 'season', label: `현 시즌${seasonLabel ? ` (${seasonLabel})` : ''}` },
+            { key: 'season', label: '시즌별' },
             { key: 'range', label: '기간 지정' },
           ].map(option => (
             <button
@@ -626,6 +765,24 @@ function AttendanceStats() {
             </button>
           ))}
         </div>
+
+        {/* 🔄 시즌 선택 드롭다운 */}
+        {filterMode === 'season' && (
+          <div className="mt-3">
+            <label className="block text-slate-400 text-xs mb-1.5">시즌 선택</label>
+            <select
+              value={selectedSeason}
+              onChange={(e) => setSelectedSeason(e.target.value)}
+              className="w-full sm:max-w-xs bg-slate-700 border border-slate-600 rounded-lg px-4 py-2.5 text-white text-sm focus:outline-none focus:border-emerald-500"
+            >
+              {availableSeasons.map(season => (
+                <option key={season} value={season}>
+                  {season} {season === seasonLabel && '(현재)'}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
         {/* 📅 기간 지정 - 클릭하면 바로 달력 */}
         {filterMode === 'range' && (
@@ -816,38 +973,38 @@ function AttendanceStats() {
             >
               {/* 팝업 헤더 */}
               <div className="flex justify-center items-center px-2 py-2 border-b border-slate-700 relative">
-  <h3 className="font-bold text-white text-sm">
-    👤 {popupPlayer.name}
-    {popupPlayer.team && (
-      <span className="ml-1.5 text-xs font-normal" style={{ color: getTeamColor(popupPlayer.team) }}>
-        · {popupPlayer.team}
-      </span>
-    )}
-  </h3>
-  <button
-    onClick={() => setPopupPlayer(null)}
-    className="text-slate-400 hover:text-white text-base leading-none absolute right-2"
-  >
-    ✕
-  </button>
-</div>
+                <h3 className="font-bold text-white text-sm">
+                  👤 {popupPlayer.name}
+                  {popupPlayer.team && (
+                    <span className="ml-1.5 text-xs font-normal" style={{ color: getTeamColor(popupPlayer.team) }}>
+                      · {popupPlayer.team}
+                    </span>
+                  )}
+                </h3>
+                <button
+                  onClick={() => setPopupPlayer(null)}
+                  className="text-slate-400 hover:text-white text-base leading-none absolute right-2"
+                >
+                  ✕
+                </button>
+              </div>
 
               {/* ⚽ 리그 요약 */}
               <div className="px-3 py-2 border-b border-slate-700 bg-emerald-500/5">
                 <div className="flex items-baseline justify-center gap-3">
-  <span className="text-emerald-300 text-xs font-bold">⚽ 리그 출석률</span>
-  <span className={`text-xl font-black ${rateColor(popupPlayer.leagueRate)}`}>
-    {popupPlayer.leagueRate}%
-  </span>
-</div>
+                  <span className="text-emerald-300 text-xs font-bold">⚽ 리그 출석률</span>
+                  <span className={`text-xl font-black ${rateColor(popupPlayer.leagueRate)}`}>
+                    {popupPlayer.leagueRate}%
+                  </span>
+                </div>
                 <div className="flex items-center justify-center gap-4">
-  <p className="text-slate-400 text-[10px]">
-    {popupPlayer.leaguePresent} / {leagueGames}회 참석
-  </p>
-  <p className="text-slate-500 text-[10px]">
-    ✅{popupPlayer.leagueAttended} 🕐{popupPlayer.leagueLate} 🏃{popupPlayer.leagueEarly}
-  </p>
-</div>
+                  <p className="text-slate-400 text-[10px]">
+                    {popupPlayer.leaguePresent} / {leagueGames}회 참석
+                  </p>
+                  <p className="text-slate-500 text-[10px]">
+                    ✅{popupPlayer.leagueAttended} 🕐{popupPlayer.leagueLate} 🏃{popupPlayer.leagueEarly}
+                  </p>
+                </div>
               </div>
 
               {/* 날짜별 기록 — 매우 컴팩트 */}

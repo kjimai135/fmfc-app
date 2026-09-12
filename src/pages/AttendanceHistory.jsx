@@ -18,6 +18,9 @@ function AttendanceHistory() {
   const [availableDates, setAvailableDates] = useState([])
   const [loading, setLoading] = useState(true)
 
+  // 🔄 현재 시즌
+  const [currentSeason, setCurrentSeason] = useState('')
+
   // 📅 최근 경기 드롭다운
   const [dateMenuOpen, setDateMenuOpen] = useState(false)
   const dateMenuRef = useRef(null)
@@ -33,11 +36,17 @@ function AttendanceHistory() {
   const [movingId, setMovingId] = useState(null)
 
   useEffect(() => {
-    fetchAvailableDates()
+    fetchSeason()
     fetchTeams()
     if (canEdit) fetchPlayers()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  useEffect(() => {
+    if (currentSeason) {
+      fetchAvailableDates()
+    }
+  }, [currentSeason])
 
   useEffect(() => {
     if (selectedDate) {
@@ -56,6 +65,16 @@ function AttendanceHistory() {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
+  // 🔄 현재 시즌 조회
+  async function fetchSeason() {
+    const { data } = await supabase
+      .from('app_settings')
+      .select('value')
+      .eq('key', 'season_label')
+      .single()
+    setCurrentSeason(data?.value || '')
+  }
+
   async function fetchTeams() {
     const { data } = await supabase
       .from('teams')
@@ -72,10 +91,14 @@ function AttendanceHistory() {
     setPlayers((data || []).filter(p => p.is_active !== false))
   }
 
+  // 🔥 "최근 경기" 드롭다운용: 현재 시즌 날짜만
   async function fetchAvailableDates() {
+    if (!currentSeason) return
+
     const { data } = await supabase
       .from('attendance')
       .select('game_date')
+      .eq('season', currentSeason) // 🔥 현재 시즌만
       .order('game_date', { ascending: false })
 
     if (data) {
@@ -87,12 +110,14 @@ function AttendanceHistory() {
     }
   }
 
+  // 🔥 날짜별 출석 조회: 모든 시즌 (직접 선택한 날짜는 과거 시즌도 보여줌)
   async function fetchAttendance(date) {
     setLoading(true)
     const { data } = await supabase
       .from('attendance')
       .select('*')
       .eq('game_date', date)
+      // 🔥 시즌 필터 제거 → 모든 시즌 데이터 조회 가능
       .order('check_order')
 
     setAttendance(data || [])
@@ -162,6 +187,8 @@ function AttendanceHistory() {
       .from('attendance')
       .delete()
       .eq('game_date', selectedDate)
+      // 🔥 시즌 필터 제거 → 선택한 날짜의 모든 시즌 데이터 삭제
+    
     await fetchAvailableDates()
     fetchAttendance(selectedDate)
   }
@@ -177,7 +204,7 @@ function AttendanceHistory() {
 
   // ✅ 선수 수동 추가
   async function addAttendance() {
-    if (!canEdit) return
+    if (!canEdit || !currentSeason) return
     if (!addPlayerId) {
       alert('선수를 선택해 주세요.')
       return
@@ -207,6 +234,7 @@ function AttendanceHistory() {
         game_date: selectedDate,
         check_order: nextOrder,
         checked_at: new Date().toISOString(),
+        season: currentSeason, // 🔥 현재 시즌으로 추가
       })
 
     if (error) {
@@ -259,6 +287,9 @@ function AttendanceHistory() {
   const selectedPlayerObj = players.find(p => p.id === addPlayerId)
   const isUnassignedPlayer = !!addPlayerId && !selectedPlayerObj?.current_team
 
+  // 🔥 선택한 날짜의 시즌 표시 (attendance에서 가져옴)
+  const selectedDateSeason = attendance.length > 0 ? attendance[0].season : null
+
   return (
     <div>
       <h1 className="text-3xl font-bold text-white mb-6">📋 출석현황</h1>
@@ -271,67 +302,93 @@ function AttendanceHistory() {
         </div>
       )}
 
-      {/* 날짜 선택 */}
-      <div className="flex flex-wrap items-end gap-3 mb-6">
-        <div>
-          <label className="block text-slate-300 text-sm font-medium mb-2">날짜 선택</label>
-          <input
-            type="date"
-            value={selectedDate}
-            onChange={(e) => setSelectedDate(e.target.value)}
-            className="bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-emerald-500"
-          />
+      {/* 날짜 선택 영역 개선 */}
+      <div className="bg-slate-800 rounded-xl p-5 border border-slate-700 mb-6">
+        <div className="flex flex-wrap items-end gap-4">
+          {/* 날짜 직접 선택 */}
+          <div className="flex-1 min-w-[200px]">
+            <label className="block text-slate-300 text-sm font-medium mb-2">
+              📅 날짜 선택
+            </label>
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+              className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-emerald-500"
+              style={{ colorScheme: 'dark' }}
+            />
+          </div>
+
+          {/* 최근 경기 드롭다운 */}
+          <div className="flex-1 min-w-[200px] relative" ref={dateMenuRef}>
+            <label className="block text-slate-300 text-sm font-medium mb-2">
+              🕐 최근 경기 <span className="text-emerald-400 text-xs">({currentSeason})</span>
+            </label>
+            <button
+              onClick={() => setDateMenuOpen(v => !v)}
+              className={`w-full flex items-center justify-between bg-slate-700 border rounded-lg px-4 py-2.5 text-white transition-colors ${
+                dateMenuOpen ? 'border-emerald-500' : 'border-slate-600 hover:border-slate-500'
+              }`}
+            >
+              <span className="font-medium">{selectedDate}</span>
+              <span className="text-slate-400 text-xs ml-2">{dateMenuOpen ? '▲' : '▼'}</span>
+            </button>
+
+            {dateMenuOpen && (
+              <div className="absolute left-0 top-full mt-2 z-40 w-full bg-slate-700 border border-slate-600 rounded-lg shadow-2xl shadow-black/50 overflow-hidden">
+                <div className="px-3 py-2 border-b border-slate-600 bg-slate-800/60">
+                  <span className="text-slate-400 text-xs">현재 시즌 경기</span>
+                  <span className="text-emerald-400 text-xs ml-2">({availableDates.length})</span>
+                </div>
+                <div className="max-h-64 overflow-y-auto">
+                  {availableDates.length === 0 ? (
+                    <p className="px-4 py-3 text-slate-500 text-sm text-center">기록 없음</p>
+                  ) : (
+                    availableDates.map(date => {
+                      const active = selectedDate === date
+                      return (
+                        <button
+                          key={date}
+                          onClick={() => {
+                            setSelectedDate(date)
+                            setDateMenuOpen(false)
+                          }}
+                          className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm text-left transition-colors ${
+                            active
+                              ? 'bg-emerald-500/20 text-emerald-300 font-semibold'
+                              : 'text-slate-200 hover:bg-slate-600'
+                          }`}
+                        >
+                          <span className="w-4 flex-shrink-0">{active ? '✓' : ''}</span>
+                          <span>{fmtDateLabel(date)}</span>
+                        </button>
+                      )
+                    })
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* 📅 최근 경기 — 드롭다운 */}
-        <div className="relative" ref={dateMenuRef}>
-          <label className="block text-slate-300 text-sm font-medium mb-2">최근 경기</label>
-          <button
-            onClick={() => setDateMenuOpen(v => !v)}
-            className={`flex items-center gap-2 min-w-[200px] bg-slate-800 border rounded-xl px-4 py-3 text-white transition-colors ${
-              dateMenuOpen ? 'border-emerald-500' : 'border-slate-700 hover:border-slate-600'
-            }`}
-          >
-            <span className="text-base">📅</span>
-            <span className="font-medium">{fmtDateLabel(selectedDate)}</span>
-            <span className="ml-auto text-slate-400 text-xs">{dateMenuOpen ? '▲' : '▼'}</span>
-          </button>
-
-          {dateMenuOpen && (
-            <div className="absolute left-0 top-full mt-1.5 z-40 w-full min-w-[200px] bg-slate-800 border border-slate-600 rounded-xl shadow-2xl shadow-black/50 overflow-hidden">
-              <div className="px-3 py-2 border-b border-slate-700 flex items-center justify-between">
-                <span className="text-slate-400 text-xs">기록 있는 날짜</span>
-                <span className="text-slate-500 text-xs">{availableDates.length}건</span>
-              </div>
-              <div className="max-h-72 overflow-y-auto py-1">
-                {availableDates.length === 0 ? (
-                  <p className="px-4 py-3 text-slate-500 text-sm text-center">기록 없음</p>
-                ) : (
-                  availableDates.map(date => {
-                    const active = selectedDate === date
-                    return (
-                      <button
-                        key={date}
-                        onClick={() => {
-                          setSelectedDate(date)
-                          setDateMenuOpen(false)
-                        }}
-                        className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm text-left transition-colors ${
-                          active
-                            ? 'bg-emerald-500/20 text-emerald-300 font-bold'
-                            : 'text-slate-300 hover:bg-slate-700'
-                        }`}
-                      >
-                        <span className="w-3 flex-shrink-0">{active ? '✓' : ''}</span>
-                        <span>{fmtDateLabel(date)}</span>
-                      </button>
-                    )
-                  })
-                )}
-              </div>
-            </div>
-          )}
-        </div>
+        {/* 시즌 정보 표시 */}
+        {selectedDateSeason && (
+          <div className={`mt-4 flex items-center gap-2 px-4 py-2.5 rounded-lg ${
+            selectedDateSeason === currentSeason
+              ? 'bg-emerald-500/10 border border-emerald-500/30'
+              : 'bg-amber-500/10 border border-amber-500/30'
+          }`}>
+            <span className="text-lg">🗓️</span>
+            <span className={`text-sm font-semibold ${
+              selectedDateSeason === currentSeason ? 'text-emerald-300' : 'text-amber-300'
+            }`}>
+              {selectedDateSeason} 시즌
+            </span>
+            {selectedDateSeason !== currentSeason && (
+              <span className="text-amber-200/80 text-xs ml-1">(과거 시즌)</span>
+            )}
+          </div>
+        )}
       </div>
 
       {/* 상단 버튼 */}

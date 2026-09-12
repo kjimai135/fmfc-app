@@ -25,13 +25,26 @@ function AttendanceCheck() {
   const [hasGameToday, setHasGameToday] = useState(null) // null: 확인 중, true/false: 결과
   const [todayGameInfo, setTodayGameInfo] = useState(null) // { venue, time }
 
+  // 🔄 현재 시즌
+  const [currentSeason, setCurrentSeason] = useState('')
+
+  // 🚫 시즌 전환 당일 차단용
+  const [isSeasonTransitionDay, setIsSeasonTransitionDay] = useState(false)
+
   const today = new Date(new Date().getTime() + 9 * 60 * 60 * 1000).toISOString().split('T')[0]
 
   useEffect(() => {
+    fetchSeason()
     fetchPlayers()
-    fetchTodayCount()
     fetchTodayGame()
   }, [])
+
+  useEffect(() => {
+    if (currentSeason) {
+      fetchTodayCount()
+      checkSeasonTransitionDay()
+    }
+  }, [currentSeason])
 
   // 내 선수 정보 세팅 (profile.player_id 기준)
   useEffect(() => {
@@ -42,6 +55,16 @@ function AttendanceCheck() {
       setMyPlayer(null)
     }
   }, [profile, players])
+
+  // 🔄 현재 시즌 조회
+  async function fetchSeason() {
+    const { data } = await supabase
+      .from('app_settings')
+      .select('value')
+      .eq('key', 'season_label')
+      .single()
+    setCurrentSeason(data?.value || '')
+  }
 
   async function fetchPlayers() {
     const { data } = await supabase
@@ -56,6 +79,7 @@ function AttendanceCheck() {
       .from('attendance')
       .select('*')
       .eq('game_date', today)
+      .eq('season', currentSeason)
       .order('check_order')
     setTodayCount(data?.length || 0)
     setTodayChecked(data?.map((a) => a.player_id) || [])
@@ -85,10 +109,34 @@ function AttendanceCheck() {
     }
   }
 
+  // 🚫 시즌 전환 당일인지 체크 (오늘이 이전 시즌의 마지막 경기일인지)
+  async function checkSeasonTransitionDay() {
+    if (!currentSeason) return
+
+    // 1) 오늘 이전 시즌 데이터가 있는지 확인
+    const { data: prevSeasonData } = await supabase
+      .from('attendance')
+      .select('season')
+      .eq('game_date', today)
+      .neq('season', currentSeason)
+      .limit(1)
+
+    // 2) 오늘 다른 시즌 데이터가 있으면 → 시즌 전환 당일
+    if (prevSeasonData && prevSeasonData.length > 0) {
+      setIsSeasonTransitionDay(true)
+    } else {
+      setIsSeasonTransitionDay(false)
+    }
+  }
+
   // 특정 선수를 출석 처리 (본인/대리 공통)
   async function checkInPlayer(player, status, isPickup) {
     if (!hasGameToday) {
       alert('오늘은 확정된 경기 일정이 없어 출석체크를 할 수 없습니다.')
+      return
+    }
+    if (isSeasonTransitionDay) {
+      alert('⚠️ 시즌 전환 당일입니다.\n이전 시즌 경기가 종료된 후 새 시즌 출석체크가 가능합니다.')
       return
     }
     if (!player) {
@@ -97,6 +145,10 @@ function AttendanceCheck() {
     }
     if (todayChecked.includes(player.id)) {
       alert('이미 출석 체크되었습니다!')
+      return
+    }
+    if (!currentSeason) {
+      alert('현재 시즌 정보를 불러올 수 없습니다.')
       return
     }
 
@@ -112,6 +164,7 @@ function AttendanceCheck() {
         check_order: nextOrder,
         game_date: today,
         is_pickup: !!isPickup,
+        season: currentSeason,
       },
     ])
 
@@ -145,6 +198,7 @@ function AttendanceCheck() {
       .delete()
       .eq('player_id', player.id)
       .eq('game_date', today)
+      .eq('season', currentSeason)
 
     if (error) {
       alert('취소 중 오류가 발생했습니다: ' + error.message)
@@ -165,10 +219,32 @@ function AttendanceCheck() {
 
   return (
     <div className="max-w-lg mx-auto">
-      {/* 제목 + 날짜 */}
-      <h1 className="text-3xl font-bold text-white mb-8 text-center">
-        ✅ 출석 체크 <span className="text-slate-400 text-xl font-normal ml-2">{today}</span>
-      </h1>
+      {/* 제목 + 날짜 + 시즌 */}
+      <div className="mb-6">
+        <h1 className="text-3xl font-bold text-white text-center">
+          ✅ 출석 체크
+        </h1>
+        <div className="flex items-center justify-center gap-3 mt-2">
+          <span className="text-slate-400 text-xl font-normal">{today}</span>
+          {currentSeason && (
+            <span className="text-emerald-400 text-sm font-semibold px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30">
+              🗓️ {currentSeason}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* 🚫 시즌 전환 당일 경고 */}
+      {isSeasonTransitionDay && (
+        <div className="bg-amber-500/10 border border-amber-500/40 rounded-2xl p-6 mb-6 text-center">
+          <p className="text-4xl mb-3">⚠️</p>
+          <p className="text-amber-300 font-bold text-lg mb-2">시즌 전환 당일입니다</p>
+          <p className="text-amber-200/80 text-sm">
+            이전 시즌 경기가 이미 기록되어 있습니다.<br />
+            새 시즌 출석체크는 내일부터 가능합니다.
+          </p>
+        </div>
+      )}
 
       {/* 📅 오늘 경기 없음 안내 */}
       {hasGameToday === false && (
@@ -185,7 +261,7 @@ function AttendanceCheck() {
       )}
 
       {/* ⚽ 경기가 있는 날에만 아래 내용 표시 */}
-      {hasGameToday === true && (
+      {hasGameToday === true && !isSeasonTransitionDay && (
         <>
           {/* 📍 오늘 경기 정보 안내 */}
           {(todayGameInfo?.venue || todayGameInfo?.time) && (
