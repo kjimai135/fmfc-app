@@ -518,7 +518,7 @@ function RefereeAssign() {
                     <thead>
                       <tr className="bg-slate-900/60 border-b border-slate-700 text-slate-300 text-xs">
                         <th className="px-1 py-3 text-center">쿼터</th>
-                        <th className="px-1 py-3 text-center">대진/심판팀</th>
+                        <th className="px-1 py-3 text-center">경기</th>
                         <th className="px-1 py-3 text-center text-yellow-300">👨‍⚖️주심</th>
                         <th className="px-1 py-3 text-center text-sky-300">🚩부심①</th>
                         <th className="px-1 py-3 text-center text-sky-300">🚩부심②</th>
@@ -537,16 +537,12 @@ function RefereeAssign() {
                             <td className="px-1 py-6 text-center font-extrabold text-emerald-400 text-2xl">
                               {match.match_number}Q
                             </td>
-                            {/* 대진 + 심판팀 */}
+                                                        {/* 대진 */}
                             <td className="px-1 py-6 text-center leading-tight">
                               <div className="text-base whitespace-nowrap">
                                 <span style={{ color: colorA }} className="font-bold">{match.team_a}</span>
                                 <span className="text-slate-500 mx-0.5">:</span>
                                 <span style={{ color: colorB }} className="font-bold">{match.team_b}</span>
-                              </div>
-                              <div className="text-sm mt-1.5">
-                                🚦<span className="font-bold" style={{ color: refColor }}>{refTeam || '-'}</span>
-                                <span className="text-slate-500">({candidates.length})</span>
                               </div>
                             </td>
                             {/* 주심 */}
