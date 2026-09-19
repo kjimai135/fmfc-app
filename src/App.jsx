@@ -31,6 +31,7 @@ import NoticeDetail from './pages/NoticeDetail'
 import LetterBoard from './pages/LetterBoard'
 import CalendarPage from './pages/CalendarPage'
 import PersonalRecord from './pages/PersonalRecord'
+import RefereeAssign from './pages/RefereeAssign'
 import NoticeTicker from './components/NoticeTicker'
 import logoImg from './assets/logo.png'
 import './App.css'
@@ -52,6 +53,7 @@ const allMenu = [
   { to: '/attendance/history', label: '🗓️ 출석현황', roles: ['admin', 'executive', 'captain', 'member'], group: 'game' },
   { to: '/polls', label: '🗳️ 투표', roles: ['admin', 'executive', 'captain', 'member'], group: 'game' },
   { to: '/calendar', label: '📅 일정', roles: ['admin', 'executive', 'captain', 'member'], group: 'game' },
+  
 
   // 📋 일반
   { to: '/roster', label: '📋 팀명단', roles: ['admin', 'executive', 'captain', 'member'], group: 'general' },
@@ -62,7 +64,9 @@ const allMenu = [
   { to: '/letter', label: '💌 마음의 편지', roles: ['admin', 'executive', 'captain', 'member'], group: 'general' },
 
   // 🔧 관리
+   // 🔧 관리
   { to: '/matches', label: '⚽ 경기 생성 및 기록', roles: ['admin', 'executive', 'captain'], group: 'manage' },
+  { to: '/referee', label: '🚦 심판 배정', roles: ['admin', 'executive'], group: 'manage' },
   { to: '/stars', label: '⭐ 별 사용 및 잔여현황', roles: ['admin', 'executive'], group: 'manage' },
   { to: '/archive', label: '🗂️ 아카이브', roles: ['admin', 'executive'], group: 'manage' },
   { to: '/players', label: '🧑 회원관리', roles: ['admin', 'executive'], group: 'manage' },
@@ -568,6 +572,9 @@ function AppContent() {
             <Route path="/matches" element={<Protected allowed={['admin', 'executive', 'captain', 'member']}><MatchRecord /></Protected>} />
 
             <Route path="/calendar" element={<Protected allowed={['admin', 'executive', 'captain', 'member']}><CalendarPage /></Protected>} />
+
+            {/* 🚦 심판 배정 - 관리자·임원만 */}
+            <Route path="/referee" element={<Protected allowed={['admin', 'executive']}><RefereeAssign /></Protected>} />
 
             {/* 🏆 순위 통합 (팀순위 + 득점순위 스와이프) */}
             <Route path="/rankings" element={<Protected allowed={['admin', 'executive', 'captain', 'member']}><Rankings /></Protected>} />

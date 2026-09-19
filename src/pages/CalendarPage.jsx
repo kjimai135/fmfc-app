@@ -884,27 +884,52 @@ function CalendarPage() {
                       </div>
                     )}
 
-                    {/* 일정 목록 */}
+                                        {/* 일정 목록 */}
                     {dayRes.map((r, i) => {
-                      // 정회원·주장/부주장: 구장 - 시간만 / 관리자·임원: 구장 - 시간 - 예약자
-                      const text = canSeeAll
-                        ? [r.venue, r.time, r.reserver].filter(Boolean).join('-')
-                        : [r.venue, r.time].filter(Boolean).join('-')
+                      // 🔥 관리자·임원: 구장-시간-예약자 (한 줄)
+                      //    정회원 등: 구장 / 시간 (두 줄)
+                      if (canSeeAll) {
+                        const text = [r.venue, r.time, r.reserver].filter(Boolean).join('-')
+                        return (
+                          <div
+                            key={i}
+                            style={{
+                              fontSize: '10.5px',
+                              color: r.is_confirmed ? '#fef08a' : '#e2e8f0',
+                              fontWeight: r.is_confirmed ? 700 : 400,
+                              lineHeight: 1.4,
+                              whiteSpace: 'nowrap',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                            }}
+                            title={text}
+                          >
+                            {text}
+                          </div>
+                        )
+                      }
+
+                      // 🔥 정회원: 구장 / 시간 두 줄
                       return (
                         <div
                           key={i}
                           style={{
-                            fontSize: '10.5px',
+                            fontSize: '10px',
                             color: r.is_confirmed ? '#fef08a' : '#e2e8f0',
                             fontWeight: r.is_confirmed ? 700 : 400,
-                            lineHeight: 1.4,
-                            whiteSpace: 'nowrap',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
+                            lineHeight: 1.3,
+                            marginBottom: '2px',
                           }}
-                          title={text}
+                          title={[r.venue, r.time].filter(Boolean).join(' ')}
                         >
-                          {text}
+                                                    {r.venue && (
+                            <div style={{ wordBreak: 'break-all' }}>📍{r.venue}</div>
+                          )}
+                                                    {r.time && (
+                            <div style={{ opacity: 0.9 }}>
+                              🕐 {String(r.time).includes('시') ? r.time : `${r.time}시`}
+                            </div>
+                          )}
                         </div>
                       )
                     })}
@@ -1053,12 +1078,12 @@ function CalendarPage() {
                     placeholder="구장 (예: 삼산체육관)"
                     className="flex-1 min-w-[130px] bg-slate-700 border border-slate-600 rounded px-2 py-1.5 text-white text-sm placeholder-slate-500 focus:outline-none focus:border-emerald-500"
                   />
-                  <input
+                                    <input
                     type="text"
                     value={r.time}
                     onChange={(e) => updateRow(idx, 'time', e.target.value)}
-                    placeholder="시간 (예: 20시)"
-                    className="w-[100px] bg-slate-700 border border-slate-600 rounded px-2 py-1.5 text-white text-sm placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+                    placeholder="시간 24시 (예: 07, 19)"
+                    className="w-[120px] bg-slate-700 border border-slate-600 rounded px-2 py-1.5 text-white text-sm placeholder-slate-500 focus:outline-none focus:border-emerald-500"
                   />
                   <input
                     type="text"

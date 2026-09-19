@@ -139,12 +139,14 @@ function AttendanceCheck() {
     }
   }
 
-  // 🕐 경기 시작 시간이 지났는지 판정
+  // 🕐 경기 시작 시간이 지났는지 판정 (24시 기준 · 분까지 반영)
   function isGameStarted() {
     const startHour = parseStartHour(todayGameInfo?.time)
     if (startHour === null) return false // 시간 정보 없으면 판정 불가
-    const now = new Date(new Date().getTime() + 9 * 60 * 60 * 1000) // KST
-    return now.getHours() >= startHour
+    // 🔥 브라우저 로컬 시간(이미 KST)을 그대로 사용 — 9시간 이중 보정 제거!
+    const now = new Date()
+    const nowDecimal = now.getHours() + now.getMinutes() / 60
+    return nowDecimal >= startHour
   }
 
   // 특정 선수를 출석 처리 (본인/대리 공통)
