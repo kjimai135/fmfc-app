@@ -19,19 +19,16 @@ function statusEmoji(response) {
   return ''
 }
 
-// 📊 슬라이드 탭
 const TABS = [
   { key: 'assign', label: '🚦 심판 배정' },
-  { key: 'stats', label: '📊 배정 현황' },
+  { key: 'stats', label: '📊 심판 현황' },
 ]
 
 function RefereeAssign() {
   const { role } = useAuth()
   const canAssign = role === 'admin' || role === 'executive'
 
-  const [selectedDate, setSelectedDate] = useState(
-    new Date().toISOString().split('T')[0]
-  )
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0])
   const [matches, setMatches] = useState([])
   const [teams, setTeams] = useState([])
   const [attendees, setAttendees] = useState([])
@@ -40,15 +37,11 @@ function RefereeAssign() {
   const [saving, setSaving] = useState(false)
   const [currentSeason, setCurrentSeason] = useState('')
 
-  // 📊 슬라이드 인덱스 (0: 배정, 1: 현황)
   const [index, setIndex] = useState(0)
-  const indexRef = useRef(0)
-  useEffect(() => { indexRef.current = index }, [index])
 
-  // 📊 현황용 데이터
-  const [statsPeriod, setStatsPeriod] = useState('season') // 'season' | 'all'
-  const [statsSort, setStatsSort] = useState('count') // 'name' | 'team' | 'count'
-  const [allAssignments, setAllAssignments] = useState([]) // 전체 배정 기록
+  const [statsPeriod, setStatsPeriod] = useState('season')
+  const [statsSort, setStatsSort] = useState('count')
+  const [allAssignments, setAllAssignments] = useState([])
   const [statsLoading, setStatsLoading] = useState(false)
 
   const [pickerOpen, setPickerOpen] = useState(false)
@@ -58,13 +51,11 @@ function RefereeAssign() {
   })
   const pickerRef = useRef(null)
 
-  // 👆 스와이프
-  const startX = useRef(null)
-  const startY = useRef(null)
-  const dragging = useRef(false)
-  const decidedHorizontal = useRef(false)
-  const decidedVertical = useRef(false)
-  const swipeAreaRef = useRef(null)
+  // 👆 드래그/스와이프 공통 상태
+  const dragStartX = useRef(null)
+  const dragStartY = useRef(null)
+  const isDragging = useRef(false)
+  const isHorizontal = useRef(false)
 
   useEffect(() => {
     fetchCurrentSeason()
@@ -76,7 +67,6 @@ function RefereeAssign() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDate])
 
-  // 현황 탭 열릴 때 전체 배정 조회
   useEffect(() => {
     if (index === 1) fetchAllAssignments()
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -91,58 +81,6 @@ function RefereeAssign() {
     if (pickerOpen) document.addEventListener('mousedown', onClickOutside)
     return () => document.removeEventListener('mousedown', onClickOutside)
   }, [pickerOpen])
-
-  // 👆 터치 스와이프 (non-passive)
-  useEffect(() => {
-    const el = swipeAreaRef.current
-    if (!el) return
-
-    const HDECIDE = 4, VDECIDE = 6, COMPLETE = 30
-
-    function onTouchStart(e) {
-      const t = e.touches[0]
-      startX.current = t.clientX
-      startY.current = t.clientY
-      dragging.current = true
-      decidedHorizontal.current = false
-      decidedVertical.current = false
-    }
-    function onTouchMove(e) {
-      if (!dragging.current || startX.current === null) return
-      const t = e.touches[0]
-      const dx = t.clientX - startX.current
-      const dy = t.clientY - startY.current
-      if (!decidedHorizontal.current && !decidedVertical.current) {
-        if (Math.abs(dx) > HDECIDE && Math.abs(dx) > Math.abs(dy)) decidedHorizontal.current = true
-        else if (Math.abs(dy) > VDECIDE && Math.abs(dy) >= Math.abs(dx)) decidedVertical.current = true
-      }
-      if (decidedHorizontal.current) e.preventDefault()
-    }
-    function onTouchEnd(e) {
-      if (!dragging.current || startX.current === null) { dragging.current = false; return }
-      const t = e.changedTouches[0]
-      const dx = t.clientX - startX.current
-      if (decidedHorizontal.current && Math.abs(dx) > COMPLETE) {
-        const cur = indexRef.current
-        if (dx < 0 && cur < TABS.length - 1) setIndex(cur + 1)
-        else if (dx > 0 && cur > 0) setIndex(cur - 1)
-      }
-      startX.current = null; startY.current = null
-      dragging.current = false
-      decidedHorizontal.current = false; decidedVertical.current = false
-    }
-
-    el.addEventListener('touchstart', onTouchStart, { passive: true })
-    el.addEventListener('touchmove', onTouchMove, { passive: false })
-    el.addEventListener('touchend', onTouchEnd, { passive: true })
-    el.addEventListener('touchcancel', onTouchEnd, { passive: true })
-    return () => {
-      el.removeEventListener('touchstart', onTouchStart)
-      el.removeEventListener('touchmove', onTouchMove)
-      el.removeEventListener('touchend', onTouchEnd)
-      el.removeEventListener('touchcancel', onTouchEnd)
-    }
-  }, [loading])
 
   async function fetchCurrentSeason() {
     const { data } = await supabase
@@ -160,7 +98,6 @@ function RefereeAssign() {
 
   async function fetchData(date) {
     setLoading(true)
-
     const { data: matchData } = await supabase
       .from('matches')
       .select('*')
@@ -180,7 +117,6 @@ function RefereeAssign() {
         .from('poll_responses')
         .select('player_id, player_name, team, response')
         .in('poll_id', pollIds)
-
       attendeeList = (respData || [])
         .filter(r => PRESENT_STATUSES.includes(r.response))
         .map(r => ({
@@ -197,16 +133,12 @@ function RefereeAssign() {
       .select('*')
       .eq('game_date', date)
     setAssignments(refData || [])
-
     setLoading(false)
   }
 
-  // 📊 전체 심판 배정 기록 조회 (현황용)
   async function fetchAllAssignments() {
     setStatsLoading(true)
-    const { data } = await supabase
-      .from('referee_assignments')
-      .select('*')
+    const { data } = await supabase.from('referee_assignments').select('*')
     setAllAssignments(data || [])
     setStatsLoading(false)
   }
@@ -224,9 +156,7 @@ function RefereeAssign() {
     const team = teams.find(t => t.name === teamName)
     const color = team?.color || '#94a3b8'
     const c = color.toLowerCase()
-    if (c === '#1d4ed8' || c === '#2563eb' || c === '#1e40af' || c === '#1e3a8a') {
-      return '#60a5fa'
-    }
+    if (c === '#1d4ed8' || c === '#2563eb' || c === '#1e40af' || c === '#1e3a8a') return '#60a5fa'
     return color
   }
 
@@ -241,21 +171,18 @@ function RefereeAssign() {
     return attendees.filter(a => a.team === refTeam)
   }
 
-  function getSlotPlayerId(matchNumber, role, subIndex) {
-    const list = assignments.filter(
-      a => a.match_number === matchNumber && a.role === role
-    )
-    if (role === '주심') return list[0]?.player_id || ''
+  function getSlotPlayerId(matchNumber, r, subIndex) {
+    const list = assignments.filter(a => a.match_number === matchNumber && a.role === r)
+    if (r === '주심') return list[0]?.player_id || ''
     return list[subIndex]?.player_id || ''
   }
 
-  function assignSlot(match, role, subIndex, playerId) {
+  function assignSlot(match, r, subIndex, playerId) {
     if (!canAssign) return
     const mn = match.match_number
-
     setAssignments(prev => {
       let list = [...prev]
-      if (role === '주심') {
+      if (r === '주심') {
         list = list.filter(a => !(a.match_number === mn && a.role === '주심'))
       } else {
         const subs = list.filter(a => a.match_number === mn && a.role === '부심')
@@ -263,22 +190,17 @@ function RefereeAssign() {
         if (target) list = list.filter(a => a !== target)
       }
       if (!playerId) return list
-
-      const alreadyInQuarter = list.some(
-        a => a.match_number === mn && a.player_id === playerId
-      )
-      if (alreadyInQuarter) {
+      const dup = list.some(a => a.match_number === mn && a.player_id === playerId)
+      if (dup) {
         alert('이 선수는 같은 쿼터에서 이미 다른 심판으로 배정되어 있습니다.')
         return prev
       }
-
       const candidate = getCandidates(match).find(c => c.player_id === playerId)
       if (!candidate) return list
-
       return [...list, {
         game_date: selectedDate,
         match_number: mn,
-        role,
+        role: r,
         player_id: candidate.player_id,
         player_name: candidate.name,
         team: candidate.team,
@@ -290,18 +212,15 @@ function RefereeAssign() {
   async function saveAssignments() {
     if (!canAssign) return
     setSaving(true)
-
     const { error: delErr } = await supabase
       .from('referee_assignments')
       .delete()
       .eq('game_date', selectedDate)
-
     if (delErr) {
-      alert('저장 실패(삭제 단계): ' + delErr.message)
+      alert('저장 실패: ' + delErr.message)
       setSaving(false)
       return
     }
-
     const rows = assignments.map(a => ({
       game_date: selectedDate,
       match_number: a.match_number,
@@ -311,16 +230,14 @@ function RefereeAssign() {
       team: a.team,
       season: a.season || currentSeason || null,
     }))
-
     if (rows.length > 0) {
       const { error: insErr } = await supabase.from('referee_assignments').insert(rows)
       if (insErr) {
-        alert('저장 실패(삽입 단계): ' + insErr.message)
+        alert('저장 실패: ' + insErr.message)
         setSaving(false)
         return
       }
     }
-
     setSaving(false)
     alert('✅ 심판 배정이 저장되었습니다!')
     fetchData(selectedDate)
@@ -328,17 +245,13 @@ function RefereeAssign() {
 
   function resetAssignments() {
     if (!canAssign) return
-    if (!window.confirm('현재 화면의 선택을 모두 지우시겠습니까?\n(저장 버튼을 누르지 않으면 기존 저장 내용은 유지됩니다)')) return
+    if (!window.confirm('현재 화면의 선택을 모두 지우시겠습니까?\n(저장 안 하면 기존 저장 내용 유지)')) return
     setAssignments([])
   }
 
   function getSummary(matchNumber) {
-    const main = assignments
-      .filter(a => a.match_number === matchNumber && a.role === '주심')
-      .map(a => a.player_name)
-    const sub = assignments
-      .filter(a => a.match_number === matchNumber && a.role === '부심')
-      .map(a => a.player_name)
+    const main = assignments.filter(a => a.match_number === matchNumber && a.role === '주심').map(a => a.player_name)
+    const sub = assignments.filter(a => a.match_number === matchNumber && a.role === '부심').map(a => a.player_name)
     return { main, sub }
   }
 
@@ -377,329 +290,66 @@ function RefereeAssign() {
     setPickerOpen(v => !v)
   }
 
-  // 📊 심판 횟수 집계
   function buildRefStats() {
-    // 기간 필터
     let source = allAssignments
     if (statsPeriod === 'season' && currentSeason) {
       source = allAssignments.filter(a => a.season === currentSeason)
     }
-
-    // 선수별 집계
     const map = {}
     source.forEach(a => {
       const pid = a.player_id
       if (!pid) return
       if (!map[pid]) {
-        map[pid] = {
-          player_id: pid,
-          name: a.player_name,
-          team: a.team || '미배정',
-          main: 0,
-          sub: 0,
-        }
+        map[pid] = { player_id: pid, name: a.player_name, team: a.team || '미배정', main: 0, sub: 0 }
       }
       if (a.role === '주심') map[pid].main++
       else if (a.role === '부심') map[pid].sub++
     })
-
     let list = Object.values(map).map(x => ({ ...x, total: x.main + x.sub }))
-
-    // 정렬
     if (statsSort === 'name') {
       list.sort((a, b) => a.name.localeCompare(b.name, 'ko'))
     } else if (statsSort === 'team') {
-      list.sort((a, b) => {
-        if (a.team !== b.team) return a.team.localeCompare(b.team, 'ko')
-        return b.total - a.total
-      })
+      list.sort((a, b) => a.team !== b.team ? a.team.localeCompare(b.team, 'ko') : b.total - a.total)
     } else {
-      // count (합계 많은 순)
-      list.sort((a, b) => {
-        if (b.total !== a.total) return b.total - a.total
-        return a.name.localeCompare(b.name, 'ko')
-      })
+      list.sort((a, b) => b.total !== a.total ? b.total - a.total : a.name.localeCompare(b.name, 'ko'))
     }
-
     return list
+  }
+
+  // 🖱️👆 드래그/스와이프 시작
+  function handleDragStart(clientX, clientY) {
+    dragStartX.current = clientX
+    dragStartY.current = clientY
+    isDragging.current = true
+    isHorizontal.current = false
+  }
+  function handleDragMove(clientX, clientY) {
+    if (!isDragging.current || dragStartX.current === null) return
+    const dx = clientX - dragStartX.current
+    const dy = clientY - dragStartY.current
+    if (!isHorizontal.current && Math.abs(dx) > 8 && Math.abs(dx) > Math.abs(dy)) {
+      isHorizontal.current = true
+    }
+  }
+  function handleDragEnd(clientX) {
+    if (!isDragging.current || dragStartX.current === null) {
+      isDragging.current = false
+      return
+    }
+    const dx = clientX - dragStartX.current
+    if (isHorizontal.current && Math.abs(dx) > 50) {
+      if (dx < 0 && index < TABS.length - 1) setIndex(index + 1)
+      else if (dx > 0 && index > 0) setIndex(index - 1)
+    }
+    dragStartX.current = null
+    dragStartY.current = null
+    isDragging.current = false
+    isHorizontal.current = false
   }
 
   const calendarCells = buildCalendar(pickerYM.year, pickerYM.month)
   const todayKey = toKey(new Date())
-
-  function renderOptions(match, selfPlayerId) {
-    const candidates = getCandidates(match)
-    const usedIds = new Set(
-      assignments
-        .filter(a => a.match_number === match.match_number && a.player_id !== selfPlayerId)
-        .map(a => a.player_id)
-    )
-    return candidates.map(c => (
-      <option key={c.player_id} value={c.player_id} disabled={usedIds.has(c.player_id)}>
-        {c.name}{statusEmoji(c.response) ? ` ${statusEmoji(c.response)}` : ''}
-        {usedIds.has(c.player_id) ? ' (배정됨)' : ''}
-      </option>
-    ))
-  }
-
-  function SlotSelect({ match, role, subIndex, label, color }) {
-    const value = getSlotPlayerId(match.match_number, role, subIndex)
-    const selected = getCandidates(match).find(c => c.player_id === value)
-    return (
-      <div className="flex items-center gap-2">
-        <span className="text-xs font-bold w-16 flex-shrink-0" style={{ color }}>{label}</span>
-        <select
-          value={value}
-          onChange={(e) => assignSlot(match, role, subIndex, e.target.value)}
-          disabled={!canAssign}
-          className="flex-1 bg-slate-900/70 border border-slate-600 rounded-lg px-2 py-2 text-sm focus:outline-none focus:border-emerald-500"
-          style={{ color: selected ? getStatusColor(selected.response) : '#94a3b8' }}
-        >
-          <option value="">— 선택 —</option>
-          {renderOptions(match, value)}
-        </select>
-      </div>
-    )
-  }
-
-  // 🚦 배정 탭 내용
-  function AssignView() {
-    if (loading) {
-      return <div className="text-center py-20 text-slate-400">⏳ 불러오는 중...</div>
-    }
-    if (matches.length === 0) {
-      return (
-        <div className="text-center py-20 text-slate-400 bg-slate-800/40 border border-dashed border-slate-700 rounded-2xl">
-          <p className="text-4xl mb-3">⚽</p>
-          <p className="text-white font-semibold">해당 날짜에 생성된 경기가 없습니다</p>
-          <p className="text-sm mt-1">먼저 "경기생성 및 기록"에서 경기를 생성해주세요.</p>
-        </div>
-      )
-    }
-    if (attendees.length === 0) {
-      return (
-        <div className="text-center py-20 text-slate-400 bg-slate-800/40 border border-dashed border-slate-700 rounded-2xl">
-          <p className="text-4xl mb-3">🗳️</p>
-          <p className="text-white font-semibold">투표 참석자 정보가 없습니다</p>
-          <p className="text-sm mt-1">투표에서 참석/늦참/조퇴한 선수가 있어야 심판을 배정할 수 있습니다.</p>
-        </div>
-      )
-    }
-
-    return (
-      <>
-        {/* 범례 */}
-        <div className="flex flex-wrap items-center gap-3 mb-3 text-xs bg-slate-800/40 border border-slate-700 rounded-xl px-3 py-2">
-          <span className="text-slate-400">이름 색상:</span>
-          <span className="flex items-center gap-1"><span style={{ color: '#4ade80' }}>●</span> 참석</span>
-          <span className="flex items-center gap-1"><span style={{ color: '#facc15' }}>●</span> ⏰늦참</span>
-          <span className="flex items-center gap-1"><span style={{ color: '#fb923c' }}>●</span> 🏃조퇴</span>
-        </div>
-
-        {/* 쿼터별 슬롯 */}
-        <div className="space-y-3">
-          {matches.map(match => {
-            const refTeam = getRefereeTeam(match)
-            const candidates = getCandidates(match)
-            const colorA = getTeamColor(match.team_a)
-            const colorB = getTeamColor(match.team_b)
-            const refColor = refTeam ? getTeamColor(refTeam) : '#94a3b8'
-
-            return (
-              <div key={match.id} className="rounded-2xl border border-slate-700 overflow-hidden bg-slate-800/50">
-                <div className="px-4 py-2.5 bg-slate-900/50 border-b border-slate-700 flex items-center justify-between flex-wrap gap-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-emerald-400 font-extrabold">{match.match_number}Q</span>
-                    <span className="text-sm">
-                      <span style={{ color: colorA }} className="font-bold">{match.team_a}</span>
-                      <span className="text-slate-500 mx-1.5">vs</span>
-                      <span style={{ color: colorB }} className="font-bold">{match.team_b}</span>
-                    </span>
-                  </div>
-                  <span className="text-xs">
-                    <span className="text-slate-400">🚦 심판: </span>
-                    <span className="font-bold" style={{ color: refColor }}>{refTeam || '없음'}</span>
-                    <span className="text-slate-500 ml-1">({candidates.length}명)</span>
-                  </span>
-                </div>
-
-                <div className="p-3 space-y-2">
-                  {candidates.length === 0 ? (
-                    <p className="text-slate-500 text-sm py-1">
-                      {refTeam ? `${refTeam}에 참석한 선수가 없습니다.` : '심판 팀을 찾을 수 없습니다.'}
-                    </p>
-                  ) : (
-                    <>
-                      <SlotSelect match={match} role="주심" subIndex={0} label="👨‍⚖️ 주심" color="#facc15" />
-                      <SlotSelect match={match} role="부심" subIndex={0} label="🚩 부심①" color="#38bdf8" />
-                      <SlotSelect match={match} role="부심" subIndex={1} label="🚩 부심②" color="#38bdf8" />
-                    </>
-                  )}
-                </div>
-              </div>
-            )
-          })}
-        </div>
-
-        {/* 저장 / 리셋 */}
-        {canAssign && (
-          <div className="mt-6 flex gap-3">
-            <button
-              onClick={resetAssignments}
-              disabled={saving}
-              className="bg-slate-700 hover:bg-slate-600 text-slate-200 px-6 py-3.5 rounded-xl font-bold transition-colors disabled:opacity-50 whitespace-nowrap"
-            >
-              🔄 초기화
-            </button>
-            <button
-              onClick={saveAssignments}
-              disabled={saving}
-              className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white py-3.5 rounded-xl font-bold transition-colors disabled:opacity-50 shadow-lg shadow-emerald-500/20"
-            >
-              {saving ? '저장 중...' : '💾 심판 배정 저장'}
-            </button>
-          </div>
-        )}
-
-        {/* 요약표 */}
-        <div className="mt-8">
-          <h2 className="text-lg font-bold text-white mb-3">📋 심판 배정 요약</h2>
-          <div className="bg-slate-800/60 border border-slate-700 rounded-2xl overflow-hidden">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-slate-900/50 border-b border-slate-700 text-slate-400 text-xs">
-                  <th className="px-3 py-2.5 text-center w-12">쿼터</th>
-                  <th className="px-3 py-2.5 text-center">대진</th>
-                  <th className="px-3 py-2.5 text-center">👨‍⚖️ 주심</th>
-                  <th className="px-3 py-2.5 text-center">🚩 부심</th>
-                </tr>
-              </thead>
-              <tbody>
-                {matches.map(match => {
-                  const { main, sub } = getSummary(match.match_number)
-                  const colorA = getTeamColor(match.team_a)
-                  const colorB = getTeamColor(match.team_b)
-                  return (
-                    <tr key={match.id} className="border-b border-slate-700/40">
-                      <td className="px-3 py-2.5 text-center font-extrabold text-emerald-400">{match.match_number}Q</td>
-                      <td className="px-3 py-2.5 text-center whitespace-nowrap">
-                        <span style={{ color: colorA }} className="font-bold">{match.team_a}</span>
-                        <span className="text-slate-500 mx-1 text-xs">vs</span>
-                        <span style={{ color: colorB }} className="font-bold">{match.team_b}</span>
-                      </td>
-                      <td className="px-3 py-2.5 text-center">
-                        {main.length > 0 ? <span className="text-yellow-300 font-bold">{main.join(', ')}</span> : <span className="text-slate-600">-</span>}
-                      </td>
-                      <td className="px-3 py-2.5 text-center">
-                        {sub.length > 0 ? <span className="text-sky-300 font-medium">{sub.join(', ')}</span> : <span className="text-slate-600">-</span>}
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-          <p className="text-slate-500 text-xs mt-2">
-            ※ 선택한 내용이 실시간 반영됩니다. 저장 버튼을 눌러야 최종 저장됩니다.
-          </p>
-        </div>
-      </>
-    )
-  }
-
-  // 📊 현황 탭 내용
-  function StatsView() {
-    const stats = buildRefStats()
-
-    return (
-      <>
-        {/* 기간 선택 */}
-        <div className="flex gap-2 mb-3">
-          {[
-            { key: 'season', label: `이번 시즌${currentSeason ? ` (${currentSeason})` : ''}` },
-            { key: 'all', label: '전체 시즌' },
-          ].map(opt => (
-            <button
-              key={opt.key}
-              onClick={() => setStatsPeriod(opt.key)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                statsPeriod === opt.key
-                  ? 'bg-emerald-500 text-white'
-                  : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-              }`}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
-
-        {/* 정렬 선택 */}
-        <div className="flex gap-2 mb-4">
-          <span className="text-slate-400 text-sm py-1.5">정렬:</span>
-          {[
-            { key: 'count', label: '📊 횟수순' },
-            { key: 'name', label: '🔤 이름순' },
-            { key: 'team', label: '👥 팀별' },
-          ].map(opt => (
-            <button
-              key={opt.key}
-              onClick={() => setStatsSort(opt.key)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                statsSort === opt.key
-                  ? 'bg-emerald-500 text-white'
-                  : 'bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700'
-              }`}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
-
-        {statsLoading ? (
-          <div className="text-center py-20 text-slate-400">⏳ 불러오는 중...</div>
-        ) : stats.length === 0 ? (
-          <div className="text-center py-20 text-slate-400 bg-slate-800/40 border border-dashed border-slate-700 rounded-2xl">
-            <p className="text-4xl mb-3">📊</p>
-            <p className="text-white font-semibold">심판 배정 기록이 없습니다</p>
-          </div>
-        ) : (
-          <div className="bg-slate-800/60 border border-slate-700 rounded-2xl overflow-hidden">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-slate-900/50 border-b border-slate-700 text-slate-400 text-xs">
-                  <th className="px-3 py-2.5 text-left">이름</th>
-                  <th className="px-2 py-2.5 text-center">팀</th>
-                  <th className="px-2 py-2.5 text-center text-yellow-300">👨‍⚖️ 주심</th>
-                  <th className="px-2 py-2.5 text-center text-sky-300">🚩 부심</th>
-                  <th className="px-3 py-2.5 text-center">합계</th>
-                </tr>
-              </thead>
-              <tbody>
-                {stats.map((s, idx) => {
-                  const tColor = getTeamColor(s.team)
-                  return (
-                    <tr key={s.player_id} className={`border-b border-slate-700/40 ${idx % 2 === 0 ? 'bg-slate-900/20' : ''}`}>
-                      <td className="px-3 py-2.5 text-left font-medium text-white">{s.name}</td>
-                      <td className="px-2 py-2.5 text-center">
-                        <span className="text-xs font-bold" style={{ color: tColor }}>{s.team}</span>
-                      </td>
-                      <td className="px-2 py-2.5 text-center text-yellow-300 font-bold">{s.main}</td>
-                      <td className="px-2 py-2.5 text-center text-sky-300 font-bold">{s.sub}</td>
-                      <td className="px-3 py-2.5 text-center text-white font-black text-base">{s.total}</td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        <p className="text-slate-500 text-xs mt-2">
-          ※ 저장된 심판 배정 기준입니다. (형평성 참고용)
-        </p>
-      </>
-    )
-  }
+  const stats = buildRefStats()
 
   return (
     <div className="max-w-3xl mx-auto">
@@ -718,16 +368,14 @@ function RefereeAssign() {
         </div>
       )}
 
-      {/* 📊 탭 */}
+      {/* 탭 */}
       <div className="flex gap-2 mb-3 bg-slate-800/60 border border-slate-700 rounded-xl p-1.5">
         {TABS.map((tab, i) => (
           <button
             key={tab.key}
             onClick={() => setIndex(i)}
             className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-colors ${
-              index === i
-                ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20'
-                : 'text-slate-300 hover:bg-slate-700/60'
+              index === i ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20' : 'text-slate-300 hover:bg-slate-700/60'
             }`}
           >
             {tab.label}
@@ -754,7 +402,6 @@ function RefereeAssign() {
               <span className="text-emerald-400 font-bold leading-none">{formatDate(selectedDate)}</span>
               <span className="text-slate-400 text-xs">▾</span>
             </button>
-
             {pickerOpen && (
               <div className="absolute left-0 mt-2 bg-slate-800 border border-slate-600 rounded-xl shadow-2xl p-3" style={{ zIndex: 60, width: '300px' }}>
                 <div className="flex items-center justify-between mb-2">
@@ -778,18 +425,14 @@ function RefereeAssign() {
                     if (dow === 0) color = '#f87171'
                     else if (dow === 6) color = '#60a5fa'
                     return (
-                      <button
-                        key={idx}
-                        type="button"
-                        onClick={() => pickDate(d)}
+                      <button key={idx} type="button" onClick={() => pickDate(d)}
                         className="aspect-square rounded-lg text-sm font-medium flex items-center justify-center transition-colors"
                         style={{
                           background: isSelected ? '#10b981' : isToday ? 'rgba(16,185,129,0.18)' : 'transparent',
                           color: isSelected ? '#ffffff' : color,
                           opacity: inMonth ? 1 : 0.35,
                           fontWeight: isToday || isSelected ? 800 : 500,
-                        }}
-                      >
+                        }}>
                         {d.getDate()}
                       </button>
                     )
@@ -806,21 +449,236 @@ function RefereeAssign() {
 
       {/* 슬라이드 영역 */}
       <div
-        ref={swipeAreaRef}
         className="overflow-hidden select-none"
-        style={{ touchAction: 'pan-y', overscrollBehaviorX: 'contain' }}
+        style={{ touchAction: 'pan-y', cursor: index >= 0 ? 'grab' : 'default' }}
+        onMouseDown={(e) => handleDragStart(e.clientX, e.clientY)}
+        onMouseMove={(e) => { if (isDragging.current) handleDragMove(e.clientX, e.clientY) }}
+        onMouseUp={(e) => handleDragEnd(e.clientX)}
+        onMouseLeave={(e) => { if (isDragging.current) handleDragEnd(e.clientX) }}
+        onTouchStart={(e) => handleDragStart(e.touches[0].clientX, e.touches[0].clientY)}
+        onTouchMove={(e) => { if (isDragging.current) handleDragMove(e.touches[0].clientX, e.touches[0].clientY) }}
+        onTouchEnd={(e) => handleDragEnd(e.changedTouches[0].clientX)}
       >
-        <div
-          className="flex transition-transform duration-300 ease-out"
-          style={{ transform: `translateX(-${index * 100}%)` }}
-        >
-          {/* 🚦 배정 */}
-          <div className="w-full flex-shrink-0" style={{ paddingRight: '2px' }}>
-            {AssignView()}
+        <div className="flex transition-transform duration-300 ease-out" style={{ transform: `translateX(-${index * 100}%)` }}>
+          {/* ── 배정 탭 ── */}
+          <div className="w-full flex-shrink-0 px-0.5">
+            {loading ? (
+              <div className="text-center py-20 text-slate-400">⏳ 불러오는 중...</div>
+            ) : matches.length === 0 ? (
+              <div className="text-center py-20 text-slate-400 bg-slate-800/40 border border-dashed border-slate-700 rounded-2xl">
+                <p className="text-4xl mb-3">⚽</p>
+                <p className="text-white font-semibold">해당 날짜에 생성된 경기가 없습니다</p>
+                <p className="text-sm mt-1">먼저 "경기생성 및 기록"에서 경기를 생성해주세요.</p>
+              </div>
+            ) : attendees.length === 0 ? (
+              <div className="text-center py-20 text-slate-400 bg-slate-800/40 border border-dashed border-slate-700 rounded-2xl">
+                <p className="text-4xl mb-3">🗳️</p>
+                <p className="text-white font-semibold">투표 참석자 정보가 없습니다</p>
+                <p className="text-sm mt-1">투표에서 참석/늦참/조퇴한 선수가 있어야 심판을 배정할 수 있습니다.</p>
+              </div>
+            ) : (
+              <>
+                <div className="flex flex-wrap items-center gap-3 mb-3 text-xs bg-slate-800/40 border border-slate-700 rounded-xl px-3 py-2">
+                  <span className="text-slate-400">이름 색상:</span>
+                  <span className="flex items-center gap-1"><span style={{ color: '#4ade80' }}>●</span> 참석</span>
+                  <span className="flex items-center gap-1"><span style={{ color: '#facc15' }}>●</span> ⏰늦참</span>
+                  <span className="flex items-center gap-1"><span style={{ color: '#fb923c' }}>●</span> 🏃조퇴</span>
+                </div>
+
+                <div className="space-y-3">
+                  {matches.map(match => {
+                    const refTeam = getRefereeTeam(match)
+                    const candidates = getCandidates(match)
+                    const colorA = getTeamColor(match.team_a)
+                    const colorB = getTeamColor(match.team_b)
+                    const refColor = refTeam ? getTeamColor(refTeam) : '#94a3b8'
+                    const usedIds = (self) => new Set(assignments.filter(a => a.match_number === match.match_number && a.player_id !== self).map(a => a.player_id))
+
+                    const slot = (r, subIndex, label, color) => {
+                      const value = getSlotPlayerId(match.match_number, r, subIndex)
+                      const selected = candidates.find(c => c.player_id === value)
+                      const used = usedIds(value)
+                      return (
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold w-16 flex-shrink-0" style={{ color }}>{label}</span>
+                          <select
+                            value={value}
+                            onChange={(e) => assignSlot(match, r, subIndex, e.target.value)}
+                            onMouseDown={(e) => e.stopPropagation()}
+                            disabled={!canAssign}
+                            className="flex-1 bg-slate-900/70 border border-slate-600 rounded-lg px-2 py-2 text-sm focus:outline-none focus:border-emerald-500"
+                            style={{ color: selected ? getStatusColor(selected.response) : '#94a3b8' }}
+                          >
+                            <option value="">— 선택 —</option>
+                            {candidates.map(c => (
+                              <option key={c.player_id} value={c.player_id} disabled={used.has(c.player_id)}>
+                                {c.name}{statusEmoji(c.response) ? ` ${statusEmoji(c.response)}` : ''}{used.has(c.player_id) ? ' (배정됨)' : ''}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )
+                    }
+
+                    return (
+                      <div key={match.id} className="rounded-2xl border border-slate-700 overflow-hidden bg-slate-800/50">
+                        <div className="px-4 py-2.5 bg-slate-900/50 border-b border-slate-700 flex items-center justify-between flex-wrap gap-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-emerald-400 font-extrabold">{match.match_number}Q</span>
+                            <span className="text-sm">
+                              <span style={{ color: colorA }} className="font-bold">{match.team_a}</span>
+                              <span className="text-slate-500 mx-1.5">vs</span>
+                              <span style={{ color: colorB }} className="font-bold">{match.team_b}</span>
+                            </span>
+                          </div>
+                          <span className="text-xs">
+                            <span className="text-slate-400">🚦 심판: </span>
+                            <span className="font-bold" style={{ color: refColor }}>{refTeam || '없음'}</span>
+                            <span className="text-slate-500 ml-1">({candidates.length}명)</span>
+                          </span>
+                        </div>
+                        <div className="p-3 space-y-2">
+                          {candidates.length === 0 ? (
+                            <p className="text-slate-500 text-sm py-1">
+                              {refTeam ? `${refTeam}에 참석한 선수가 없습니다.` : '심판 팀을 찾을 수 없습니다.'}
+                            </p>
+                          ) : (
+                            <>
+                              {slot('주심', 0, '👨‍⚖️ 주심', '#facc15')}
+                              {slot('부심', 0, '🚩 부심①', '#38bdf8')}
+                              {slot('부심', 1, '🚩 부심②', '#38bdf8')}
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+
+                {canAssign && (
+                  <div className="mt-6 flex gap-3">
+                    <button onClick={resetAssignments} disabled={saving}
+                      className="bg-slate-700 hover:bg-slate-600 text-slate-200 px-6 py-3.5 rounded-xl font-bold transition-colors disabled:opacity-50 whitespace-nowrap">
+                      🔄 초기화
+                    </button>
+                    <button onClick={saveAssignments} disabled={saving}
+                      className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white py-3.5 rounded-xl font-bold transition-colors disabled:opacity-50 shadow-lg shadow-emerald-500/20">
+                      {saving ? '저장 중...' : '💾 심판 배정 저장'}
+                    </button>
+                  </div>
+                )}
+
+                <div className="mt-8">
+                  <h2 className="text-lg font-bold text-white mb-3">📋 심판 배정 요약</h2>
+                  <div className="bg-slate-800/60 border border-slate-700 rounded-2xl overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-slate-900/50 border-b border-slate-700 text-slate-400 text-xs">
+                          <th className="px-3 py-2.5 text-center w-12">쿼터</th>
+                          <th className="px-3 py-2.5 text-center">대진</th>
+                          <th className="px-3 py-2.5 text-center">👨‍⚖️ 주심</th>
+                          <th className="px-3 py-2.5 text-center">🚩 부심</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {matches.map(match => {
+                          const { main, sub } = getSummary(match.match_number)
+                          const colorA = getTeamColor(match.team_a)
+                          const colorB = getTeamColor(match.team_b)
+                          return (
+                            <tr key={match.id} className="border-b border-slate-700/40">
+                              <td className="px-3 py-2.5 text-center font-extrabold text-emerald-400">{match.match_number}Q</td>
+                              <td className="px-3 py-2.5 text-center whitespace-nowrap">
+                                <span style={{ color: colorA }} className="font-bold">{match.team_a}</span>
+                                <span className="text-slate-500 mx-1 text-xs">vs</span>
+                                <span style={{ color: colorB }} className="font-bold">{match.team_b}</span>
+                              </td>
+                              <td className="px-3 py-2.5 text-center">
+                                {main.length > 0 ? <span className="text-yellow-300 font-bold">{main.join(', ')}</span> : <span className="text-slate-600">-</span>}
+                              </td>
+                              <td className="px-3 py-2.5 text-center">
+                                {sub.length > 0 ? <span className="text-sky-300 font-medium">{sub.join(', ')}</span> : <span className="text-slate-600">-</span>}
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
-          {/* 📊 현황 */}
-          <div className="w-full flex-shrink-0" style={{ paddingLeft: '2px' }}>
-            {StatsView()}
+
+          {/* ── 현황 탭 ── */}
+          <div className="w-full flex-shrink-0 px-0.5">
+            <div className="flex gap-2 mb-3">
+              {[
+                { key: 'season', label: `이번 시즌${currentSeason ? ` (${currentSeason})` : ''}` },
+                { key: 'all', label: '전체 시즌' },
+              ].map(opt => (
+                <button key={opt.key} onClick={() => setStatsPeriod(opt.key)}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    statsPeriod === opt.key ? 'bg-emerald-500 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                  }`}>
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex gap-2 mb-4">
+              <span className="text-slate-400 text-sm py-1.5">정렬:</span>
+              {[
+                { key: 'count', label: '📊 횟수순' },
+                { key: 'name', label: '🔤 이름순' },
+                { key: 'team', label: '👥 팀별' },
+              ].map(opt => (
+                <button key={opt.key} onClick={() => setStatsSort(opt.key)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                    statsSort === opt.key ? 'bg-emerald-500 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700'
+                  }`}>
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+
+            {statsLoading ? (
+              <div className="text-center py-20 text-slate-400">⏳ 불러오는 중...</div>
+            ) : stats.length === 0 ? (
+              <div className="text-center py-20 text-slate-400 bg-slate-800/40 border border-dashed border-slate-700 rounded-2xl">
+                <p className="text-4xl mb-3">📊</p>
+                <p className="text-white font-semibold">심판 배정 기록이 없습니다</p>
+              </div>
+            ) : (
+              <div className="bg-slate-800/60 border border-slate-700 rounded-2xl overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-slate-900/50 border-b border-slate-700 text-slate-400 text-xs">
+                      <th className="px-3 py-2.5 text-left">이름</th>
+                      <th className="px-2 py-2.5 text-center">팀</th>
+                      <th className="px-2 py-2.5 text-center text-yellow-300">👨‍⚖️ 주심</th>
+                      <th className="px-2 py-2.5 text-center text-sky-300">🚩 부심</th>
+                      <th className="px-3 py-2.5 text-center">합계</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {stats.map((s, idx) => {
+                      const tColor = getTeamColor(s.team)
+                      return (
+                        <tr key={s.player_id} className={`border-b border-slate-700/40 ${idx % 2 === 0 ? 'bg-slate-900/20' : ''}`}>
+                          <td className="px-3 py-2.5 text-left font-medium text-white">{s.name}</td>
+                          <td className="px-2 py-2.5 text-center"><span className="text-xs font-bold" style={{ color: tColor }}>{s.team}</span></td>
+                          <td className="px-2 py-2.5 text-center text-yellow-300 font-bold">{s.main}</td>
+                          <td className="px-2 py-2.5 text-center text-sky-300 font-bold">{s.sub}</td>
+                          <td className="px-3 py-2.5 text-center text-white font-black text-base">{s.total}</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <p className="text-slate-500 text-xs mt-2">※ 저장된 심판 배정 기준입니다. (형평성 참고용)</p>
           </div>
         </div>
       </div>
@@ -828,18 +686,9 @@ function RefereeAssign() {
       {/* 점 인디케이터 */}
       <div className="flex justify-center gap-2 mt-4">
         {TABS.map((tab, i) => (
-          <button
-            key={tab.key}
-            onClick={() => setIndex(i)}
-            aria-label={tab.label}
+          <button key={tab.key} onClick={() => setIndex(i)} aria-label={tab.label}
             className="transition-all"
-            style={{
-              width: index === i ? '24px' : '8px',
-              height: '8px',
-              borderRadius: '9999px',
-              background: index === i ? '#10b981' : '#475569',
-            }}
-          />
+            style={{ width: index === i ? '24px' : '8px', height: '8px', borderRadius: '9999px', background: index === i ? '#10b981' : '#475569' }} />
         ))}
       </div>
 
