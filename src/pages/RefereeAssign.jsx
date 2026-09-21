@@ -150,9 +150,10 @@ function RefereeAssign() {
 
   function getStatusColor(response) {
     switch (response) {
-      case '참석': return '#4ade80'
-      case '늦참': return '#facc15'
-      case '조퇴': return '#fb923c'
+      case '참석': return '#3b82f6' // 파랑
+      case '조퇴': return '#22c55e' // 초록
+      case '늦참': return '#eab308' // 노랑
+      case '불참': return '#ef4444' // 빨강
       default: return '#e2e8f0'
     }
   }
@@ -533,12 +534,12 @@ function RefereeAssign() {
               </div>
             ) : (
               <>
-                {/* 범례 */}
+                              {/* 범례 */}
                 <div className="flex flex-wrap items-center gap-3 mb-2 text-xs bg-slate-800/40 border border-slate-700 rounded-xl px-3 py-1.5">
                   <span className="text-slate-400">색상:</span>
-                  <span className="flex items-center gap-1"><span style={{ color: '#4ade80' }}>●</span> 참석</span>
-                  <span className="flex items-center gap-1"><span style={{ color: '#facc15' }}>●</span> ⏰늦참</span>
-                  <span className="flex items-center gap-1"><span style={{ color: '#fb923c' }}>●</span> 🏃조퇴</span>
+                  <span className="flex items-center gap-1"><span style={{ color: '#3b82f6' }}>●</span> 참석</span>
+                  <span className="flex items-center gap-1"><span style={{ color: '#22c55e' }}>●</span> 🏃조퇴</span>
+                  <span className="flex items-center gap-1"><span style={{ color: '#eab308' }}>●</span> ⏰늦참</span>
                 </div>
 
                 {/* 📋 통합 표 */}

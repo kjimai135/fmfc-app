@@ -605,18 +605,19 @@ function AttendanceStats() {
 
   const statusIcon = (s) => {
     switch(s) {
-      case '출석': return '✅'
-      case '늦참': return '🕐'
+      case '출석': return '🔵'
       case '조퇴': return '🏃'
+      case '늦참': return '⏰'
       default: return ''
     }
   }
 
   const statusBgColor = (s) => {
     switch(s) {
-      case '출석': return 'bg-emerald-500/10 text-emerald-400'
-      case '늦참': return 'bg-blue-500/10 text-blue-400'
-      case '조퇴': return 'bg-orange-500/10 text-orange-400'
+      case '출석': return 'bg-blue-500/10 text-blue-400'      // 파랑
+      case '조퇴': return 'bg-emerald-500/10 text-emerald-400' // 초록
+      case '늦참': return 'bg-yellow-500/10 text-yellow-400'   // 노랑
+      case '불참': return 'bg-red-500/10 text-red-400'         // 빨강
       default: return 'bg-slate-500/10 text-slate-400'
     }
   }
@@ -1011,8 +1012,8 @@ function AttendanceStats() {
                   <p className="text-slate-400 text-[10px]">
                     {popupPlayer.leaguePresent} / {leagueGames}회 참석
                   </p>
-                  <p className="text-slate-500 text-[10px]">
-                    ✅{popupPlayer.leagueAttended} 🕐{popupPlayer.leagueLate} 🏃{popupPlayer.leagueEarly}
+                                   <p className="text-slate-500 text-[10px]">
+                    🔵{popupPlayer.leagueAttended} 🏃{popupPlayer.leagueEarly} ⏰{popupPlayer.leagueLate}
                   </p>
                 </div>
               </div>

@@ -364,25 +364,25 @@ function AttendanceCheck() {
                     </div>
                   </label>
 
-                  <div className="grid grid-cols-3 gap-4">
+                                    <div className="grid grid-cols-3 gap-4">
                     <button
                       onClick={() => checkInPlayer(myPlayer, '출석', myPickup)}
                       disabled={loading}
-                      className="bg-emerald-500 hover:bg-emerald-600 disabled:opacity-30 text-white py-8 rounded-2xl font-bold text-xl transition-colors shadow-lg shadow-emerald-500/20"
+                      className="bg-blue-500 hover:bg-blue-600 disabled:opacity-30 text-white py-8 rounded-2xl font-bold text-xl transition-colors shadow-lg shadow-blue-500/20"
                     >
                       ✅<br />출석
                     </button>
                     <button
                       onClick={() => checkInPlayer(myPlayer, '늦참', myPickup)}
                       disabled={loading}
-                      className="bg-blue-500 hover:bg-blue-600 disabled:opacity-30 text-white py-8 rounded-2xl font-bold text-xl transition-colors shadow-lg shadow-blue-500/20"
+                      className="bg-yellow-500 hover:bg-yellow-600 disabled:opacity-30 text-slate-900 py-8 rounded-2xl font-bold text-xl transition-colors shadow-lg shadow-yellow-500/20"
                     >
                       🕐<br />늦참
                     </button>
                     <button
                       onClick={() => checkInPlayer(myPlayer, '조퇴', myPickup)}
                       disabled={loading}
-                      className="bg-orange-500 hover:bg-orange-600 disabled:opacity-30 text-white py-8 rounded-2xl font-bold text-xl transition-colors shadow-lg shadow-orange-500/20"
+                      className="bg-emerald-500 hover:bg-emerald-600 disabled:opacity-30 text-white py-8 rounded-2xl font-bold text-xl transition-colors shadow-lg shadow-emerald-500/20"
                     >
                       🏃<br />조퇴
                     </button>
@@ -472,25 +472,25 @@ function AttendanceCheck() {
                         <span className="text-white font-bold text-sm">🚗 픽업함</span>
                       </label>
 
-                      <div className="grid grid-cols-3 gap-4" style={{ marginTop: '16px' }}>
+                                           <div className="grid grid-cols-3 gap-4" style={{ marginTop: '16px' }}>
                         <button
                           onClick={() => checkInPlayer(selectedPlayer, '출석', otherPickup)}
                           disabled={loading}
-                          className="bg-emerald-500 hover:bg-emerald-600 disabled:opacity-30 text-white py-6 rounded-2xl font-bold text-lg transition-colors"
+                          className="bg-blue-500 hover:bg-blue-600 disabled:opacity-30 text-white py-6 rounded-2xl font-bold text-lg transition-colors"
                         >
                           ✅<br />출석
                         </button>
                         <button
                           onClick={() => checkInPlayer(selectedPlayer, '늦참', otherPickup)}
                           disabled={loading}
-                          className="bg-blue-500 hover:bg-blue-600 disabled:opacity-30 text-white py-6 rounded-2xl font-bold text-lg transition-colors"
+                          className="bg-yellow-500 hover:bg-yellow-600 disabled:opacity-30 text-slate-900 py-6 rounded-2xl font-bold text-lg transition-colors"
                         >
                           🕐<br />늦참
                         </button>
                         <button
                           onClick={() => checkInPlayer(selectedPlayer, '조퇴', otherPickup)}
                           disabled={loading}
-                          className="bg-orange-500 hover:bg-orange-600 disabled:opacity-30 text-white py-6 rounded-2xl font-bold text-lg transition-colors"
+                          className="bg-emerald-500 hover:bg-emerald-600 disabled:opacity-30 text-white py-6 rounded-2xl font-bold text-lg transition-colors"
                         >
                           🏃<br />조퇴
                         </button>

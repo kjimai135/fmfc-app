@@ -347,13 +347,13 @@ function PollList() {
   const thisWeekPolls = upcomingPolls.filter(isWithinWeekPoll)
   const laterPolls = upcomingPolls.filter(p => !isWithinWeekPoll(p))
 
-  // 🎨 투표 옵션
-  const voteOptions = [
-    { key: '참석', emoji: '✅', color: '#10b981', textOnActive: '#ffffff' },
-    { key: '불참', emoji: '❌', color: '#ef4444', textOnActive: '#ffffff' },
-    { key: '조퇴', emoji: '🏃', color: '#f97316', textOnActive: '#ffffff' },
-    { key: '늦참', emoji: '⏰', color: '#eab308', textOnActive: '#1e293b' },
-  ]
+     // 🔥 투표 옵션 정의 (참석 → 조퇴 → 늦참 → 불참 · 색상 통일)
+    const voteOptions = [
+      { key: '참석', emoji: '🔵', base: 'bg-blue-500/15 text-blue-300 border-blue-500/30', active: 'bg-blue-500 text-white border-blue-400' },
+      { key: '조퇴', emoji: '🏃', base: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30', active: 'bg-emerald-500 text-white border-emerald-400' },
+      { key: '늦참', emoji: '⏰', base: 'bg-yellow-500/15 text-yellow-300 border-yellow-500/30', active: 'bg-yellow-500 text-slate-900 border-yellow-400' },
+      { key: '불참', emoji: '❌', base: 'bg-red-500/15 text-red-300 border-red-500/30', active: 'bg-red-500 text-white border-red-400' },
+    ]
 
   // 🃏 개별 카드 렌더링
   function renderPollCard(poll) {
@@ -515,6 +515,7 @@ function PollList() {
           {/* 🔥 이번 주: 출석 버튼 */}
           {isWithinWeek ? (
             <div>
+                            {/* 4개 버튼 (테두리 색상 강조 · 선택 시 또렷하게) */}
               <div className="grid grid-cols-4 gap-2 mb-2.5">
                 {voteOptions.map(opt => {
                   const isActive = myResponse === opt.key
@@ -522,21 +523,18 @@ function PollList() {
                     <button
                       key={opt.key}
                       onClick={() => handleQuickAttendance(poll.id, opt.key)}
-                      className="relative flex flex-col items-center justify-center gap-1 py-3 rounded-xl transition-all duration-200"
-                      style={{
-                        background: isActive ? opt.color : 'rgba(15,23,42,0.5)',
-                        border: `1.5px solid ${isActive ? opt.color : 'rgba(148,163,184,0.15)'}`,
-                        color: isActive ? opt.textOnActive : '#94a3b8',
-                        boxShadow: isActive ? `0 6px 18px -4px ${opt.color}88` : 'none',
-                        transform: isActive ? 'translateY(-1px)' : 'none',
-                      }}
+                      className={`relative py-3.5 rounded-xl font-bold text-sm border-2 transition-all duration-150 ${
+                        isActive
+                          ? `${opt.active} shadow-lg scale-[1.03] ring-2 ring-white/20`
+                          : `${opt.base} opacity-80 hover:opacity-100 hover:scale-[1.01]`
+                      }`}
                     >
-                      <span className="text-xl leading-none" style={{ opacity: isActive ? 1 : 0.5 }}>
-                        {opt.emoji}
-                      </span>
-                      <span className={`text-xs ${isActive ? 'font-extrabold' : 'font-medium'}`}>
-                        {opt.key}
-                      </span>
+                      {/* 선택 시 체크 배지 */}
+                      {isActive && (
+                        <span className="absolute top-1 right-1.5 text-[10px]">✔</span>
+                      )}
+                      <span className="text-lg block leading-none mb-1">{opt.emoji}</span>
+                      <span className="text-xs">{opt.key}</span>
                     </button>
                   )
                 })}
