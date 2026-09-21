@@ -40,8 +40,9 @@ function RefereeAssign() {
   const [index, setIndex] = useState(0)
 
   const [statsPeriod, setStatsPeriod] = useState('season')
-  const [statsSort, setStatsSort] = useState('count')
+  const [statsSort, setStatsSort] = useState('team') // 🔥 디폴트: 팀별
   const [allAssignments, setAllAssignments] = useState([])
+  const [allPlayers, setAllPlayers] = useState([])
   const [statsLoading, setStatsLoading] = useState(false)
 
   const [pickerOpen, setPickerOpen] = useState(false)
@@ -137,8 +138,12 @@ function RefereeAssign() {
 
   async function fetchAllAssignments() {
     setStatsLoading(true)
-    const { data } = await supabase.from('referee_assignments').select('*')
-    setAllAssignments(data || [])
+    const [{ data: refData }, { data: playerData }] = await Promise.all([
+      supabase.from('referee_assignments').select('*'),
+      supabase.from('players').select('id, name, current_team').neq('is_active', false),
+    ])
+    setAllAssignments(refData || [])
+    setAllPlayers(playerData || [])
     setStatsLoading(false)
   }
 
@@ -288,7 +293,17 @@ function RefereeAssign() {
     if (statsPeriod === 'season' && currentSeason) {
       source = allAssignments.filter(a => a.season === currentSeason)
     }
+
     const map = {}
+
+    // 🔥 1) 전체 활성 선수를 먼저 0으로 등록 (한 번도 안 한 사람도 포함)
+    allPlayers.forEach(p => {
+      if (!map[p.id]) {
+        map[p.id] = { player_id: p.id, name: p.name, team: p.current_team || '미배정', main: 0, sub: 0 }
+      }
+    })
+
+    // 🔥 2) 배정 기록 집계
     source.forEach(a => {
       const pid = a.player_id
       if (!pid) return
@@ -298,6 +313,7 @@ function RefereeAssign() {
       if (a.role === '주심') map[pid].main++
       else if (a.role === '부심') map[pid].sub++
     })
+
     let list = Object.values(map).map(x => ({ ...x, total: x.main + x.sub }))
     if (statsSort === 'name') {
       list.sort((a, b) => a.name.localeCompare(b.name, 'ko'))
@@ -344,7 +360,7 @@ function RefereeAssign() {
   const todayKey = toKey(new Date())
   const stats = buildRefStats()
 
-      // 📋 통합표용: 쿼터별 셀렉트 렌더
+  // 📋 통합표용: 쿼터별 셀렉트 렌더
   function renderCell(match, r, subIndex) {
     const candidates = getCandidates(match)
     const value = getSlotPlayerId(match.match_number, r, subIndex)
@@ -366,7 +382,7 @@ function RefereeAssign() {
         onChange={(e) => assignSlot(match, r, subIndex, e.target.value)}
         onMouseDown={(e) => e.stopPropagation()}
         disabled={!canAssign || candidates.length === 0}
-        className="w-full rounded-lg px-2 py-4 text-lg font-bold focus:outline-none disabled:opacity-40"
+        className="w-full rounded-lg px-2 py-4 text-lg font-bold focus:outline-none disabled:opacity-40 text-center"
         style={{
           background: roleBg,
           border: `2px solid ${roleBorder}`,
@@ -515,7 +531,7 @@ function RefereeAssign() {
                   <span className="flex items-center gap-1"><span style={{ color: '#fb923c' }}>●</span> 🏃조퇴</span>
                 </div>
 
-                                {/* 📋 통합 표 */}
+                {/* 📋 통합 표 */}
                 <div className="bg-slate-800/60 border border-slate-700 rounded-xl overflow-hidden">
                   <table className="w-full" style={{ tableLayout: 'fixed' }}>
                     <colgroup>
@@ -529,24 +545,21 @@ function RefereeAssign() {
                       <tr className="bg-slate-900/60 border-b border-slate-700 text-slate-300 text-xs">
                         <th className="px-1 py-3 text-center">쿼터</th>
                         <th className="px-1 py-3 text-center">경기</th>
-                                                <th className="px-1 py-3 text-center text-yellow-300">👨‍⚖️주심</th>
+                        <th className="px-1 py-3 text-center text-yellow-300">👨‍⚖️주심</th>
                         <th className="px-1 py-3 text-center text-sky-300" colSpan={2}>🚩부심</th>
                       </tr>
                     </thead>
                     <tbody>
                       {matches.map(match => {
-                        const refTeam = getRefereeTeam(match)
-                        const candidates = getCandidates(match)
                         const colorA = getTeamColor(match.team_a)
                         const colorB = getTeamColor(match.team_b)
-                        const refColor = refTeam ? getTeamColor(refTeam) : '#94a3b8'
                         return (
-                                                    <tr key={match.id} className="border-b border-slate-700/40">
+                          <tr key={match.id} className="border-b border-slate-700/40">
                             {/* 쿼터 */}
                             <td className="px-1 py-6 text-center font-extrabold text-emerald-400 text-2xl">
                               {match.match_number}Q
                             </td>
-                                                        {/* 대진 */}
+                            {/* 대진 */}
                             <td className="px-1 py-6 text-center leading-tight">
                               <div className="text-base whitespace-nowrap">
                                 <span style={{ color: colorA }} className="font-bold">{match.team_a}</span>
@@ -606,9 +619,9 @@ function RefereeAssign() {
             <div className="flex gap-2 mb-4">
               <span className="text-slate-400 text-sm py-1.5">정렬:</span>
               {[
-                { key: 'count', label: '📊 횟수순' },
-                { key: 'name', label: '🔤 이름순' },
                 { key: 'team', label: '👥 팀별' },
+                { key: 'name', label: '🔤 이름순' },
+                { key: 'count', label: '📊 횟수순' },
               ].map(opt => (
                 <button key={opt.key} onClick={() => setStatsSort(opt.key)}
                   className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
@@ -624,14 +637,14 @@ function RefereeAssign() {
             ) : stats.length === 0 ? (
               <div className="text-center py-20 text-slate-400 bg-slate-800/40 border border-dashed border-slate-700 rounded-2xl">
                 <p className="text-4xl mb-3">📊</p>
-                <p className="text-white font-semibold">심판 배정 기록이 없습니다</p>
+                <p className="text-white font-semibold">선수 정보가 없습니다</p>
               </div>
             ) : (
               <div className="bg-slate-800/60 border border-slate-700 rounded-2xl overflow-hidden">
-                                <table className="w-full text-sm">
+                <table className="w-full text-sm">
                   <thead>
                     <tr className="bg-slate-900/60 border-b border-slate-700 text-slate-300 text-sm">
-                      <th className="px-3 py-3.5 text-left">이름</th>
+                      <th className="px-2 py-3.5 text-center">이름</th>
                       <th className="px-2 py-3.5 text-center">팀명</th>
                       <th className="px-2 py-3.5 text-center">합계</th>
                       <th className="px-2 py-3.5 text-center text-yellow-300">👨‍⚖️주심</th>
@@ -643,7 +656,7 @@ function RefereeAssign() {
                       const tColor = getTeamColor(s.team)
                       return (
                         <tr key={s.player_id} className={`border-b border-slate-700/40 ${idx % 2 === 0 ? 'bg-slate-900/20' : ''}`}>
-                          <td className="px-3 py-3 text-left font-medium text-white">{s.name}</td>
+                          <td className="px-2 py-3 text-center font-medium text-white">{s.name}</td>
                           <td className="px-2 py-3 text-center"><span className="text-xs font-bold" style={{ color: tColor }}>{s.team}</span></td>
                           <td className="px-2 py-3 text-center text-white font-black text-base">{s.total}</td>
                           <td className="px-2 py-3 text-center text-yellow-300 font-bold">{s.main}</td>
