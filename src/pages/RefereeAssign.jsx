@@ -40,7 +40,8 @@ function RefereeAssign() {
   const [index, setIndex] = useState(0)
 
   const [statsPeriod, setStatsPeriod] = useState('season')
-  const [statsSort, setStatsSort] = useState('team') // 🔥 디폴트: 팀별
+  const [statsSort, setStatsSort] = useState('team')
+  const [statsSearch, setStatsSearch] = useState('')
   const [allAssignments, setAllAssignments] = useState([])
   const [allPlayers, setAllPlayers] = useState([])
   const [statsLoading, setStatsLoading] = useState(false)
@@ -314,7 +315,17 @@ function RefereeAssign() {
       else if (a.role === '부심') map[pid].sub++
     })
 
-    let list = Object.values(map).map(x => ({ ...x, total: x.main + x.sub }))
+        let list = Object.values(map).map(x => ({ ...x, total: x.main + x.sub }))
+
+    // 🔥 미배정 팀 선수는 목록에서 제외 (기록은 DB에 유지)
+    list = list.filter(x => x.team && x.team !== '미배정')
+
+    // 🔍 이름 검색 필터
+    const keyword = statsSearch.trim()
+    if (keyword) {
+      list = list.filter(x => x.name.includes(keyword))
+    }
+
     if (statsSort === 'name') {
       list.sort((a, b) => a.name.localeCompare(b.name, 'ko'))
     } else if (statsSort === 'team') {
@@ -371,7 +382,6 @@ function RefereeAssign() {
         .map(a => a.player_id)
     )
 
-    // 🎨 역할별 배경/테두리 (주심=노랑, 부심=파랑)
     const isMain = r === '주심'
     const roleBg = isMain ? 'rgba(250,204,21,0.10)' : 'rgba(56,189,248,0.10)'
     const roleBorder = isMain ? 'rgba(250,204,21,0.55)' : 'rgba(56,189,248,0.55)'
@@ -555,11 +565,9 @@ function RefereeAssign() {
                         const colorB = getTeamColor(match.team_b)
                         return (
                           <tr key={match.id} className="border-b border-slate-700/40">
-                            {/* 쿼터 */}
                             <td className="px-1 py-6 text-center font-extrabold text-emerald-400 text-2xl">
                               {match.match_number}Q
                             </td>
-                            {/* 대진 */}
                             <td className="px-1 py-6 text-center leading-tight">
                               <div className="text-base whitespace-nowrap">
                                 <span style={{ color: colorA }} className="font-bold">{match.team_a}</span>
@@ -567,11 +575,8 @@ function RefereeAssign() {
                                 <span style={{ color: colorB }} className="font-bold">{match.team_b}</span>
                               </div>
                             </td>
-                            {/* 주심 */}
                             <td className="px-1 py-6">{renderCell(match, '주심', 0)}</td>
-                            {/* 부심1 */}
                             <td className="px-1 py-6">{renderCell(match, '부심', 0)}</td>
-                            {/* 부심2 */}
                             <td className="px-1 py-6">{renderCell(match, '부심', 1)}</td>
                           </tr>
                         )
@@ -602,6 +607,15 @@ function RefereeAssign() {
 
           {/* ── 현황 탭 ── */}
           <div className="w-full flex-shrink-0 px-0.5">
+            {/* 🔍 이름 검색 */}
+            <input
+              type="text"
+              value={statsSearch}
+              onChange={(e) => setStatsSearch(e.target.value)}
+              placeholder="🔍 이름 검색"
+              className="w-full mb-3 bg-slate-900/70 border border-slate-600 rounded-lg px-4 py-2.5 text-white text-sm placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+            />
+
             <div className="flex gap-2 mb-3">
               {[
                 { key: 'season', label: `이번 시즌${currentSeason ? ` (${currentSeason})` : ''}` },
@@ -637,7 +651,7 @@ function RefereeAssign() {
             ) : stats.length === 0 ? (
               <div className="text-center py-20 text-slate-400 bg-slate-800/40 border border-dashed border-slate-700 rounded-2xl">
                 <p className="text-4xl mb-3">📊</p>
-                <p className="text-white font-semibold">선수 정보가 없습니다</p>
+                <p className="text-white font-semibold">{statsSearch ? `'${statsSearch}' 검색 결과가 없습니다` : '선수 정보가 없습니다'}</p>
               </div>
             ) : (
               <div className="bg-slate-800/60 border border-slate-700 rounded-2xl overflow-hidden">
