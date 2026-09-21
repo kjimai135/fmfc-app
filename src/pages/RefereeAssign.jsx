@@ -344,7 +344,7 @@ function RefereeAssign() {
   const todayKey = toKey(new Date())
   const stats = buildRefStats()
 
-  // 📋 통합표용: 쿼터별 셀렉트 렌더
+      // 📋 통합표용: 쿼터별 셀렉트 렌더
   function renderCell(match, r, subIndex) {
     const candidates = getCandidates(match)
     const value = getSlotPlayerId(match.match_number, r, subIndex)
@@ -354,14 +354,24 @@ function RefereeAssign() {
         .filter(a => a.match_number === match.match_number && a.player_id !== value)
         .map(a => a.player_id)
     )
+
+    // 🎨 역할별 배경/테두리 (주심=노랑, 부심=파랑)
+    const isMain = r === '주심'
+    const roleBg = isMain ? 'rgba(250,204,21,0.10)' : 'rgba(56,189,248,0.10)'
+    const roleBorder = isMain ? 'rgba(250,204,21,0.55)' : 'rgba(56,189,248,0.55)'
+
     return (
       <select
         value={value}
         onChange={(e) => assignSlot(match, r, subIndex, e.target.value)}
         onMouseDown={(e) => e.stopPropagation()}
         disabled={!canAssign || candidates.length === 0}
-                className="w-full bg-slate-900/70 border border-slate-600 rounded-lg px-2 py-4 text-lg font-bold focus:outline-none focus:border-emerald-500 disabled:opacity-40"
-        style={{ color: selected ? getStatusColor(selected.response) : '#94a3b8' }}
+        className="w-full rounded-lg px-2 py-4 text-lg font-bold focus:outline-none disabled:opacity-40"
+        style={{
+          background: roleBg,
+          border: `2px solid ${roleBorder}`,
+          color: selected ? getStatusColor(selected.response) : '#94a3b8',
+        }}
       >
         <option value="">-</option>
         {candidates.map(c => (
@@ -519,9 +529,8 @@ function RefereeAssign() {
                       <tr className="bg-slate-900/60 border-b border-slate-700 text-slate-300 text-xs">
                         <th className="px-1 py-3 text-center">쿼터</th>
                         <th className="px-1 py-3 text-center">경기</th>
-                        <th className="px-1 py-3 text-center text-yellow-300">👨‍⚖️주심</th>
-                        <th className="px-1 py-3 text-center text-sky-300">🚩부심①</th>
-                        <th className="px-1 py-3 text-center text-sky-300">🚩부심②</th>
+                                                <th className="px-1 py-3 text-center text-yellow-300">👨‍⚖️주심</th>
+                        <th className="px-1 py-3 text-center text-sky-300" colSpan={2}>🚩부심</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -619,26 +628,26 @@ function RefereeAssign() {
               </div>
             ) : (
               <div className="bg-slate-800/60 border border-slate-700 rounded-2xl overflow-hidden">
-                <table className="w-full text-sm">
-                                      <thead>
-                      <tr className="bg-slate-900/60 border-b border-slate-700 text-slate-300 text-sm">
-                        <th className="px-1 py-3.5 text-center">쿼터</th>
-                        <th className="px-1 py-3.5 text-center">대진/심판팀</th>
-                        <th className="px-1 py-3.5 text-center text-yellow-300">👨‍⚖️주심</th>
-                        <th className="px-1 py-3.5 text-center text-sky-300">🚩부심①</th>
-                        <th className="px-1 py-3.5 text-center text-sky-300">🚩부심②</th>
-                      </tr>
-                    </thead>
+                                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-slate-900/60 border-b border-slate-700 text-slate-300 text-sm">
+                      <th className="px-3 py-3.5 text-left">이름</th>
+                      <th className="px-2 py-3.5 text-center">팀명</th>
+                      <th className="px-2 py-3.5 text-center">합계</th>
+                      <th className="px-2 py-3.5 text-center text-yellow-300">👨‍⚖️주심</th>
+                      <th className="px-2 py-3.5 text-center text-sky-300">🚩부심</th>
+                    </tr>
+                  </thead>
                   <tbody>
                     {stats.map((s, idx) => {
                       const tColor = getTeamColor(s.team)
                       return (
                         <tr key={s.player_id} className={`border-b border-slate-700/40 ${idx % 2 === 0 ? 'bg-slate-900/20' : ''}`}>
-                          <td className="px-3 py-2.5 text-left font-medium text-white">{s.name}</td>
-                          <td className="px-2 py-2.5 text-center"><span className="text-xs font-bold" style={{ color: tColor }}>{s.team}</span></td>
-                          <td className="px-2 py-2.5 text-center text-yellow-300 font-bold">{s.main}</td>
-                          <td className="px-2 py-2.5 text-center text-sky-300 font-bold">{s.sub}</td>
-                          <td className="px-3 py-2.5 text-center text-white font-black text-base">{s.total}</td>
+                          <td className="px-3 py-3 text-left font-medium text-white">{s.name}</td>
+                          <td className="px-2 py-3 text-center"><span className="text-xs font-bold" style={{ color: tColor }}>{s.team}</span></td>
+                          <td className="px-2 py-3 text-center text-white font-black text-base">{s.total}</td>
+                          <td className="px-2 py-3 text-center text-yellow-300 font-bold">{s.main}</td>
+                          <td className="px-2 py-3 text-center text-sky-300 font-bold">{s.sub}</td>
                         </tr>
                       )
                     })}
