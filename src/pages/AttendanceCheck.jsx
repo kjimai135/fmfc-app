@@ -14,11 +14,10 @@ function parseStartHour(timeStr) {
 
 function AttendanceCheck() {
   const { profile, role } = useAuth()
-  // 관리자·임원·주장은 다른 사람 대리 체크 가능
   const canCheckOthers = role === 'admin' || role === 'executive' || role === 'captain'
 
   const [players, setPlayers] = useState([])
-  const [myPlayer, setMyPlayer] = useState(null) // 내 계정에 연결된 선수
+  const [myPlayer, setMyPlayer] = useState(null)
   const [selectedPlayer, setSelectedPlayer] = useState(null)
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(false)
@@ -27,19 +26,18 @@ function AttendanceCheck() {
   const [todayChecked, setTodayChecked] = useState([])
   const [showOthers, setShowOthers] = useState(false)
 
-  // 🚗 픽업 여부
   const [myPickup, setMyPickup] = useState(false)
   const [otherPickup, setOtherPickup] = useState(false)
 
-  // 📅 오늘 경기(확정 예약) 존재 여부
-  const [hasGameToday, setHasGameToday] = useState(null) // null: 확인 중, true/false: 결과
-  const [todayGameInfo, setTodayGameInfo] = useState(null) // { venue, time }
+  const [hasGameToday, setHasGameToday] = useState(null)
+  const [todayGameInfo, setTodayGameInfo] = useState(null)
 
-  // 🔄 현재 시즌
   const [currentSeason, setCurrentSeason] = useState('')
-
-  // 🚫 시즌 전환 당일 차단용
   const [isSeasonTransitionDay, setIsSeasonTransitionDay] = useState(false)
+
+  // 🚦 오늘 심판 배정
+  const [refereeAssignments, setRefereeAssignments] = useState([])
+  const [refereeMatches, setRefereeMatches] = useState([])
 
   const today = new Date(new Date().getTime() + 9 * 60 * 60 * 1000).toISOString().split('T')[0]
 
@@ -47,6 +45,7 @@ function AttendanceCheck() {
     fetchSeason()
     fetchPlayers()
     fetchTodayGame()
+    fetchRefereeAssignments()
   }, [])
 
   useEffect(() => {
@@ -56,7 +55,6 @@ function AttendanceCheck() {
     }
   }, [currentSeason])
 
-  // 내 선수 정보 세팅 (profile.player_id 기준)
   useEffect(() => {
     if (profile?.player_id && players.length > 0) {
       const me = players.find((p) => p.id === profile.player_id)
@@ -66,7 +64,6 @@ function AttendanceCheck() {
     }
   }, [profile, players])
 
-  // 🔄 현재 시즌 조회
   async function fetchSeason() {
     const { data } = await supabase
       .from('app_settings')
@@ -95,7 +92,6 @@ function AttendanceCheck() {
     setTodayChecked(data?.map((a) => a.player_id) || [])
   }
 
-  // 📅 오늘 날짜에 확정(노란색)된 경기 일정이 있는지 확인
   async function fetchTodayGame() {
     const { data, error } = await supabase
       .from('reservations')
@@ -119,19 +115,24 @@ function AttendanceCheck() {
     }
   }
 
-  // 🚫 시즌 전환 당일인지 체크 (오늘이 이전 시즌의 마지막 경기일인지)
+  // 🚦 오늘 심판 배정 조회
+  async function fetchRefereeAssignments() {
+    const [{ data: refData }, { data: matchData }] = await Promise.all([
+      supabase.from('referee_assignments').select('*').eq('game_date', today),
+      supabase.from('matches').select('match_number, team_a, team_b').eq('game_date', today).order('match_number'),
+    ])
+    setRefereeAssignments(refData || [])
+    setRefereeMatches(matchData || [])
+  }
+
   async function checkSeasonTransitionDay() {
     if (!currentSeason) return
-
-    // 1) 오늘 이전 시즌 데이터가 있는지 확인
     const { data: prevSeasonData } = await supabase
       .from('attendance')
       .select('season')
       .eq('game_date', today)
       .neq('season', currentSeason)
       .limit(1)
-
-    // 2) 오늘 다른 시즌 데이터가 있으면 → 시즌 전환 당일
     if (prevSeasonData && prevSeasonData.length > 0) {
       setIsSeasonTransitionDay(true)
     } else {
@@ -142,14 +143,12 @@ function AttendanceCheck() {
   // 🕐 경기 시작 시간이 지났는지 판정 (24시 기준 · 분까지 반영)
   function isGameStarted() {
     const startHour = parseStartHour(todayGameInfo?.time)
-    if (startHour === null) return false // 시간 정보 없으면 판정 불가
-    // 🔥 브라우저 로컬 시간(이미 KST)을 그대로 사용 — 9시간 이중 보정 제거!
+    if (startHour === null) return false
     const now = new Date()
     const nowDecimal = now.getHours() + now.getMinutes() / 60
     return nowDecimal >= startHour
   }
 
-  // 특정 선수를 출석 처리 (본인/대리 공통)
   async function checkInPlayer(player, status, isPickup) {
     if (!hasGameToday) {
       alert('오늘은 확정된 경기 일정이 없어 출석체크를 할 수 없습니다.')
@@ -172,7 +171,6 @@ function AttendanceCheck() {
       return
     }
 
-    // 🔥 "출석"인데 경기 시작 시간이 지났으면 → 알림 후 "늦참"으로 변경
     let finalStatus = status
     if (status === '출석' && isGameStarted()) {
       const startHour = parseStartHour(todayGameInfo?.time)
@@ -192,7 +190,7 @@ function AttendanceCheck() {
         player_id: player.id,
         player_name: player.name,
         team: player.current_team || '미배정',
-        status: finalStatus, // 🔥 변경된 상태 사용
+        status: finalStatus,
         check_order: nextOrder,
         game_date: today,
         is_pickup: !!isPickup,
@@ -216,15 +214,12 @@ function AttendanceCheck() {
     setLoading(false)
   }
 
-  // 출석 취소 (본인 전용)
   async function cancelAttendance(player) {
     if (!player) return
-
     const confirmCancel = window.confirm(`${player.name}님의 출석을 취소하시겠습니까?`)
     if (!confirmCancel) return
 
     setLoading(true)
-
     const { error } = await supabase
       .from('attendance')
       .delete()
@@ -249,7 +244,6 @@ function AttendanceCheck() {
     (p) => p.name?.includes(search) && !todayChecked.includes(p.id)
   )
 
-  // 🔥 경기 시작 여부 (버튼 안내 문구용)
   const gameStarted = hasGameToday && isGameStarted()
 
   return (
@@ -364,7 +358,7 @@ function AttendanceCheck() {
                     </div>
                   </label>
 
-                                    <div className="grid grid-cols-3 gap-4">
+                  <div className="grid grid-cols-3 gap-4">
                     <button
                       onClick={() => checkInPlayer(myPlayer, '출석', myPickup)}
                       disabled={loading}
@@ -391,14 +385,13 @@ function AttendanceCheck() {
               )}
             </div>
           ) : (
-            // 선수 연결이 안 된 계정 안내
             <div className="bg-sky-500/10 border border-sky-500/30 rounded-xl px-4 py-3 mb-6 text-sky-200 text-sm text-center">
               👤 계정에 연결된 선수 정보가 없습니다.
               {canCheckOthers ? ' 아래에서 이름을 검색해 출석 체크하세요.' : ' 관리자에게 선수 연결을 요청해주세요.'}
             </div>
           )}
 
-          {/* ===== 대리 체크 (관리자·임원·주장, 또는 선수 연결 안 된 계정) ===== */}
+          {/* ===== 대리 체크 ===== */}
           {(canCheckOthers || !myPlayer) && (
             <div className="bg-slate-800/50 border border-slate-700 rounded-2xl p-4">
               <button
@@ -455,7 +448,6 @@ function AttendanceCheck() {
                         <p className="text-slate-400">{selectedPlayer.current_team || '팀 미배정'}</p>
                       </div>
 
-                      {/* 🚗 픽업 체크 (대리) */}
                       <label
                         className={`flex items-center gap-3 rounded-xl border p-3 mt-4 cursor-pointer transition-colors ${
                           otherPickup
@@ -472,7 +464,7 @@ function AttendanceCheck() {
                         <span className="text-white font-bold text-sm">🚗 픽업함</span>
                       </label>
 
-                                           <div className="grid grid-cols-3 gap-4" style={{ marginTop: '16px' }}>
+                      <div className="grid grid-cols-3 gap-4" style={{ marginTop: '16px' }}>
                         <button
                           onClick={() => checkInPlayer(selectedPlayer, '출석', otherPickup)}
                           disabled={loading}
@@ -504,6 +496,54 @@ function AttendanceCheck() {
 
           {/* 오늘 출석 인원 */}
           <p className="text-slate-500 text-sm text-center mt-6">오늘 출석 인원: {todayCount}명</p>
+
+          {/* 🚦 오늘 심판 배정표 (참고용) */}
+          {refereeMatches.length > 0 && refereeAssignments.length > 0 && (
+            <div className="mt-8">
+              <h2 className="text-lg font-bold text-white mb-3 text-center">🚦 오늘 심판 배정 (참고)</h2>
+              <div className="bg-slate-800/60 border border-slate-700 rounded-2xl overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-slate-900/60 border-b border-slate-700 text-slate-300 text-xs">
+                      <th className="px-2 py-3 text-center w-12">쿼터</th>
+                      <th className="px-2 py-3 text-center text-yellow-300">👨‍⚖️ 주심</th>
+                      <th className="px-2 py-3 text-center text-sky-300">🚩 부심</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {refereeMatches.map(match => {
+                      const main = refereeAssignments
+                        .filter(a => a.match_number === match.match_number && a.role === '주심')
+                        .map(a => a.player_name)
+                      const sub = refereeAssignments
+                        .filter(a => a.match_number === match.match_number && a.role === '부심')
+                        .map(a => a.player_name)
+                      return (
+                        <tr key={match.match_number} className="border-b border-slate-700/40">
+                          <td className="px-2 py-3 text-center font-extrabold text-emerald-400 text-lg">
+                            {match.match_number}Q
+                          </td>
+                          <td className="px-2 py-3 text-center">
+                            {main.length > 0
+                              ? <span className="text-yellow-300 font-bold">{main.join(', ')}</span>
+                              : <span className="text-slate-600">-</span>}
+                          </td>
+                          <td className="px-2 py-3 text-center">
+                            {sub.length > 0
+                              ? <span className="text-sky-300 font-medium">{sub.join(', ')}</span>
+                              : <span className="text-slate-600">-</span>}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <p className="text-slate-500 text-xs text-center mt-2">
+                ※ 관리자가 배정한 오늘 경기 심판입니다.
+              </p>
+            </div>
+          )}
         </>
       )}
 
