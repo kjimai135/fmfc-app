@@ -38,6 +38,7 @@ function AttendanceCheck() {
   // 🚦 오늘 심판 배정
   const [refereeAssignments, setRefereeAssignments] = useState([])
   const [refereeMatches, setRefereeMatches] = useState([])
+  const [refTeams, setRefTeams] = useState([])
 
   const today = new Date(new Date().getTime() + 9 * 60 * 60 * 1000).toISOString().split('T')[0]
 
@@ -117,12 +118,23 @@ function AttendanceCheck() {
 
   // 🚦 오늘 심판 배정 조회
   async function fetchRefereeAssignments() {
-    const [{ data: refData }, { data: matchData }] = await Promise.all([
+    const [{ data: refData }, { data: matchData }, { data: teamData }] = await Promise.all([
       supabase.from('referee_assignments').select('*').eq('game_date', today),
       supabase.from('matches').select('match_number, team_a, team_b').eq('game_date', today).order('match_number'),
+      supabase.from('teams').select('name, color'),
     ])
     setRefereeAssignments(refData || [])
     setRefereeMatches(matchData || [])
+    setRefTeams(teamData || [])
+  }
+
+  // 🎨 팀 색상 (남색 → 밝은 파랑)
+  function getRefTeamColor(teamName) {
+    const t = refTeams.find(x => x.name === teamName)
+    const color = t?.color || '#e2e8f0'
+    const c = color.toLowerCase()
+    if (c === '#1d4ed8' || c === '#2563eb' || c === '#1e40af' || c === '#1e3a8a') return '#60a5fa'
+    return color
   }
 
   async function checkSeasonTransitionDay() {
@@ -140,7 +152,6 @@ function AttendanceCheck() {
     }
   }
 
-  // 🕐 경기 시작 시간이 지났는지 판정 (24시 기준 · 분까지 반영)
   function isGameStarted() {
     const startHour = parseStartHour(todayGameInfo?.time)
     if (startHour === null) return false
@@ -500,46 +511,68 @@ function AttendanceCheck() {
           {/* 🚦 오늘 심판 배정표 (참고용) */}
           {refereeMatches.length > 0 && refereeAssignments.length > 0 && (
             <div className="mt-8">
-              <h2 className="text-lg font-bold text-white mb-3 text-center">🚦 오늘 심판 배정 (참고)</h2>
-              <div className="bg-slate-800/60 border border-slate-700 rounded-2xl overflow-hidden">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="bg-slate-900/60 border-b border-slate-700 text-slate-300 text-xs">
-                      <th className="px-2 py-3 text-center w-12">쿼터</th>
-                      <th className="px-2 py-3 text-center text-yellow-300">👨‍⚖️ 주심</th>
-                      <th className="px-2 py-3 text-center text-sky-300">🚩 부심</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {refereeMatches.map(match => {
-                      const main = refereeAssignments
-                        .filter(a => a.match_number === match.match_number && a.role === '주심')
-                        .map(a => a.player_name)
-                      const sub = refereeAssignments
-                        .filter(a => a.match_number === match.match_number && a.role === '부심')
-                        .map(a => a.player_name)
-                      return (
-                        <tr key={match.match_number} className="border-b border-slate-700/40">
-                          <td className="px-2 py-3 text-center font-extrabold text-emerald-400 text-lg">
-                            {match.match_number}Q
-                          </td>
-                          <td className="px-2 py-3 text-center">
-                            {main.length > 0
-                              ? <span className="text-yellow-300 font-bold">{main.join(', ')}</span>
-                              : <span className="text-slate-600">-</span>}
-                          </td>
-                          <td className="px-2 py-3 text-center">
-                            {sub.length > 0
-                              ? <span className="text-sky-300 font-medium">{sub.join(', ')}</span>
-                              : <span className="text-slate-600">-</span>}
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
+              <h2 className="text-lg font-bold text-white mb-3 text-center">🚦 오늘 심판 배정</h2>
+
+              <div className="rounded-xl overflow-hidden border border-slate-700">
+                {/* 헤더 (라벨 한 번만) */}
+                <div className="flex items-center gap-3" style={{ background: 'rgba(15,23,42,0.7)' }}>
+                  <div className="flex items-center justify-center flex-shrink-0 w-14 py-2">
+                    <span className="text-slate-400 text-xs font-bold">쿼터</span>
+                  </div>
+                  <div className="flex-1 py-2 pr-3 grid grid-cols-2 gap-2 text-center">
+                    <span className="text-white text-xs font-bold">👨‍⚖️ 주심</span>
+                    <span className="text-white text-xs font-bold border-l border-slate-700/60">🚩 부심</span>
+                  </div>
+                </div>
+
+                {/* 쿼터별 행 */}
+                {refereeMatches.map(match => {
+                  const mainList = refereeAssignments
+                    .filter(a => a.match_number === match.match_number && a.role === '주심')
+                  const subList = refereeAssignments
+                    .filter(a => a.match_number === match.match_number && a.role === '부심')
+
+                  return (
+                    <div
+                      key={match.match_number}
+                      className="flex items-center gap-3 border-t border-slate-700/50"
+                      style={{ background: 'rgba(30,41,59,0.6)' }}
+                    >
+                      {/* 쿼터 배지 */}
+                      <div
+                        className="flex items-center justify-center flex-shrink-0 w-14 self-stretch"
+                        style={{ background: 'rgba(16,185,129,0.15)' }}
+                      >
+                        <span className="text-emerald-400 font-black text-lg">{match.match_number}Q</span>
+                      </div>
+
+                      {/* 주심 / 부심 (이름만) */}
+                      <div className="flex-1 py-3 pr-3 grid grid-cols-2 gap-2">
+                        <span className="font-bold text-sm text-center">
+                          {mainList.length > 0
+                            ? mainList.map((a, i) => (
+                                <span key={i} style={{ color: getRefTeamColor(a.team) }}>
+                                  {a.player_name}{i < mainList.length - 1 ? ', ' : ''}
+                                </span>
+                              ))
+                            : <span className="text-slate-600">-</span>}
+                        </span>
+                        <span className="font-medium text-sm text-center border-l border-slate-700/60">
+                          {subList.length > 0
+                            ? subList.map((a, i) => (
+                                <span key={i} style={{ color: getRefTeamColor(a.team) }}>
+                                  {a.player_name}{i < subList.length - 1 ? ', ' : ''}
+                                </span>
+                              ))
+                            : <span className="text-slate-600">-</span>}
+                        </span>
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
-              <p className="text-slate-500 text-xs text-center mt-2">
+
+              <p className="text-slate-500 text-xs text-center mt-3">
                 ※ 관리자가 배정한 오늘 경기 심판입니다.
               </p>
             </div>
