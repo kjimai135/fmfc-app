@@ -76,10 +76,17 @@ function CalendarPage() {
   // 🗓️ 현재 시즌
   const [currentSeason, setCurrentSeason] = useState('')
 
-  // 📅 연/월 선택 팝오버
+   // 📅 연/월 선택 팝오버
   const [pickerOpen, setPickerOpen] = useState(false)
   const [pickerYear, setPickerYear] = useState(today.getFullYear())
   const pickerRef = useRef(null)
+
+  // 👆 스와이프/드래그 (월 전환)
+  const swipeAreaRef = useRef(null)
+  const dragStartX = useRef(null)
+  const dragStartY = useRef(null)
+  const isDragging = useRef(false)
+  const isHorizontal = useRef(false)
 
   // 모달 상태
   const [editKey, setEditKey] = useState(null) // 편집 중인 날짜 (YYYY-MM-DD)
@@ -107,7 +114,7 @@ function CalendarPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canEdit])
 
-  // 팝오버 바깥 클릭 시 닫기
+   // 팝오버 바깥 클릭 시 닫기
   useEffect(() => {
     function onClickOutside(e) {
       if (pickerRef.current && !pickerRef.current.contains(e.target)) {
@@ -117,6 +124,38 @@ function CalendarPage() {
     if (pickerOpen) document.addEventListener('mousedown', onClickOutside)
     return () => document.removeEventListener('mousedown', onClickOutside)
   }, [pickerOpen])
+
+  // 👆 터치 스와이프 (non-passive로 등록해 가로 스와이프 시 세로 스크롤 방지)
+  useEffect(() => {
+    const el = swipeAreaRef.current
+    if (!el) return
+
+    function onTouchStart(e) {
+      const t = e.touches[0]
+      handleDragStart(t.clientX, t.clientY)
+    }
+    function onTouchMove(e) {
+      if (!isDragging.current) return
+      const t = e.touches[0]
+      handleDragMove(t.clientX, t.clientY)
+      if (isHorizontal.current) e.preventDefault()
+    }
+    function onTouchEnd(e) {
+      const t = e.changedTouches[0]
+      handleDragEnd(t.clientX)
+    }
+
+    el.addEventListener('touchstart', onTouchStart, { passive: true })
+    el.addEventListener('touchmove', onTouchMove, { passive: false })
+    el.addEventListener('touchend', onTouchEnd, { passive: true })
+    el.addEventListener('touchcancel', onTouchEnd, { passive: true })
+    return () => {
+      el.removeEventListener('touchstart', onTouchStart)
+      el.removeEventListener('touchmove', onTouchMove)
+      el.removeEventListener('touchend', onTouchEnd)
+      el.removeEventListener('touchcancel', onTouchEnd)
+    }
+  }, [loading, month, year])
 
   // 🗓️ 현재 시즌 로드
   async function fetchCurrentSeason() {
@@ -197,11 +236,60 @@ function CalendarPage() {
     setLoading(false)
   }
 
-  function goToday() {
+   function goToday() {
     setYear(today.getFullYear())
     setMonth(today.getMonth() + 1)
     setPickerOpen(false)
   }
+
+  // ◀ 이전 달 / ▶ 다음 달
+  function goPrevMonth() {
+    if (month === 1) {
+      setYear((y) => y - 1)
+      setMonth(12)
+    } else {
+      setMonth((m) => m - 1)
+    }
+  }
+  function goNextMonth() {
+    if (month === 12) {
+      setYear((y) => y + 1)
+      setMonth(1)
+    } else {
+      setMonth((m) => m + 1)
+    }
+  }
+
+  // 👆 드래그/스와이프 (왼쪽=다음달, 오른쪽=이전달)
+  function handleDragStart(clientX, clientY) {
+    dragStartX.current = clientX
+    dragStartY.current = clientY
+    isDragging.current = true
+    isHorizontal.current = false
+  }
+  function handleDragMove(clientX, clientY) {
+    if (!isDragging.current || dragStartX.current === null) return
+    const dx = clientX - dragStartX.current
+    const dy = clientY - dragStartY.current
+    if (!isHorizontal.current && Math.abs(dx) > 10 && Math.abs(dx) > Math.abs(dy)) {
+      isHorizontal.current = true
+    }
+  }
+  function handleDragEnd(clientX) {
+    if (!isDragging.current || dragStartX.current === null) {
+      isDragging.current = false
+      return
+    }
+    const dx = clientX - dragStartX.current
+    if (isHorizontal.current && Math.abs(dx) > 60) {
+      if (dx < 0) goNextMonth()
+      else goPrevMonth()
+    }
+    dragStartX.current = null
+    dragStartY.current = null
+    isDragging.current = false
+    isHorizontal.current = false
+  } 
 
   function openPicker() {
     setPickerYear(year)
@@ -718,15 +806,22 @@ function CalendarPage() {
         </p>
       )}
 
-      {loading ? (
+          {loading ? (
         <div className="text-center text-slate-400 py-20">⏳ 불러오는 중...</div>
       ) : (
         <div
+          ref={swipeAreaRef}
+          onMouseDown={(e) => handleDragStart(e.clientX, e.clientY)}
+          onMouseMove={(e) => { if (isDragging.current) handleDragMove(e.clientX, e.clientY) }}
+          onMouseUp={(e) => handleDragEnd(e.clientX)}
+          onMouseLeave={(e) => { if (isDragging.current) handleDragEnd(e.clientX) }}
           style={{
             border: '1px solid rgba(148,163,184,0.35)',
             borderRadius: '10px',
             overflow: 'hidden',
             background: 'transparent',
+            touchAction: 'pan-y',
+            userSelect: 'none',
           }}
         >
           {/* 요일 헤더 */}
