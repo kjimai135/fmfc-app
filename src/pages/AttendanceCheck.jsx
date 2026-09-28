@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 
-// 🕐 "7시", "20시-22시", "오후 2시" 등에서 시작 시각(시)만 추출
 function parseStartHour(timeStr) {
   if (!timeStr) return null
   const m = String(timeStr).match(/\d{1,2}/)
@@ -29,6 +28,11 @@ function AttendanceCheck() {
   const [myPickup, setMyPickup] = useState(false)
   const [otherPickup, setOtherPickup] = useState(false)
 
+  // 🔀 미배정 선수 임시 팀 선택
+  const [teams, setTeams] = useState([])
+  const [myTempTeam, setMyTempTeam] = useState('')
+  const [otherTempTeam, setOtherTempTeam] = useState('')
+
   const [hasGameToday, setHasGameToday] = useState(null)
   const [todayGameInfo, setTodayGameInfo] = useState(null)
 
@@ -47,6 +51,7 @@ function AttendanceCheck() {
     fetchPlayers()
     fetchTodayGame()
     fetchRefereeAssignments()
+    fetchTeamsForCheck()
   }, [])
 
   useEffect(() => {
@@ -80,6 +85,13 @@ function AttendanceCheck() {
       .select('*')
       .order('name')
     setPlayers((data || []).filter((p) => p.is_active !== false))
+  }
+
+  // 🔀 팀 목록 조회 (미배정 선수 임시 배정용)
+  async function fetchTeamsForCheck() {
+    const { data } = await supabase.from('teams').select('name, color').order('display_order')
+    setTeams(data || [])
+    setRefTeams(data || [])
   }
 
   async function fetchTodayCount() {
@@ -118,14 +130,12 @@ function AttendanceCheck() {
 
   // 🚦 오늘 심판 배정 조회
   async function fetchRefereeAssignments() {
-    const [{ data: refData }, { data: matchData }, { data: teamData }] = await Promise.all([
+    const [{ data: refData }, { data: matchData }] = await Promise.all([
       supabase.from('referee_assignments').select('*').eq('game_date', today),
       supabase.from('matches').select('match_number, team_a, team_b').eq('game_date', today).order('match_number'),
-      supabase.from('teams').select('name, color'),
     ])
     setRefereeAssignments(refData || [])
     setRefereeMatches(matchData || [])
-    setRefTeams(teamData || [])
   }
 
   // 🎨 팀 색상 (남색 → 밝은 파랑)
@@ -160,7 +170,7 @@ function AttendanceCheck() {
     return nowDecimal >= startHour
   }
 
-  async function checkInPlayer(player, status, isPickup) {
+  async function checkInPlayer(player, status, isPickup, tempTeam) {
     if (!hasGameToday) {
       alert('오늘은 확정된 경기 일정이 없어 출석체크를 할 수 없습니다.')
       return
@@ -182,6 +192,13 @@ function AttendanceCheck() {
       return
     }
 
+    // 🔀 팀 결정: 배정된 선수는 본인 팀, 미배정 선수는 선택한 임시 팀
+    if (!player.current_team && !tempTeam) {
+      alert('미배정 선수입니다. 오늘 뛸 팀을 선택해주세요!')
+      return
+    }
+    const finalTeam = player.current_team || tempTeam || '미배정'
+
     let finalStatus = status
     if (status === '출석' && isGameStarted()) {
       const startHour = parseStartHour(todayGameInfo?.time)
@@ -200,7 +217,7 @@ function AttendanceCheck() {
       {
         player_id: player.id,
         player_name: player.name,
-        team: player.current_team || '미배정',
+        team: finalTeam,
         status: finalStatus,
         check_order: nextOrder,
         game_date: today,
@@ -214,11 +231,13 @@ function AttendanceCheck() {
       setMessage('')
     } else {
       setMessage(
-        `${player.name}님 ${finalStatus} 완료!${isPickup ? ' 🚗 픽업' : ''} (${player.current_team || '미배정'})`
+        `${player.name}님 ${finalStatus} 완료!${isPickup ? ' 🚗 픽업' : ''} (${finalTeam})`
       )
       setSelectedPlayer(null)
       setSearch('')
       setOtherPickup(false)
+      setMyTempTeam('')
+      setOtherTempTeam('')
       await fetchTodayCount()
       setTimeout(() => setMessage(''), 3000)
     }
@@ -347,6 +366,31 @@ function AttendanceCheck() {
                 </div>
               ) : (
                 <>
+                  {/* 🔀 미배정 선수 팀 선택 (타일) */}
+                  {!myPlayer.current_team && (
+                    <div className="bg-amber-500/10 border border-amber-500/40 rounded-xl p-3 mb-4">
+                      <p className="text-amber-300 font-bold text-sm mb-2 text-center">🔀 오늘 뛸 팀을 선택하세요 (미배정)</p>
+                      <div className="grid grid-cols-3 gap-2">
+                        {teams.map((t) => {
+                          const active = myTempTeam === t.name
+                          return (
+                            <button
+                              key={t.name}
+                              onClick={() => setMyTempTeam(t.name)}
+                              className={`py-3 rounded-xl font-bold text-sm transition-colors border-2 ${
+                                active
+                                  ? 'bg-emerald-500 text-white border-emerald-400'
+                                  : 'bg-slate-700/60 text-slate-300 border-slate-600 hover:bg-slate-600'
+                              }`}
+                            >
+                              {t.name}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
+
                   {/* 🚗 픽업 체크 */}
                   <label
                     className={`flex items-center gap-3 rounded-xl border p-3 mb-4 cursor-pointer transition-colors ${
@@ -369,29 +413,39 @@ function AttendanceCheck() {
                     </div>
                   </label>
 
-                  <div className="grid grid-cols-3 gap-4">
-                    <button
-                      onClick={() => checkInPlayer(myPlayer, '출석', myPickup)}
-                      disabled={loading}
-                      className="bg-blue-500/70 hover:bg-blue-500 disabled:opacity-30 text-white py-8 rounded-2xl font-bold text-xl transition-colors border border-blue-400/40"
-                    >
-                      🔵<br />출석
-                    </button>
-                    <button
-                      onClick={() => checkInPlayer(myPlayer, '조퇴', myPickup)}
-                      disabled={loading}
-                      className="bg-emerald-500/70 hover:bg-emerald-500 disabled:opacity-30 text-white py-8 rounded-2xl font-bold text-xl transition-colors border border-emerald-400/40"
-                    >
-                      🏃<br />조퇴
-                    </button>
-                    <button
-                      onClick={() => checkInPlayer(myPlayer, '늦참', myPickup)}
-                      disabled={loading}
-                      className="bg-yellow-500/70 hover:bg-yellow-500 disabled:opacity-30 text-slate-900 py-8 rounded-2xl font-bold text-xl transition-colors border border-yellow-400/40"
-                    >
-                      ⏰<br />늦참
-                    </button>
-                  </div>
+                  {(() => {
+                    const needTeam = !myPlayer.current_team && !myTempTeam
+                    return (
+                      <>
+                        {needTeam && (
+                          <p className="text-amber-400 text-xs text-center mb-2">⚠️ 팀을 먼저 선택해주세요</p>
+                        )}
+                        <div className="grid grid-cols-3 gap-4">
+                          <button
+                            onClick={() => checkInPlayer(myPlayer, '출석', myPickup, myTempTeam)}
+                            disabled={loading || needTeam}
+                            className="bg-blue-500/70 hover:bg-blue-500 disabled:opacity-30 disabled:cursor-not-allowed text-white py-8 rounded-2xl font-bold text-xl transition-colors border border-blue-400/40"
+                          >
+                            🔵<br />출석
+                          </button>
+                          <button
+                            onClick={() => checkInPlayer(myPlayer, '조퇴', myPickup, myTempTeam)}
+                            disabled={loading || needTeam}
+                            className="bg-emerald-500/70 hover:bg-emerald-500 disabled:opacity-30 disabled:cursor-not-allowed text-white py-8 rounded-2xl font-bold text-xl transition-colors border border-emerald-400/40"
+                          >
+                            🏃<br />조퇴
+                          </button>
+                          <button
+                            onClick={() => checkInPlayer(myPlayer, '늦참', myPickup, myTempTeam)}
+                            disabled={loading || needTeam}
+                            className="bg-yellow-500/70 hover:bg-yellow-500 disabled:opacity-30 disabled:cursor-not-allowed text-slate-900 py-8 rounded-2xl font-bold text-xl transition-colors border border-yellow-400/40"
+                          >
+                            ⏰<br />늦참
+                          </button>
+                        </div>
+                      </>
+                    )
+                  })()}
                 </>
               )}
             </div>
@@ -422,6 +476,7 @@ function AttendanceCheck() {
                     onChange={(e) => {
                       setSearch(e.target.value)
                       setSelectedPlayer(null)
+                      setOtherTempTeam('')
                     }}
                     className="w-full bg-slate-700 border border-slate-600 rounded-xl px-5 py-4 text-white text-lg placeholder-slate-400 focus:outline-none focus:border-emerald-500 text-center"
                   />
@@ -437,6 +492,7 @@ function AttendanceCheck() {
                             onClick={() => {
                               setSelectedPlayer(player)
                               setSearch(player.name)
+                              setOtherTempTeam('')
                             }}
                             className={`w-full text-left px-4 py-3 hover:bg-slate-600 transition-colors border-b border-slate-600/50 ${
                               selectedPlayer?.id === player.id ? 'bg-emerald-500/20 text-emerald-400' : 'text-white'
@@ -459,6 +515,32 @@ function AttendanceCheck() {
                         <p className="text-slate-400">{selectedPlayer.current_team || '팀 미배정'}</p>
                       </div>
 
+                      {/* 🔀 미배정 선수 팀 선택 (대리 · 타일) */}
+                      {!selectedPlayer.current_team && (
+                        <div className="bg-amber-500/10 border border-amber-500/40 rounded-xl p-3 mt-4">
+                          <p className="text-amber-300 font-bold text-sm mb-2 text-center">🔀 오늘 뛸 팀 선택 (미배정)</p>
+                          <div className="grid grid-cols-3 gap-2">
+                            {teams.map((t) => {
+                              const active = otherTempTeam === t.name
+                              return (
+                                <button
+                                  key={t.name}
+                                  onClick={() => setOtherTempTeam(t.name)}
+                                  className={`py-3 rounded-xl font-bold text-sm transition-colors border-2 ${
+                                    active
+                                      ? 'bg-emerald-500 text-white border-emerald-400'
+                                      : 'bg-slate-700/60 text-slate-300 border-slate-600 hover:bg-slate-600'
+                                  }`}
+                                >
+                                  {t.name}
+                                </button>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* 🚗 픽업 체크 (대리) */}
                       <label
                         className={`flex items-center gap-3 rounded-xl border p-3 mt-4 cursor-pointer transition-colors ${
                           otherPickup
@@ -475,29 +557,39 @@ function AttendanceCheck() {
                         <span className="text-white font-bold text-sm">🚗 픽업함</span>
                       </label>
 
-                      <div className="grid grid-cols-3 gap-4" style={{ marginTop: '16px' }}>
-                        <button
-                          onClick={() => checkInPlayer(selectedPlayer, '출석', otherPickup)}
-                          disabled={loading}
-                          className="bg-blue-500/70 hover:bg-blue-500 disabled:opacity-30 text-white py-6 rounded-2xl font-bold text-lg transition-colors border border-blue-400/40"
-                        >
-                          🔵<br />출석
-                        </button>
-                        <button
-                          onClick={() => checkInPlayer(selectedPlayer, '조퇴', otherPickup)}
-                          disabled={loading}
-                          className="bg-emerald-500/70 hover:bg-emerald-500 disabled:opacity-30 text-white py-6 rounded-2xl font-bold text-lg transition-colors border border-emerald-400/40"
-                        >
-                          🏃<br />조퇴
-                        </button>
-                        <button
-                          onClick={() => checkInPlayer(selectedPlayer, '늦참', otherPickup)}
-                          disabled={loading}
-                          className="bg-yellow-500/70 hover:bg-yellow-500 disabled:opacity-30 text-slate-900 py-6 rounded-2xl font-bold text-lg transition-colors border border-yellow-400/40"
-                        >
-                          ⏰<br />늦참
-                        </button>
-                      </div>
+                      {(() => {
+                        const needTeam = !selectedPlayer.current_team && !otherTempTeam
+                        return (
+                          <>
+                            {needTeam && (
+                              <p className="text-amber-400 text-xs text-center mt-3">⚠️ 팀을 먼저 선택해주세요</p>
+                            )}
+                            <div className="grid grid-cols-3 gap-4" style={{ marginTop: needTeam ? '8px' : '16px' }}>
+                              <button
+                                onClick={() => checkInPlayer(selectedPlayer, '출석', otherPickup, otherTempTeam)}
+                                disabled={loading || needTeam}
+                                className="bg-blue-500/70 hover:bg-blue-500 disabled:opacity-30 disabled:cursor-not-allowed text-white py-6 rounded-2xl font-bold text-lg transition-colors border border-blue-400/40"
+                              >
+                                🔵<br />출석
+                              </button>
+                              <button
+                                onClick={() => checkInPlayer(selectedPlayer, '조퇴', otherPickup, otherTempTeam)}
+                                disabled={loading || needTeam}
+                                className="bg-emerald-500/70 hover:bg-emerald-500 disabled:opacity-30 disabled:cursor-not-allowed text-white py-6 rounded-2xl font-bold text-lg transition-colors border border-emerald-400/40"
+                              >
+                                🏃<br />조퇴
+                              </button>
+                              <button
+                                onClick={() => checkInPlayer(selectedPlayer, '늦참', otherPickup, otherTempTeam)}
+                                disabled={loading || needTeam}
+                                className="bg-yellow-500/70 hover:bg-yellow-500 disabled:opacity-30 disabled:cursor-not-allowed text-slate-900 py-6 rounded-2xl font-bold text-lg transition-colors border border-yellow-400/40"
+                              >
+                                ⏰<br />늦참
+                              </button>
+                            </div>
+                          </>
+                        )
+                      })()}
                     </>
                   )}
                 </div>
@@ -538,7 +630,6 @@ function AttendanceCheck() {
                       className="flex items-center gap-3 border-t border-slate-700/50"
                       style={{ background: 'rgba(30,41,59,0.6)' }}
                     >
-                      {/* 쿼터 배지 */}
                       <div
                         className="flex items-center justify-center flex-shrink-0 w-14 self-stretch"
                         style={{ background: 'rgba(16,185,129,0.15)' }}
@@ -546,7 +637,6 @@ function AttendanceCheck() {
                         <span className="text-emerald-400 font-black text-lg">{match.match_number}Q</span>
                       </div>
 
-                      {/* 주심 / 부심 (이름만) */}
                       <div className="flex-1 py-3 pr-3 grid grid-cols-2 gap-2">
                         <span className="font-bold text-sm text-center">
                           {mainList.length > 0
