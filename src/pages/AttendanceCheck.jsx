@@ -162,6 +162,12 @@ function AttendanceCheck() {
     }
   }
 
+  // 🔀 미배정 판별 (null, 빈값, '미배정' 모두 미배정으로 처리)
+  function isUnassigned(player) {
+    const t = player?.current_team
+    return !t || t === '미배정'
+  }
+
   function isGameStarted() {
     const startHour = parseStartHour(todayGameInfo?.time)
     if (startHour === null) return false
@@ -193,11 +199,12 @@ function AttendanceCheck() {
     }
 
     // 🔀 팀 결정: 배정된 선수는 본인 팀, 미배정 선수는 선택한 임시 팀
-    if (!player.current_team && !tempTeam) {
-      alert('미배정 선수입니다. 오늘 뛸 팀을 선택해주세요!')
+    const unassigned = isUnassigned(player)
+    if (unassigned && !tempTeam) {
+      alert('미배정 선수입니다. 오늘 뛸 팀을 먼저 선택해주세요!')
       return
     }
-    const finalTeam = player.current_team || tempTeam || '미배정'
+    const finalTeam = unassigned ? tempTeam : player.current_team
 
     let finalStatus = status
     if (status === '출석' && isGameStarted()) {
@@ -350,7 +357,7 @@ function AttendanceCheck() {
             <div className="bg-slate-800 border border-slate-700 rounded-2xl p-6 mb-6">
               <p className="text-slate-400 text-sm text-center mb-1">👤 내 출석</p>
               <p className="text-white text-2xl font-bold text-center">{myPlayer.name}</p>
-              <p className="text-slate-400 text-center mb-5">{myPlayer.current_team || '팀 미배정'}</p>
+              <p className="text-slate-400 text-center mb-5">{isUnassigned(myPlayer) ? '팀 미배정' : myPlayer.current_team}</p>
 
               {iAmChecked ? (
                 <div className="bg-emerald-500/15 border border-emerald-500/40 rounded-2xl py-6 text-center">
@@ -367,7 +374,7 @@ function AttendanceCheck() {
               ) : (
                 <>
                   {/* 🔀 미배정 선수 팀 선택 (타일) */}
-                  {!myPlayer.current_team && (
+                  {isUnassigned(myPlayer) && (
                     <div className="bg-amber-500/10 border border-amber-500/40 rounded-xl p-3 mb-4">
                       <p className="text-amber-300 font-bold text-sm mb-2 text-center">🔀 오늘 뛸 팀을 선택하세요 (미배정)</p>
                       <div className="grid grid-cols-3 gap-2">
@@ -414,7 +421,7 @@ function AttendanceCheck() {
                   </label>
 
                   {(() => {
-                    const needTeam = !myPlayer.current_team && !myTempTeam
+                    const needTeam = isUnassigned(myPlayer) && !myTempTeam
                     return (
                       <>
                         {needTeam && (
@@ -499,8 +506,11 @@ function AttendanceCheck() {
                             }`}
                           >
                             <span className="font-medium">{player.name}</span>
-                            {player.current_team && (
+                            {!isUnassigned(player) && (
                               <span className="text-slate-400 text-sm ml-2">({player.current_team})</span>
+                            )}
+                            {isUnassigned(player) && (
+                              <span className="text-amber-400 text-sm ml-2">(미배정)</span>
                             )}
                           </button>
                         ))
@@ -512,11 +522,11 @@ function AttendanceCheck() {
                     <>
                       <div className="text-center mt-4">
                         <p className="text-white text-xl font-bold">{selectedPlayer.name}</p>
-                        <p className="text-slate-400">{selectedPlayer.current_team || '팀 미배정'}</p>
+                        <p className="text-slate-400">{isUnassigned(selectedPlayer) ? '팀 미배정' : selectedPlayer.current_team}</p>
                       </div>
 
                       {/* 🔀 미배정 선수 팀 선택 (대리 · 타일) */}
-                      {!selectedPlayer.current_team && (
+                      {isUnassigned(selectedPlayer) && (
                         <div className="bg-amber-500/10 border border-amber-500/40 rounded-xl p-3 mt-4">
                           <p className="text-amber-300 font-bold text-sm mb-2 text-center">🔀 오늘 뛸 팀 선택 (미배정)</p>
                           <div className="grid grid-cols-3 gap-2">
@@ -558,7 +568,7 @@ function AttendanceCheck() {
                       </label>
 
                       {(() => {
-                        const needTeam = !selectedPlayer.current_team && !otherTempTeam
+                        const needTeam = isUnassigned(selectedPlayer) && !otherTempTeam
                         return (
                           <>
                             {needTeam && (
