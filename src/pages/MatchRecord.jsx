@@ -546,7 +546,18 @@ function MatchRecord() {
       champsWinner = champsStandings[0]
     }
   }
-  const winByPk = isTied && currentPkWinner && champsWinner?.name === currentPkWinner
+    const winByPk = isTied && currentPkWinner && champsWinner?.name === currentPkWinner
+
+  // 🥅 순위표 표시용: 승부차기 승팀을 맨 위로 재정렬 (동률 시)
+  const displayStandings = (() => {
+    if (!isChampsDay || champsStandings.length === 0) return champsStandings
+    if (isTied && currentPkWinner) {
+      const winner = champsStandings.find(t => t.name === currentPkWinner)
+      const rest = champsStandings.filter(t => t.name !== currentPkWinner)
+      return winner ? [winner, ...rest] : champsStandings
+    }
+    return champsStandings
+  })()
 
   const allTeamNames = [...new Set([
     ...teams.map(t => t.name),
@@ -789,7 +800,7 @@ function MatchRecord() {
           {/* 🏆 챔스 결과 (우승팀 + 승부차기 + MVP) */}
           {isChampsDay && (
             <div className="rounded-2xl border p-6 mb-6" style={{ borderColor: `${CHAMPS_COLOR}66`, background: `${CHAMPS_COLOR}14` }}>
-              <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2">🏆 챔피언스 결과</h2>
+                            <h2 className="text-lg font-bold text-white mb-4 flex items-center justify-center gap-2">🏆 경기(챔스) 결과</h2>
 
               {/* 챔스 우승팀 */}
               <div className="rounded-xl p-4 mb-4 text-center border" style={{ borderColor: `${CHAMPS_COLOR}33`, background: `linear-gradient(135deg, ${CHAMPS_COLOR}20 0%, rgba(15,23,42,0.6) 100%)` }}>
@@ -947,8 +958,8 @@ function MatchRecord() {
                       <th className="px-3 py-2.5">승점</th>
                     </tr>
                   </thead>
-                  <tbody>
-                    {champsStandings.map((t, idx) => {
+                                    <tbody>
+                    {displayStandings.map((t, idx) => {
                       const color = getTeamColor(t.name)
                       const gd = t.goalsFor - t.goalsAgainst
                       const isChampWinner = champsWinner?.name === t.name
