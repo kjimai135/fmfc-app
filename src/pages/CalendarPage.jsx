@@ -709,11 +709,41 @@ function CalendarPage() {
   const matchupResults = getMatchupResults()
   const resultIsChamps = resultMatches.some((m) => m.is_champions)
   const resultMvp = resultMatches.find((m) => m.champs_mvp)?.champs_mvp || ''
-  const champsStandings = resultIsChamps ? getChampsStandings() : []
-  const champsWinner =
-    resultIsChamps && champsStandings.length > 0 && champsStandings[0].played > 0
-      ? champsStandings[0]
-      : null
+   const champsStandings = resultIsChamps ? getChampsStandings() : []
+
+  // 🥅 승부차기 우승팀
+  const resultPkWinner = resultMatches.find((m) => m.champs_pk_winner)?.champs_pk_winner || ''
+
+  // 🥅 1위 동률 여부
+  const resultIsTied =
+    champsStandings.length >= 2 &&
+    champsStandings[0].played > 0 &&
+    champsStandings[0].points === champsStandings[1].points &&
+    (champsStandings[0].goalsFor - champsStandings[0].goalsAgainst) ===
+      (champsStandings[1].goalsFor - champsStandings[1].goalsAgainst) &&
+    champsStandings[0].goalsFor === champsStandings[1].goalsFor
+
+  // 🏆 최종 우승팀 (동률이면 승부차기 승팀)
+  let champsWinner = null
+  if (resultIsChamps && champsStandings.length > 0 && champsStandings[0].played > 0) {
+    if (resultIsTied && resultPkWinner) {
+      champsWinner = champsStandings.find((t) => t.name === resultPkWinner) || champsStandings[0]
+    } else {
+      champsWinner = champsStandings[0]
+    }
+  }
+  const resultWinByPk = resultIsTied && resultPkWinner && champsWinner?.name === resultPkWinner
+
+  // 🥅 순위표 표시용: 승부차기 승팀을 맨 위로
+  const displayChampsStandings = (() => {
+    if (!resultIsChamps || champsStandings.length === 0) return champsStandings
+    if (resultIsTied && resultPkWinner) {
+      const winner = champsStandings.find((t) => t.name === resultPkWinner)
+      const rest = champsStandings.filter((t) => t.name !== resultPkWinner)
+      return winner ? [winner, ...rest] : champsStandings
+    }
+    return champsStandings
+  })()
 
   return (
     <div className="max-w-full mx-auto">
@@ -1324,12 +1354,14 @@ function CalendarPage() {
                     className="rounded-xl border p-4 mb-5"
                     style={{ borderColor: `${CHAMPS_COLOR}66`, background: `${CHAMPS_COLOR}14` }}
                   >
-                    <div className="text-center mb-3">
-                      <p className="text-slate-300 text-xs mb-1">👑 챔스 우승팀 (승점 최다)</p>
+                                        <div className="text-center mb-3">
+                      <p className="text-slate-300 text-xs mb-1">👑 챔스 우승팀 {resultWinByPk ? '(승부차기 승)' : '(승점 최다)'}</p>
                       {champsWinner ? (
                         <p className="text-xl font-extrabold" style={{ color: getTeamColor(champsWinner.name) }}>
                           {champsWinner.name}
-                          <span className="text-slate-400 text-sm font-normal ml-2">({champsWinner.points}점)</span>
+                          <span className="text-slate-400 text-sm font-normal ml-2">
+                            ({champsWinner.points}점{resultWinByPk ? ' · 🥅PK승' : ''})
+                          </span>
                         </p>
                       ) : (
                         <p className="text-slate-500 text-sm">경기 결과 없음</p>
@@ -1462,21 +1494,22 @@ function CalendarPage() {
                             <th className="px-2 py-2">승점</th>
                           </tr>
                         </thead>
-                        <tbody>
-                          {champsStandings.map((t, idx) => {
+                                                <tbody>
+                          {displayChampsStandings.map((t, idx) => {
                             const color = getTeamColor(t.name)
                             const gd = t.goalsFor - t.goalsAgainst
+                            const isWinnerRow = champsWinner?.name === t.name
                             return (
                               <tr
                                 key={t.name}
                                 className="border-b border-slate-700/40"
-                                style={{ background: idx === 0 ? `${CHAMPS_COLOR}12` : 'transparent' }}
+                                style={{ background: isWinnerRow && t.played > 0 ? `${CHAMPS_COLOR}12` : 'transparent' }}
                               >
                                 <td className="px-2 py-2 text-left font-bold" style={{ color }}>
                                   <span className="inline-flex items-center gap-1.5">
                                     <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ background: color, border: '1px solid rgba(255,255,255,0.3)' }}></span>
                                     {t.name}
-                                    {idx === 0 && t.played > 0 && <span className="text-xs">👑</span>}
+                                    {isWinnerRow && t.played > 0 && <span className="text-xs">👑{resultWinByPk ? '🥅' : ''}</span>}
                                   </span>
                                 </td>
                                 <td className="px-1 py-2 text-emerald-400 font-bold">{t.wins}</td>
