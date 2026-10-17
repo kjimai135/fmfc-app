@@ -393,12 +393,12 @@ function RefereeAssign() {
     const roleBorder = isMain ? 'rgba(250,204,21,0.55)' : 'rgba(56,189,248,0.55)'
 
     return (
-      <select
+        <select
         value={value}
         onChange={(e) => assignSlot(match, r, subIndex, e.target.value)}
         onMouseDown={(e) => e.stopPropagation()}
         disabled={!canAssign || candidates.length === 0}
-        className="w-full rounded-lg px-2 py-4 text-lg font-bold focus:outline-none disabled:opacity-40 text-center"
+        className="w-full rounded-lg px-1 py-3 text-sm font-bold focus:outline-none disabled:opacity-40 text-center"
         style={{
           background: roleBg,
           border: `2px solid ${roleBorder}`,
