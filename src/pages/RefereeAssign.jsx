@@ -61,6 +61,7 @@ function RefereeAssign() {
   useEffect(() => {
     fetchCurrentSeason()
     fetchTeams()
+    fetchAllAssignments() // 🔢 배정 탭에서도 횟수 표시용으로 로드
   }, [])
 
   useEffect(() => {
@@ -150,10 +151,10 @@ function RefereeAssign() {
 
   function getStatusColor(response) {
     switch (response) {
-      case '참석': return '#3b82f6' // 파랑
-      case '조퇴': return '#22c55e' // 초록
-      case '늦참': return '#eab308' // 노랑
-      case '불참': return '#ef4444' // 빨강
+      case '참석': return '#3b82f6'
+      case '조퇴': return '#22c55e'
+      case '늦참': return '#eab308'
+      case '불참': return '#ef4444'
       default: return '#e2e8f0'
     }
   }
@@ -247,6 +248,7 @@ function RefereeAssign() {
     setSaving(false)
     alert('✅ 심판 배정이 저장되었습니다!')
     fetchData(selectedDate)
+    fetchAllAssignments() // 🔢 저장 후 횟수 갱신
   }
 
   function resetAssignments() {
@@ -290,6 +292,14 @@ function RefereeAssign() {
     setPickerOpen(v => !v)
   }
 
+  // 🔢 선수별 전체 심판 횟수 (현재 시즌 기준)
+  function getRefCount(playerId) {
+    const source = currentSeason
+      ? allAssignments.filter(a => a.season === currentSeason)
+      : allAssignments
+    return source.filter(a => a.player_id === playerId).length
+  }
+
   function buildRefStats() {
     let source = allAssignments
     if (statsPeriod === 'season' && currentSeason) {
@@ -298,14 +308,12 @@ function RefereeAssign() {
 
     const map = {}
 
-    // 🔥 1) 전체 활성 선수를 먼저 0으로 등록 (한 번도 안 한 사람도 포함)
     allPlayers.forEach(p => {
       if (!map[p.id]) {
         map[p.id] = { player_id: p.id, name: p.name, team: p.current_team || '미배정', main: 0, sub: 0 }
       }
     })
 
-    // 🔥 2) 배정 기록 집계
     source.forEach(a => {
       const pid = a.player_id
       if (!pid) return
@@ -316,12 +324,10 @@ function RefereeAssign() {
       else if (a.role === '부심') map[pid].sub++
     })
 
-        let list = Object.values(map).map(x => ({ ...x, total: x.main + x.sub }))
+    let list = Object.values(map).map(x => ({ ...x, total: x.main + x.sub }))
 
-    // 🔥 미배정 팀 선수는 목록에서 제외 (기록은 DB에 유지)
     list = list.filter(x => x.team && x.team !== '미배정')
 
-    // 🔍 이름 검색 필터
     const keyword = statsSearch.trim()
     if (keyword) {
       list = list.filter(x => x.name.includes(keyword))
@@ -337,7 +343,6 @@ function RefereeAssign() {
     return list
   }
 
-  // 드래그/스와이프
   function handleDragStart(clientX, clientY) {
     dragStartX.current = clientX
     dragStartY.current = clientY
@@ -401,11 +406,14 @@ function RefereeAssign() {
         }}
       >
         <option value="">-</option>
-        {candidates.map(c => (
-          <option key={c.player_id} value={c.player_id} disabled={used.has(c.player_id)}>
-            {c.name}{statusEmoji(c.response) ? statusEmoji(c.response) : ''}{used.has(c.player_id) ? '(배정)' : ''}
-          </option>
-        ))}
+        {candidates.map(c => {
+          const cnt = getRefCount(c.player_id)
+          return (
+            <option key={c.player_id} value={c.player_id} disabled={used.has(c.player_id)}>
+              {c.name} ({cnt}){used.has(c.player_id) ? ' 배정' : ''}
+            </option>
+          )
+        })}
       </select>
     )
   }
@@ -534,7 +542,7 @@ function RefereeAssign() {
               </div>
             ) : (
               <>
-                              {/* 범례 */}
+                {/* 범례 */}
                 <div className="flex flex-wrap items-center gap-3 mb-2 text-xs bg-slate-800/40 border border-slate-700 rounded-xl px-3 py-1.5">
                   <span className="text-slate-400">색상:</span>
                   <span className="flex items-center gap-1"><span style={{ color: '#3b82f6' }}>●</span> 참석</span>
@@ -600,7 +608,7 @@ function RefereeAssign() {
                   </div>
                 )}
                 <p className="text-slate-500 text-xs mt-2 text-center">
-                  ※ 선택 즉시 반영됩니다. 저장 버튼을 눌러야 최종 저장됩니다.
+                  ※ 선택 즉시 반영됩니다. 저장 버튼을 눌러야 최종 저장됩니다. · [N회]=이번 시즌 심판 횟수
                 </p>
               </>
             )}
@@ -608,7 +616,6 @@ function RefereeAssign() {
 
           {/* ── 현황 탭 ── */}
           <div className="w-full flex-shrink-0 px-0.5">
-            {/* 🔍 이름 검색 */}
             <input
               type="text"
               value={statsSearch}
