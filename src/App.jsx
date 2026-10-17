@@ -58,7 +58,7 @@ const allMenu = [
   // 📋 일반
   { to: '/roster', label: '📋 팀명단', roles: ['admin', 'executive', 'captain', 'member'], group: 'general' },
   { to: '/rankings', label: '🏆 순위 (팀·득점)', roles: ['admin', 'executive', 'captain', 'member'], group: 'general' },
-  { to: '/attendance/stats', label: '📊 출석율', roles: ['admin', 'executive', 'captain', 'member'], group: 'general' },
+  { to: '/attendance/stats', label: '📊 출석률', roles: ['admin', 'executive', 'captain', 'member'], group: 'general' },
   { to: '/personal-record', label: '📋 개인 기록', roles: ['admin', 'executive', 'captain', 'member'], group: 'general' },
   { to: '/notices', label: '📢 공지', roles: ['admin', 'executive', 'captain', 'member'], group: 'general' },
   { to: '/letter', label: '💌 마음의 편지', roles: ['admin', 'executive', 'captain', 'member'], group: 'general' },
