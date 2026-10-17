@@ -28,7 +28,6 @@ function AttendanceCheck() {
   const [myPickup, setMyPickup] = useState(false)
   const [otherPickup, setOtherPickup] = useState(false)
 
-  // 🔀 미배정 선수 임시 팀 선택
   const [teams, setTeams] = useState([])
   const [myTempTeam, setMyTempTeam] = useState('')
   const [otherTempTeam, setOtherTempTeam] = useState('')
@@ -39,7 +38,6 @@ function AttendanceCheck() {
   const [currentSeason, setCurrentSeason] = useState('')
   const [isSeasonTransitionDay, setIsSeasonTransitionDay] = useState(false)
 
-  // 🚦 오늘 심판 배정
   const [refereeAssignments, setRefereeAssignments] = useState([])
   const [refereeMatches, setRefereeMatches] = useState([])
   const [refTeams, setRefTeams] = useState([])
@@ -87,7 +85,6 @@ function AttendanceCheck() {
     setPlayers((data || []).filter((p) => p.is_active !== false))
   }
 
-  // 🔀 팀 목록 조회 (미배정 선수 임시 배정용)
   async function fetchTeamsForCheck() {
     const { data } = await supabase.from('teams').select('name, color').order('display_order')
     setTeams(data || [])
@@ -128,7 +125,6 @@ function AttendanceCheck() {
     }
   }
 
-  // 🚦 오늘 심판 배정 조회
   async function fetchRefereeAssignments() {
     const [{ data: refData }, { data: matchData }] = await Promise.all([
       supabase.from('referee_assignments').select('*').eq('game_date', today),
@@ -138,7 +134,6 @@ function AttendanceCheck() {
     setRefereeMatches(matchData || [])
   }
 
-  // 🎨 팀 색상 (남색 → 밝은 파랑)
   function getRefTeamColor(teamName) {
     const t = refTeams.find(x => x.name === teamName)
     const color = t?.color || '#e2e8f0'
@@ -162,7 +157,6 @@ function AttendanceCheck() {
     }
   }
 
-  // 🔀 미배정 판별 (null, 빈값, '미배정' 모두 미배정으로 처리)
   function isUnassigned(player) {
     const t = player?.current_team
     return !t || t === '미배정'
@@ -198,7 +192,6 @@ function AttendanceCheck() {
       return
     }
 
-    // 🔀 팀 결정: 배정된 선수는 본인 팀, 미배정 선수는 선택한 임시 팀
     const unassigned = isUnassigned(player)
     if (unassigned && !tempTeam) {
       alert('미배정 선수입니다. 오늘 뛸 팀을 먼저 선택해주세요!')
@@ -218,7 +211,32 @@ function AttendanceCheck() {
     }
 
     setLoading(true)
-    const nextOrder = todayCount + 1
+
+    // 🚗 픽업 순서 반영: 픽업이면 1시간 일찍 온 것으로 계산
+    const nowMs = Date.now()
+    const myEffectiveMs = isPickup ? nowMs - 60 * 60 * 1000 : nowMs
+
+    // 오늘 같은 팀의 기존 출석자 조회 (유효 도착시각 비교)
+    const { data: todayTeamData } = await supabase
+      .from('attendance')
+      .select('id, check_order, checked_at, is_pickup')
+      .eq('game_date', today)
+      .eq('team', finalTeam)
+      .eq('season', currentSeason)
+
+    const existingList = (todayTeamData || []).map(r => ({
+      id: r.id,
+      check_order: r.check_order || 0,
+      effectiveMs: (r.checked_at ? new Date(r.checked_at).getTime() : nowMs)
+        - (r.is_pickup ? 60 * 60 * 1000 : 0),
+    }))
+
+    // 나보다 유효시각이 빠르거나 같은 사람 수 → 내 순서
+    const earlierCount = existingList.filter(r => r.effectiveMs <= myEffectiveMs).length
+    const myOrder = earlierCount + 1
+
+    // 나보다 늦은 사람들 (순서 밀어야 함)
+    const laterOnes = existingList.filter(r => r.effectiveMs > myEffectiveMs)
 
     const { error } = await supabase.from('attendance').insert([
       {
@@ -226,28 +244,41 @@ function AttendanceCheck() {
         player_name: player.name,
         team: finalTeam,
         status: finalStatus,
-        check_order: nextOrder,
+        check_order: myOrder,
         game_date: today,
         is_pickup: !!isPickup,
         season: currentSeason,
+        checked_at: new Date().toISOString(),
       },
     ])
 
     if (error) {
       alert('오류가 발생했습니다: ' + error.message)
       setMessage('')
-    } else {
-      setMessage(
-        `${player.name}님 ${finalStatus} 완료!${isPickup ? ' 🚗 픽업' : ''} (${finalTeam})`
-      )
-      setSelectedPlayer(null)
-      setSearch('')
-      setOtherPickup(false)
-      setMyTempTeam('')
-      setOtherTempTeam('')
-      await fetchTodayCount()
-      setTimeout(() => setMessage(''), 3000)
+      setLoading(false)
+      return
     }
+
+    // 🔀 나보다 늦은 사람들 순서 +1 밀기 (픽업이 중간에 끼어든 경우)
+    if (laterOnes.length > 0) {
+      for (const r of laterOnes) {
+        await supabase
+          .from('attendance')
+          .update({ check_order: r.check_order + 1 })
+          .eq('id', r.id)
+      }
+    }
+
+    setMessage(
+      `${player.name}님 ${finalStatus} 완료!${isPickup ? ' 🚗 픽업' : ''} (${finalTeam})`
+    )
+    setSelectedPlayer(null)
+    setSearch('')
+    setOtherPickup(false)
+    setMyTempTeam('')
+    setOtherTempTeam('')
+    await fetchTodayCount()
+    setTimeout(() => setMessage(''), 3000)
     setLoading(false)
   }
 
@@ -285,7 +316,6 @@ function AttendanceCheck() {
 
   return (
     <div className="max-w-lg mx-auto">
-      {/* 제목 + 날짜 + 시즌 */}
       <div className="mb-6">
         <h1 className="text-3xl font-bold text-white text-center">
           ✅ 출석 체크
@@ -300,7 +330,6 @@ function AttendanceCheck() {
         </div>
       </div>
 
-      {/* 🚫 시즌 전환 당일 경고 */}
       {isSeasonTransitionDay && (
         <div className="bg-amber-500/10 border border-amber-500/40 rounded-2xl p-6 mb-6 text-center">
           <p className="text-4xl mb-3">⚠️</p>
@@ -312,7 +341,6 @@ function AttendanceCheck() {
         </div>
       )}
 
-      {/* 📅 오늘 경기 없음 안내 */}
       {hasGameToday === false && (
         <div className="bg-slate-800 border border-dashed border-slate-600 rounded-2xl p-8 mb-6 text-center">
           <p className="text-4xl mb-3">📅</p>
@@ -321,15 +349,12 @@ function AttendanceCheck() {
         </div>
       )}
 
-      {/* 확인 중 */}
       {hasGameToday === null && (
         <div className="text-center text-slate-400 py-10">⏳ 오늘 경기 일정을 확인하는 중...</div>
       )}
 
-      {/* ⚽ 경기가 있는 날에만 아래 내용 표시 */}
       {hasGameToday === true && !isSeasonTransitionDay && (
         <>
-          {/* 📍 오늘 경기 정보 안내 */}
           {(todayGameInfo?.venue || todayGameInfo?.time) && (
             <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl px-4 py-3 mb-6 text-center text-emerald-200 text-sm">
               ⚽ 오늘 경기
@@ -338,14 +363,12 @@ function AttendanceCheck() {
             </div>
           )}
 
-          {/* 🔥 경기 시작 후 안내 */}
           {gameStarted && (
             <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl px-4 py-3 mb-6 text-center text-blue-200 text-sm">
               🕐 경기가 시작되었습니다. 지금 "출석"을 누르면 <b>늦참</b>으로 기록됩니다.
             </div>
           )}
 
-          {/* 성공 메시지 */}
           {message && (
             <div className="bg-emerald-500/20 border border-emerald-500/50 rounded-xl p-4 mb-6 text-center">
               <p className="text-emerald-400 font-bold text-lg">{message}</p>
@@ -373,7 +396,6 @@ function AttendanceCheck() {
                 </div>
               ) : (
                 <>
-                  {/* 🔀 미배정 선수 팀 선택 (타일) */}
                   {isUnassigned(myPlayer) && (
                     <div className="bg-amber-500/10 border border-amber-500/40 rounded-xl p-3 mb-4">
                       <p className="text-amber-300 font-bold text-sm mb-2 text-center">🔀 오늘 뛸 팀을 선택하세요 (미배정)</p>
@@ -398,7 +420,6 @@ function AttendanceCheck() {
                     </div>
                   )}
 
-                  {/* 🚗 픽업 체크 */}
                   <label
                     className={`flex items-center gap-3 rounded-xl border p-3 mb-4 cursor-pointer transition-colors ${
                       myPickup
@@ -525,7 +546,6 @@ function AttendanceCheck() {
                         <p className="text-slate-400">{isUnassigned(selectedPlayer) ? '팀 미배정' : selectedPlayer.current_team}</p>
                       </div>
 
-                      {/* 🔀 미배정 선수 팀 선택 (대리 · 타일) */}
                       {isUnassigned(selectedPlayer) && (
                         <div className="bg-amber-500/10 border border-amber-500/40 rounded-xl p-3 mt-4">
                           <p className="text-amber-300 font-bold text-sm mb-2 text-center">🔀 오늘 뛸 팀 선택 (미배정)</p>
@@ -550,7 +570,6 @@ function AttendanceCheck() {
                         </div>
                       )}
 
-                      {/* 🚗 픽업 체크 (대리) */}
                       <label
                         className={`flex items-center gap-3 rounded-xl border p-3 mt-4 cursor-pointer transition-colors ${
                           otherPickup
@@ -607,16 +626,14 @@ function AttendanceCheck() {
             </div>
           )}
 
-          {/* 오늘 출석 인원 */}
           <p className="text-slate-500 text-sm text-center mt-6">오늘 출석 인원: {todayCount}명</p>
 
-          {/* 🚦 오늘 심판 배정표 (참고용) */}
+          {/* 🚦 오늘 심판 배정표 */}
           {refereeMatches.length > 0 && refereeAssignments.length > 0 && (
             <div className="mt-8">
               <h2 className="text-lg font-bold text-white mb-3 text-center">🚦 오늘 심판 배정</h2>
 
               <div className="rounded-xl overflow-hidden border border-slate-700">
-                {/* 헤더 (라벨 한 번만) */}
                 <div className="flex items-center gap-3" style={{ background: 'rgba(15,23,42,0.7)' }}>
                   <div className="flex items-center justify-center flex-shrink-0 w-14 py-2">
                     <span className="text-slate-400 text-xs font-bold">쿼터</span>
@@ -627,7 +644,6 @@ function AttendanceCheck() {
                   </div>
                 </div>
 
-                {/* 쿼터별 행 */}
                 {refereeMatches.map(match => {
                   const mainList = refereeAssignments
                     .filter(a => a.match_number === match.match_number && a.role === '주심')
@@ -680,7 +696,6 @@ function AttendanceCheck() {
         </>
       )}
 
-      {/* 하단 여백 */}
       <div style={{ height: '60px', width: '100%' }} aria-hidden="true"></div>
     </div>
   )

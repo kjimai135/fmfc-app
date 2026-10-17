@@ -231,6 +231,16 @@ function AttendanceHistory() {
     }
   }
 
+  // 🚗 유효 도착시각 계산 (픽업이면 실제 출석시각 - 1시간)
+  function getEffectiveTime(record) {
+    if (!record.checked_at) return 0
+    let t = new Date(record.checked_at).getTime()
+    if (record.is_pickup) {
+      t -= 60 * 60 * 1000 // 1시간 일찍
+    }
+    return t
+  }
+
   function getTeamColor(teamName) {
     const team = teams.find(t => t.name === teamName)
     const color = team?.color || '#ffffff'
@@ -443,7 +453,14 @@ function AttendanceHistory() {
         recordedTeams.map(teamName => {
           const teamAttendance = attendance
             .filter(a => a.team === teamName)
-            .sort((a, b) => (a.check_order || 0) - (b.check_order || 0))
+            .sort((a, b) => {
+              // 🔀 수동 순서(check_order)가 있으면 우선, 없으면 유효 도착시각
+              // 🚗 픽업이면 1시간 일찍 온 것으로 계산
+              const ta = getEffectiveTime(a)
+              const tb = getEffectiveTime(b)
+              if (ta !== tb) return ta - tb
+              return (a.check_order || 0) - (b.check_order || 0)
+            })
           if (teamAttendance.length === 0) return null
           const teamColor = getTeamColor(teamName)
 
