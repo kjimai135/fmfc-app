@@ -137,13 +137,24 @@ function PollVote() {
     '불참': '#ef4444',
   }
 
+  // 🚫 불참 버튼을 숨길 선수 (매번 안 나와서 불참 선택 자체를 막음 😄)
+  const NO_ABSENT_PLAYERS = ['신동진']
+
   // 투표 상태 선택 버튼 정의 (참석 → 조퇴 → 늦참 → 불참)
-  const voteOptions = [
+  const ALL_VOTE_OPTIONS = [
     { key: '참석', emoji: '🔵', base: 'bg-blue-500/15 text-blue-300 border-blue-500/30', active: 'bg-blue-500 text-white border-blue-400' },
     { key: '조퇴', emoji: '🏃', base: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30', active: 'bg-emerald-500 text-white border-emerald-400' },
     { key: '늦참', emoji: '⏰', base: 'bg-yellow-500/15 text-yellow-300 border-yellow-500/30', active: 'bg-yellow-500 text-slate-900 border-yellow-400' },
     { key: '불참', emoji: '❌', base: 'bg-red-500/15 text-red-300 border-red-500/30', active: 'bg-red-500 text-white border-red-400' },
   ]
+
+  // 특정 선수는 불참 제외
+  function getVoteOptions(playerName) {
+    if (NO_ABSENT_PLAYERS.includes(playerName)) {
+      return ALL_VOTE_OPTIONS.filter(o => o.key !== '불참')
+    }
+    return ALL_VOTE_OPTIONS
+  }
 
   if (!poll) {
     return <div className="text-center py-20 text-slate-400">⏳ 로딩 중...</div>
@@ -289,8 +300,8 @@ function PollVote() {
           <p className="text-white text-xl font-bold text-center">{myPlayer.name}</p>
           <p className="text-slate-400 text-sm mb-4 text-center">{myPlayer.current_team || '팀 미배정'}</p>
 
-          <div className="grid grid-cols-4 gap-2 mb-3">
-            {voteOptions.map(opt => {
+          <div className={`grid gap-2 mb-3 ${getVoteOptions(myPlayer.name).length === 4 ? 'grid-cols-4' : 'grid-cols-3'}`}>
+            {getVoteOptions(myPlayer.name).map(opt => {
               const isActive = myResponse === opt.key
               return (
                 <button
@@ -470,7 +481,7 @@ function PollVote() {
             </p>
 
             <div className="grid grid-cols-2 gap-3 mb-4">
-              {voteOptions.map(opt => {
+              {getVoteOptions(modalPlayer.name).map(opt => {
                 const isActive = modalCurrentResponse === opt.key
                 return (
                   <button

@@ -42,15 +42,23 @@ function AttendanceCheck() {
   const [refereeMatches, setRefereeMatches] = useState([])
   const [refTeams, setRefTeams] = useState([])
 
+  // 🔔 내 심판 배정 알림 모달
+  const [myRefereeModal, setMyRefereeModal] = useState(null)
+
   const today = new Date(new Date().getTime() + 9 * 60 * 60 * 1000).toISOString().split('T')[0]
 
   useEffect(() => {
     fetchSeason()
     fetchPlayers()
     fetchTodayGame()
-    fetchRefereeAssignments()
     fetchTeamsForCheck()
   }, [])
+
+  // 🔔 심판 배정은 profile 로드 후에 조회 (내 배정 확인 위해)
+  useEffect(() => {
+    fetchRefereeAssignments()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile])
 
   useEffect(() => {
     if (currentSeason) {
@@ -132,6 +140,21 @@ function AttendanceCheck() {
     ])
     setRefereeAssignments(refData || [])
     setRefereeMatches(matchData || [])
+
+    // 🔔 내가 오늘 심판으로 배정됐는지 확인 → 알림 + 진동
+    if (profile?.player_id && refData && refData.length > 0) {
+      const myRefs = refData.filter(a => a.player_id === profile.player_id)
+      if (myRefs.length > 0) {
+        const main = myRefs.filter(a => a.role === '주심').map(a => a.match_number).sort((x, y) => x - y)
+        const sub = myRefs.filter(a => a.role === '부심').map(a => a.match_number).sort((x, y) => x - y)
+        setMyRefereeModal({ main, sub })
+
+        // 📳 진동 (안드로이드 등 지원 기기)
+        if (navigator.vibrate) {
+          navigator.vibrate([300, 150, 300])
+        }
+      }
+    }
   }
 
   function getRefTeamColor(teamName) {
@@ -216,7 +239,6 @@ function AttendanceCheck() {
     const nowMs = Date.now()
     const myEffectiveMs = isPickup ? nowMs - 60 * 60 * 1000 : nowMs
 
-    // 오늘 같은 팀의 기존 출석자 조회 (유효 도착시각 비교)
     const { data: todayTeamData } = await supabase
       .from('attendance')
       .select('id, check_order, checked_at, is_pickup')
@@ -231,11 +253,8 @@ function AttendanceCheck() {
         - (r.is_pickup ? 60 * 60 * 1000 : 0),
     }))
 
-    // 나보다 유효시각이 빠르거나 같은 사람 수 → 내 순서
     const earlierCount = existingList.filter(r => r.effectiveMs <= myEffectiveMs).length
     const myOrder = earlierCount + 1
-
-    // 나보다 늦은 사람들 (순서 밀어야 함)
     const laterOnes = existingList.filter(r => r.effectiveMs > myEffectiveMs)
 
     const { error } = await supabase.from('attendance').insert([
@@ -259,7 +278,6 @@ function AttendanceCheck() {
       return
     }
 
-    // 🔀 나보다 늦은 사람들 순서 +1 밀기 (픽업이 중간에 끼어든 경우)
     if (laterOnes.length > 0) {
       for (const r of laterOnes) {
         await supabase
@@ -316,6 +334,66 @@ function AttendanceCheck() {
 
   return (
     <div className="max-w-lg mx-auto">
+      {/* 🔔 내 심판 배정 알림 모달 */}
+      {myRefereeModal && (
+        <div
+          onClick={() => setMyRefereeModal(null)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.75)',
+            zIndex: 200,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '20px',
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-slate-800 border-2 border-emerald-500/50 rounded-2xl p-6 w-full max-w-sm text-center"
+            style={{ boxShadow: '0 20px 60px rgba(0,0,0,0.6)' }}
+          >
+            <p className="text-5xl mb-3">🚦</p>
+            <h2 className="text-white text-xl font-bold mb-2">심판 배정 안내</h2>
+            <p className="text-slate-300 text-sm mb-4">
+              오늘 경기에서 <b className="text-emerald-400">심판</b>으로 배정되셨습니다!
+            </p>
+
+            <div className="bg-slate-900/60 rounded-xl p-4 mb-5 space-y-2">
+              {myRefereeModal.main.length > 0 && (
+                <div className="flex items-center justify-center gap-2">
+                  <span className="text-yellow-300 font-bold text-sm">👨‍⚖️ 주심</span>
+                  <span className="text-white font-extrabold">
+                    {myRefereeModal.main.map(q => `${q}Q`).join(', ')}
+                  </span>
+                </div>
+              )}
+              {myRefereeModal.sub.length > 0 && (
+                <div className="flex items-center justify-center gap-2">
+                  <span className="text-sky-300 font-bold text-sm">🚩 부심</span>
+                  <span className="text-white font-extrabold">
+                    {myRefereeModal.sub.map(q => `${q}Q`).join(', ')}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            <p className="text-slate-400 text-xs mb-4">
+              ⏰ 해당 쿼터에 심판 준비 부탁드립니다!
+            </p>
+
+            <button
+              onClick={() => setMyRefereeModal(null)}
+              className="w-full bg-emerald-500 hover:bg-emerald-600 text-white py-3 rounded-xl font-bold transition-colors"
+            >
+              확인
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 제목 + 날짜 + 시즌 */}
       <div className="mb-6">
         <h1 className="text-3xl font-bold text-white text-center">
           ✅ 출석 체크
