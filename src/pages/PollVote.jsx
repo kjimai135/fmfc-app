@@ -138,7 +138,7 @@ function PollVote() {
   }
 
   // 🚫 불참 버튼을 숨길 선수 (매번 안 나와서 불참 선택 자체를 막음 😄)
-  const NO_ABSENT_PLAYERS = ['신동진']
+  const NO_ABSENT_PLAYERS = ['']
 
   // 투표 상태 선택 버튼 정의 (참석 → 조퇴 → 늦참 → 불참)
   const ALL_VOTE_OPTIONS = [
