@@ -747,7 +747,7 @@ function AttendanceStats() {
 
   return (
     <div>
-      <h1 className="text-3xl font-bold text-white mb-2">📊 출석율</h1>
+      <h1 className="text-3xl font-bold text-white mb-2">📊 출석률</h1>
       <p className="text-slate-400 mb-4">
         {isChampsView ? '🏆 챔스' : '⚽ 리그'} 총 {totalGames}회 경기 기준
         {filterMode === 'season' && selectedSeason && (
