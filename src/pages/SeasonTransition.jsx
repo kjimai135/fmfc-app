@@ -58,6 +58,9 @@ const STAR_REASONS = [
   { key: '주장', label: '🎖️ 주장', color: '#f472b6' },
 ]
 
+// 🧤 수동 선택 항목 (항목 안에서 바로 선수 추가 가능)
+const MANUAL_REASONS = ['베스트키퍼']
+
 function SeasonTransition() {
   const { role, isPresident } = useAuth()
   const canEdit = role === 'admin' || isPresident
@@ -68,7 +71,6 @@ function SeasonTransition() {
   const [loading, setLoading] = useState(true)
   const [processing, setProcessing] = useState(false)
 
-  // ── 1단계: 아카이브 ──
   const [archiveOpen, setArchiveOpen] = useState(true)
   const [archiveSaved, setArchiveSaved] = useState(false)
   const [savedArchive, setSavedArchive] = useState(null)
@@ -79,7 +81,6 @@ function SeasonTransition() {
   const [champsMvp, setChampsMvp] = useState('')
   const [note, setNote] = useState('')
 
-  // ── 2단계: 별 ──
   const [starOpen, setStarOpen] = useState(false)
   const [starCalculating, setStarCalculating] = useState(false)
   const [starGiving, setStarGiving] = useState(false)
@@ -88,8 +89,9 @@ function SeasonTransition() {
   const [expandedGroups, setExpandedGroups] = useState({})
   const [starAddPlayerId, setStarAddPlayerId] = useState('')
   const [starAddReason, setStarAddReason] = useState('리그우승')
+  // 🔽 항목별 바로 추가용 (reason → playerId)
+  const [groupAddSelect, setGroupAddSelect] = useState({})
 
-  // ── 3단계: 전환 ──
   const [transitionOpen, setTransitionOpen] = useState(false)
   const [newSeason, setNewSeason] = useState('')
   const [teamSetups, setTeamSetups] = useState([
@@ -135,7 +137,6 @@ function SeasonTransition() {
     setLoading(false)
   }
 
-  // ── 공통 계산 ──
   function computeStandings(matches, teamList) {
     const dates = [...new Set(matches.map((m) => m.game_date))]
     const allMatchups = []
@@ -252,11 +253,10 @@ function SeasonTransition() {
     }
   }
 
-  // 1단계: 현재 시즌 자동 계산
   async function computeCurrentSeason(season, teamList, playerList) {
     const [mRes, gAll, resvRes] = await Promise.all([
       supabase.from('matches').select('*').eq('season', season),
-      fetchAllRows('goals'), // 🔁 goals도 전체 조회 (1000행 제한 회피)
+      fetchAllRows('goals'),
       supabase.from('reservations').select('date, time, is_confirmed'),
     ])
     const isPast = makeIsPast(resvRes.data)
@@ -276,14 +276,12 @@ function SeasonTransition() {
     })
     setTopScorerIdx(0)
 
-    // 챔스 자동 감지
     const autoChampsChamp = computeChampsChampion(champsMatches)
     const autoMvp = champsMatches.find((m) => m.champs_mvp)?.champs_mvp || ''
     setChampsChampion((prev) => prev || autoChampsChamp || '')
     setChampsMvp((prev) => prev || autoMvp || '')
   }
 
-  // 1단계: 아카이브 저장
   async function saveArchive() {
     if (!currentSeason) {
       alert('현재 시즌이 설정되어 있지 않습니다.')
@@ -323,7 +321,6 @@ function SeasonTransition() {
     }
   }
 
-  // ── 2단계: 별 자동 계산 ──
   async function calculateStars() {
     if (!archiveSaved || !savedArchive) {
       alert('먼저 1단계에서 시즌 기록을 저장해 주세요.')
@@ -335,7 +332,7 @@ function SeasonTransition() {
     try {
       const [mRes, allAttendance, resvRes] = await Promise.all([
         supabase.from('matches').select('*').eq('season', currentSeason),
-        fetchAllRows('attendance'), // 🔁 1000행 제한 회피 (전체 조회)
+        fetchAllRows('attendance'),
         supabase.from('reservations').select('date, time, is_confirmed'),
       ])
 
@@ -345,13 +342,11 @@ function SeasonTransition() {
       const champsMatches = allPast.filter((m) => m.is_champions)
       const PRESENT = ['출석', '늦참', '조퇴']
 
-      // ⚽ 리그 경기일 / 🏆 챔스 경기일 분리
       const leagueDates = new Set(leagueMatches.map((m) => m.game_date))
       const champsDates = new Set(champsMatches.map((m) => m.game_date))
       const leagueGames = leagueDates.size
       const champsGames = champsDates.size
 
-      // ⚽ 리그 출석률 (베스트 플레이어·리그우승 기준)
       const rate = {}
       for (const p of players) {
         const cnt = allAttendance.filter(
@@ -363,7 +358,7 @@ function SeasonTransition() {
       const standings = computeStandings(leagueMatches, teams)
       const groups = []
 
-      // 1. 리그 우승 (아카이브 값 사용 · 리그 출석률 50%↑)
+      // 1. 리그 우승
       const leagueChamp = savedArchive.league_champion || ''
       const champPlayers = leagueChamp ? players.filter((p) => p.current_team === leagueChamp) : []
       groups.push({
@@ -377,7 +372,7 @@ function SeasonTransition() {
           .sort((a, b) => parseInt(b.info) - parseInt(a.info)),
       })
 
-      // 2. 득점왕 (아카이브 값 사용)
+      // 2. 득점왕
       const topScorerName = savedArchive.league_top_scorer || ''
       const topScorerP = topScorerName ? players.find((p) => p.name === topScorerName) : null
       groups.push({
@@ -425,14 +420,14 @@ function SeasonTransition() {
         candidates: bestCandidates,
       })
 
-      // 3-2. 베스트 키퍼 (수동 선택 · 아래 "+ 선수 추가"로 지정)
+      // 3-2. 베스트 키퍼 (수동 선택 · 항목 안에서 바로 추가)
       groups.push({
         reason: '베스트키퍼',
-        note: '🧤 수동 선택 (아래에서 선수 추가)',
+        note: '🧤 수동 선택 (펼쳐서 선수 추가)',
         candidates: [],
       })
 
-      // 4. 챔스 우승 (아카이브 값 사용 · 🏆 챔스 참석 여부)
+      // 4. 챔스 우승
       const champsChamp = savedArchive.champs_champion || ''
       const champsAtt = []
       if (champsChamp && champsGames > 0) {
@@ -450,7 +445,7 @@ function SeasonTransition() {
         candidates: champsAtt,
       })
 
-      // 5. 챔스 MVP (아카이브 값 사용)
+      // 5. 챔스 MVP
       const mvpName = savedArchive.champs_mvp || ''
       const mvpP = mvpName ? players.find((p) => p.name === mvpName) : null
       groups.push({
@@ -459,7 +454,7 @@ function SeasonTransition() {
         candidates: mvpP ? [{ player_id: mvpP.id, name: mvpP.name, team: mvpP.current_team, info: 'MVP', checked: true }] : [],
       })
 
-      // 6. 주장 (is_captain 우선 → 없으면 팀명 역추적)
+      // 6. 주장
       let captains = players.filter((p) => p.is_captain === true)
       let capNote = `${captains.length}명`
       if (captains.length === 0) {
@@ -480,8 +475,12 @@ function SeasonTransition() {
       })
 
       setStarResult({ groups, leagueGames, champsGames })
+      // 동점 있는 그룹 + 수동 그룹(베스트키퍼)은 펼쳐둠
       const exp = {}
-      groups.forEach((g) => { if (g.tie) exp[g.reason] = true })
+      groups.forEach((g) => {
+        if (g.tie) exp[g.reason] = true
+        if (MANUAL_REASONS.includes(g.reason)) exp[g.reason] = true
+      })
       setExpandedGroups(exp)
     } catch (e) {
       console.error(e)
@@ -505,6 +504,17 @@ function SeasonTransition() {
     })
   }
 
+  // 🗑️ 항목에서 선수 제거 (수동 그룹용)
+  function removeCandidate(gi, ci) {
+    setStarResult((prev) => {
+      if (!prev) return prev
+      const groups = prev.groups.map((g, i) =>
+        i !== gi ? g : { ...g, candidates: g.candidates.filter((_, j) => j !== ci) }
+      )
+      return { ...prev, groups }
+    })
+  }
+
   function addCandidate() {
     if (!starAddPlayerId) { alert('선수를 선택해 주세요.'); return }
     const p = players.find((x) => x.id === starAddPlayerId)
@@ -520,6 +530,24 @@ function SeasonTransition() {
     })
     setExpandedGroups((prev) => ({ ...prev, [starAddReason]: true }))
     setStarAddPlayerId('')
+  }
+
+  // 🔽 특정 항목에 바로 선수 추가 (항목 안 드롭다운)
+  function addToGroup(reason, playerId) {
+    if (!playerId) return
+    const p = players.find((x) => x.id === playerId)
+    if (!p) return
+    setStarResult((prev) => {
+      if (!prev) return prev
+      const groups = prev.groups.map((g) => {
+        if (g.reason !== reason) return g
+        if (g.candidates.some((c) => c.player_id === p.id)) { alert('이미 목록에 있습니다.'); return g }
+        return { ...g, candidates: [...g.candidates, { player_id: p.id, name: p.name, team: p.current_team, info: '수동', checked: true }] }
+      })
+      return { ...prev, groups }
+    })
+    setExpandedGroups((prev) => ({ ...prev, [reason]: true }))
+    setGroupAddSelect((prev) => ({ ...prev, [reason]: '' }))
   }
 
   async function giveStars() {
@@ -554,7 +582,6 @@ function SeasonTransition() {
     }
   }
 
-  // ── 3단계 ──
   function selectCaptain(idx, playerId) {
     const p = players.find((x) => x.id === playerId)
     setTeamSetups((prev) => prev.map((t, i) => (i === idx ? { ...t, captainId: playerId, teamName: p ? suggestTeamName(p.name) : t.teamName } : t)))
@@ -814,7 +841,7 @@ function SeasonTransition() {
                       ))}
                     </div>
                     <p className="text-slate-500 text-xs mb-5">
-                      ⚽ 베스트 플레이어는 <b className="text-sky-400">리그 출석률</b>만 사용합니다. (🏆 챔스 제외)
+                      ⚽ 베스트 플레이어는 <b className="text-sky-400">리그 출석률</b>만 사용 · 🧤 베스트 키퍼는 항목에서 직접 추가
                     </p>
                     <button
                       onClick={calculateStars} disabled={starCalculating}
@@ -847,15 +874,15 @@ function SeasonTransition() {
                         const checked = g.candidates.filter((c) => c.checked).length
                         const isOpen = !!expandedGroups[g.reason]
                         const empty = g.candidates.length === 0
+                        const isManual = MANUAL_REASONS.includes(g.reason)
                         const teamCols = empty ? [] : groupCandidatesByTeam(g.candidates)
                         const scrollX = teamCols.length > 4
 
                         return (
                           <div key={g.reason} className="rounded-xl border overflow-hidden" style={{ borderColor: `${info.color}33` }}>
                             <button
-                              onClick={() => !empty && toggleGroup(g.reason)}
-                              disabled={empty}
-                              className={`w-full flex items-center gap-2 px-3 py-2.5 ${empty ? 'cursor-default' : 'hover:brightness-110 cursor-pointer'}`}
+                              onClick={() => toggleGroup(g.reason)}
+                              className="w-full flex items-center gap-2 px-3 py-2.5 hover:brightness-110 cursor-pointer"
                               style={{ background: `${info.color}12` }}
                             >
                               <span className="font-bold text-sm flex-shrink-0" style={{ color: info.color }}>{info.label}</span>
@@ -865,77 +892,140 @@ function SeasonTransition() {
                               )}
                               <span className="ml-auto flex items-center gap-2 flex-shrink-0">
                                 <span className="text-white text-sm font-bold">{checked}명</span>
-                                {!empty && <span className="text-slate-500 text-xs">{isOpen ? '▲' : '▼'}</span>}
+                                <span className="text-slate-500 text-xs">{isOpen ? '▲' : '▼'}</span>
                               </span>
                             </button>
 
-                            {isOpen && !empty && (
-                              <div className={`p-2 bg-slate-900/50 ${scrollX ? 'overflow-x-auto' : ''}`}>
-                                <div
-                                  className="grid gap-2 items-start"
-                                  style={{
-                                    gridTemplateColumns: scrollX
-                                      ? `repeat(${teamCols.length}, minmax(130px, 1fr))`
-                                      : `repeat(${teamCols.length}, minmax(0, 1fr))`,
-                                    minWidth: scrollX ? `${teamCols.length * 140}px` : undefined,
-                                  }}
-                                >
-                                  {teamCols.map((col) => {
-                                    const tc = teamColorOf(col.team)
-                                    const colChecked = col.list.filter((c) => c.checked).length
-                                    const rk = rankOf(col.list)
-
-                                    return (
-                                      <div
-                                        key={col.team}
-                                        className="rounded-lg border overflow-hidden"
-                                        style={{ borderColor: `${tc}40`, background: `${tc}0d` }}
-                                      >
-                                        <div
-                                          className="flex items-center justify-center gap-1 px-1.5 py-1.5 border-b"
-                                          style={{ borderColor: `${tc}26`, background: `${tc}14` }}
-                                        >
-                                          {rk && (
-                                            <span className="px-1 py-0.5 rounded text-[9px] font-black bg-slate-900/60 text-slate-300 flex-shrink-0">
-                                              {rk}위
-                                            </span>
-                                          )}
-                                          <span
-                                            className="text-[11px] font-extrabold truncate"
-                                            style={{ color: tc }}
-                                            title={col.team}
+                            {isOpen && (
+                              <div className={`p-2 bg-slate-900/50 ${(!isManual && scrollX) ? 'overflow-x-auto' : ''}`}>
+                                {/* 🧤 수동 항목(베스트키퍼): 한 줄에 "팀명 이름" 컴팩트 리스트 */}
+                                {isManual ? (
+                                  <>
+                                    <div className="space-y-1">
+                                      {g.candidates.map((c, ci) => {
+                                        const tc = teamColorOf(c.team)
+                                        return (
+                                          <label
+                                            key={`${c.player_id}-${ci}`}
+                                            className={`flex items-center gap-2 rounded-md px-2 py-1.5 cursor-pointer transition-colors ${
+                                              c.checked ? 'bg-slate-700/70' : 'bg-slate-800/40 hover:bg-slate-700/40'
+                                            }`}
                                           >
-                                            {col.team}
-                                          </span>
-                                          <span className="text-[10px] text-slate-400 flex-shrink-0">({colChecked})</span>
-                                        </div>
-
-                                        <div className="p-1.5 space-y-1">
-                                          {col.list.map((c) => (
-                                            <label
-                                              key={`${c.player_id}-${c._idx}`}
-                                              className={`flex items-center gap-1.5 rounded-md px-1.5 py-1.5 cursor-pointer transition-colors ${
-                                                c.checked ? 'bg-slate-700/70' : 'bg-slate-800/40 hover:bg-slate-700/40'
-                                              } ${c.tieWarn ? 'ring-1 ring-amber-500/50' : ''}`}
+                                            <input
+                                              type="checkbox" checked={c.checked}
+                                              onChange={() => toggleCandidate(gi, ci)}
+                                              className="w-3.5 h-3.5 accent-amber-500 flex-shrink-0"
+                                            />
+                                            <span className="text-[11px] font-bold flex-shrink-0" style={{ color: tc }}>
+                                              {c.team || '미배정'}
+                                            </span>
+                                            <span className={`text-xs font-medium ${c.checked ? 'text-white' : 'text-slate-500'}`}>
+                                              {c.name}
+                                            </span>
+                                            <button
+                                              type="button"
+                                              onClick={(e) => { e.preventDefault(); removeCandidate(gi, ci) }}
+                                              className="text-red-400 hover:text-red-300 text-[11px] ml-auto flex-shrink-0 leading-none"
                                             >
-                                              <input
-                                                type="checkbox" checked={c.checked}
-                                                onChange={() => toggleCandidate(gi, c._idx)}
-                                                className="w-3.5 h-3.5 accent-amber-500 flex-shrink-0"
-                                              />
-                                              <span className={`text-xs font-medium truncate ${c.checked ? 'text-white' : 'text-slate-500'}`}>
-                                                {c.name}
-                                              </span>
-                                              <span className="text-slate-500 text-[10px] ml-auto flex-shrink-0">
-                                                {shortInfo(c.info)}
-                                              </span>
-                                            </label>
-                                          ))}
-                                        </div>
+                                              ✕
+                                            </button>
+                                          </label>
+                                        )
+                                      })}
+                                    </div>
+
+                                    {/* 🔽 선수 추가 드롭다운 */}
+                                    <div className="mt-2 pt-2 border-t border-slate-700/40">
+                                      <select
+                                        value={groupAddSelect[g.reason] || ''}
+                                        onChange={(e) => addToGroup(g.reason, e.target.value)}
+                                        className="w-full bg-slate-800 border rounded-lg px-2 py-1.5 text-white text-xs focus:outline-none"
+                                        style={{ borderColor: `${info.color}66` }}
+                                      >
+                                        <option value="">선수 선택</option>
+                                        {players.map((p) => (
+                                          <option key={p.id} value={p.id}>
+                                            {p.current_team ? `${p.current_team} ` : ''}{p.name}
+                                          </option>
+                                        ))}
+                                      </select>
+                                    </div>
+                                  </>
+                                ) : (
+                                  <>
+                                    {!empty && (
+                                      <div
+                                        className="grid gap-2 items-start"
+                                        style={{
+                                          gridTemplateColumns: scrollX
+                                            ? `repeat(${teamCols.length}, minmax(130px, 1fr))`
+                                            : `repeat(${teamCols.length}, minmax(0, 1fr))`,
+                                          minWidth: scrollX ? `${teamCols.length * 140}px` : undefined,
+                                        }}
+                                      >
+                                        {teamCols.map((col) => {
+                                          const tc = teamColorOf(col.team)
+                                          const colChecked = col.list.filter((c) => c.checked).length
+                                          const rk = rankOf(col.list)
+
+                                          return (
+                                            <div
+                                              key={col.team}
+                                              className="rounded-lg border overflow-hidden"
+                                              style={{ borderColor: `${tc}40`, background: `${tc}0d` }}
+                                            >
+                                              <div
+                                                className="flex items-center justify-center gap-1 px-1.5 py-1.5 border-b"
+                                                style={{ borderColor: `${tc}26`, background: `${tc}14` }}
+                                              >
+                                                {rk && (
+                                                  <span className="px-1 py-0.5 rounded text-[9px] font-black bg-slate-900/60 text-slate-300 flex-shrink-0">
+                                                    {rk}위
+                                                  </span>
+                                                )}
+                                                <span
+                                                  className="text-[11px] font-extrabold truncate"
+                                                  style={{ color: tc }}
+                                                  title={col.team}
+                                                >
+                                                  {col.team}
+                                                </span>
+                                                <span className="text-[10px] text-slate-400 flex-shrink-0">({colChecked})</span>
+                                              </div>
+
+                                              <div className="p-1.5 space-y-1">
+                                                {col.list.map((c) => (
+                                                  <label
+                                                    key={`${c.player_id}-${c._idx}`}
+                                                    className={`flex items-center gap-1.5 rounded-md px-1.5 py-1.5 cursor-pointer transition-colors ${
+                                                      c.checked ? 'bg-slate-700/70' : 'bg-slate-800/40 hover:bg-slate-700/40'
+                                                    } ${c.tieWarn ? 'ring-1 ring-amber-500/50' : ''}`}
+                                                  >
+                                                    <input
+                                                      type="checkbox" checked={c.checked}
+                                                      onChange={() => toggleCandidate(gi, c._idx)}
+                                                      className="w-3.5 h-3.5 accent-amber-500 flex-shrink-0"
+                                                    />
+                                                    <span className={`text-xs font-medium truncate ${c.checked ? 'text-white' : 'text-slate-500'}`}>
+                                                      {c.name}
+                                                    </span>
+                                                    <span className="text-slate-500 text-[10px] ml-auto flex-shrink-0">
+                                                      {shortInfo(c.info)}
+                                                    </span>
+                                                  </label>
+                                                ))}
+                                              </div>
+                                            </div>
+                                          )
+                                        })}
                                       </div>
-                                    )
-                                  })}
-                                </div>
+                                    )}
+
+                                    {empty && (
+                                      <p className="text-slate-500 text-xs text-center py-2">대상자가 없습니다.</p>
+                                    )}
+                                  </>
+                                )}
                               </div>
                             )}
                           </div>
