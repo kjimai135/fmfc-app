@@ -101,6 +101,7 @@ function reasonInfo(reason) {
   if (reason.includes('챔스')) return { icon: '👑', color: '#f59e0b', label: '챔스 우승' };
   if (reason.includes('리그')) return { icon: '🏆', color: '#fbbf24', label: '리그 우승' };
   if (reason.includes('득점왕')) return { icon: '👟', color: '#10b981', label: '득점왕' };
+  if (reason.includes('키퍼')) return { icon: '🧤', color: '#2dd4bf', label: '베스트 키퍼' };
   if (reason.includes('베스트')) return { icon: '📊', color: '#60a5fa', label: '베스트 플레이어' };
   if (reason.includes('주장')) return { icon: '🎖️', color: '#f472b6', label: '주장' };
   return { icon: '⭐', color: '#fbbf24', label: reason };
