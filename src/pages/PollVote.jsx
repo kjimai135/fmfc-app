@@ -71,7 +71,11 @@ function PollVote() {
     if (existing) {
       await supabase
         .from('poll_responses')
-        .update({ response, responded_at: new Date().toISOString() })
+        .update({
+          response,
+          team: player.current_team || null, // 🔥 현재 팀으로 갱신
+          responded_at: new Date().toISOString(),
+        })
         .eq('id', existing.id)
     } else {
       await supabase.from('poll_responses').insert([{
@@ -137,8 +141,8 @@ function PollVote() {
     '불참': '#ef4444',
   }
 
-  // 🚫 불참 버튼을 숨길 선수 (매번 안 나와서 불참 선택 자체를 막음 😄)
-  const NO_ABSENT_PLAYERS = ['']
+  // 🚫 불참 버튼을 숨길 선수 (필요 없으면 [] 로 비우면 됨)
+  const NO_ABSENT_PLAYERS = ['신동진']
 
   // 투표 상태 선택 버튼 정의 (참석 → 조퇴 → 늦참 → 불참)
   const ALL_VOTE_OPTIONS = [
@@ -148,9 +152,9 @@ function PollVote() {
     { key: '불참', emoji: '❌', base: 'bg-red-500/15 text-red-300 border-red-500/30', active: 'bg-red-500 text-white border-red-400' },
   ]
 
-  // 특정 선수는 불참 제외
   function getVoteOptions(playerName) {
-    if (NO_ABSENT_PLAYERS.includes(playerName)) {
+    const cleanName = (playerName || '').trim()
+    if (NO_ABSENT_PLAYERS.includes(cleanName)) {
       return ALL_VOTE_OPTIONS.filter(o => o.key !== '불참')
     }
     return ALL_VOTE_OPTIONS
@@ -163,19 +167,22 @@ function PollVote() {
   const validPlayerIds = new Set(players.map(p => p.id))
   const validResponses = responses.filter(r => validPlayerIds.has(r.player_id))
 
-  function getTeamStats(teamName) {
-    const teamResponses = validResponses.filter(r => r.team === teamName)
-    return {
-      참석: teamResponses.filter(r => r.response === '참석').length,
-      조퇴: teamResponses.filter(r => r.response === '조퇴').length,
-      늦참: teamResponses.filter(r => r.response === '늦참').length,
-      불참: teamResponses.filter(r => r.response === '불참').length,
-    }
-  }
-
   const teamNamesList = teams.map(t => t.name)
   const unassignedPlayers = players.filter(p => !p.current_team || !teamNamesList.includes(p.current_team))
   const assignedPlayers = players.filter(p => p.current_team && teamNamesList.includes(p.current_team))
+
+  // ✅ 팀별 통계 — 선수의 "현재 팀" 기준으로 집계 (시즌 전환 후에도 정확)
+  function getTeamStats(teamName) {
+    const teamPlayers = players.filter(p => p.current_team === teamName)
+    const resps = teamPlayers.map(p => getPlayerResponse(p.id))
+    return {
+      참석: resps.filter(r => r === '참석').length,
+      조퇴: resps.filter(r => r === '조퇴').length,
+      늦참: resps.filter(r => r === '늦참').length,
+      불참: resps.filter(r => r === '불참').length,
+      미투표: resps.filter(r => !r).length,
+    }
+  }
 
   const totalStats = {
     참석: validResponses.filter(r => r.response === '참석').length,
@@ -220,7 +227,7 @@ function PollVote() {
     )
   }
 
-  // 📊 통계 줄 (참석 → 조퇴 → 늦참 → 불참)
+  // 📊 통계 줄 (참석 → 조퇴 → 늦참 → 불참 → 미투표)
   function StatsRow({ stats }) {
     return (
       <div
@@ -231,6 +238,7 @@ function PollVote() {
         <span title="조퇴" style={{ color: LAMP_COLORS['조퇴'] }}>{stats.조퇴}</span>
         <span title="늦참" style={{ color: LAMP_COLORS['늦참'] }}>{stats.늦참}</span>
         <span title="불참" style={{ color: LAMP_COLORS['불참'] }}>{stats.불참}</span>
+        <span title="미투표" className="text-slate-500 ml-auto">{stats.미투표 ?? 0}</span>
       </div>
     )
   }
@@ -345,7 +353,7 @@ function PollVote() {
 
       <h2 className="text-xl font-bold text-white mb-4 text-center">👥 팀별 현황</h2>
 
-      {/* 📊 전체 요약 (참석 → 조퇴 → 늦참 → 불참 → 미투표) */}
+      {/* 📊 전체 요약 */}
       <div className="grid grid-cols-5 gap-3 mb-4">
         <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-4 text-center">
           <p className="text-3xl font-bold text-blue-400">{totalStats.참석}</p>
@@ -423,6 +431,7 @@ function PollVote() {
               조퇴: unassignedPlayers.filter(p => getPlayerResponse(p.id) === '조퇴').length,
               늦참: unassignedPlayers.filter(p => getPlayerResponse(p.id) === '늦참').length,
               불참: unassignedPlayers.filter(p => getPlayerResponse(p.id) === '불참').length,
+              미투표: unassignedPlayers.filter(p => !getPlayerResponse(p.id)).length,
             }}
           />
 
