@@ -2,6 +2,27 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 
+// 🔁 1000행 제한 회피: 전체 행을 페이지네이션으로 가져오기
+async function fetchAllRows(table, columns = '*') {
+  const PAGE_SIZE = 1000
+  let from = 0
+  let all = []
+  while (true) {
+    const { data, error } = await supabase
+      .from(table)
+      .select(columns)
+      .range(from, from + PAGE_SIZE - 1)
+    if (error) {
+      console.error(`${table} 조회 실패:`, error.message)
+      break
+    }
+    all = all.concat(data || [])
+    if (!data || data.length < PAGE_SIZE) break
+    from += PAGE_SIZE
+  }
+  return all
+}
+
 // 주장 이름 → 팀명 자동 생성
 function suggestTeamName(name) {
   if (!name) return ''
@@ -232,9 +253,9 @@ function SeasonTransition() {
 
   // 1단계: 현재 시즌 자동 계산
   async function computeCurrentSeason(season, teamList, playerList) {
-    const [mRes, gRes, resvRes] = await Promise.all([
+    const [mRes, gAll, resvRes] = await Promise.all([
       supabase.from('matches').select('*').eq('season', season),
-      supabase.from('goals').select('*').eq('season', season),
+      fetchAllRows('goals'), // 🔁 goals도 전체 조회 (1000행 제한 회피)
       supabase.from('reservations').select('date, time, is_confirmed'),
     ])
     const isPast = makeIsPast(resvRes.data)
@@ -242,7 +263,8 @@ function SeasonTransition() {
     const leagueMatches = allPast.filter((m) => !m.is_champions)
     const champsMatches = allPast.filter((m) => m.is_champions)
     const champsIds = new Set(champsMatches.map((m) => m.id))
-    const leagueGoals = (gRes.data || [])
+    const leagueGoals = (gAll || [])
+      .filter((g) => g.season === season)
       .filter((g) => isPast(g.game_date))
       .filter((g) => !(g.match_id && champsIds.has(g.match_id)))
 
@@ -310,9 +332,9 @@ function SeasonTransition() {
     setStarGiven(false)
 
     try {
-      const [mRes, attRes, resvRes] = await Promise.all([
+      const [mRes, allAttendance, resvRes] = await Promise.all([
         supabase.from('matches').select('*').eq('season', currentSeason),
-        supabase.from('attendance').select('*'),
+        fetchAllRows('attendance'), // 🔁 1000행 제한 회피 (전체 조회)
         supabase.from('reservations').select('date, time, is_confirmed'),
       ])
 
@@ -320,7 +342,6 @@ function SeasonTransition() {
       const allPast = (mRes.data || []).filter((m) => isPast(m.game_date))
       const leagueMatches = allPast.filter((m) => !m.is_champions)
       const champsMatches = allPast.filter((m) => m.is_champions)
-      const allAttendance = attRes.data || []
       const PRESENT = ['출석', '늦참', '조퇴']
 
       // ⚽ 리그 경기일 / 🏆 챔스 경기일 분리
@@ -434,7 +455,6 @@ function SeasonTransition() {
       let captains = players.filter((p) => p.is_captain === true)
       let capNote = `${captains.length}명`
       if (captains.length === 0) {
-        // 팀명에서 역추적: "민석팀" → 이름이 "민석"으로 끝나는 선수
         const found = []
         for (const t of teams) {
           const base = (t.name || '').replace(/팀$/, '')
@@ -452,7 +472,6 @@ function SeasonTransition() {
       })
 
       setStarResult({ groups, leagueGames, champsGames })
-      // 동점 있는 그룹만 펼침
       const exp = {}
       groups.forEach((g) => { if (g.tie) exp[g.reason] = true })
       setExpandedGroups(exp)
@@ -611,7 +630,6 @@ function SeasonTransition() {
   const teamNames = teams.map((t) => t.name)
   const selectClass = 'w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-emerald-500'
 
-  // 🎨 팀 컬러 (흰색은 가독성 위해 밝은 회색으로)
   function teamColorOf(name) {
     const t = teams.find((x) => x.name === name)
     const c = (t?.color || '').toLowerCase()
@@ -620,7 +638,6 @@ function SeasonTransition() {
     return c
   }
 
-  // 📊 후보를 팀별 열로 묶기 (등장 순서 = 1위팀 → 2위팀 → 3위팀)
   function groupCandidatesByTeam(candidates) {
     const order = []
     const map = {}
@@ -632,19 +649,16 @@ function SeasonTransition() {
     return order.map((t) => ({ team: t, list: map[t] }))
   }
 
-  // 팀명이 헤더로 올라갔으므로 항목에서는 "N위팀 " 접두사 제거
   function shortInfo(info) {
     if (!info) return ''
     return String(info).replace(/^\d+\s*위팀\s*/, '')
   }
 
-  // 열 헤더에 표시할 순위 배지 (베스트 플레이어처럼 teamRank 있는 경우)
   function rankOf(list) {
     const r = list.find((c) => c.teamRank)?.teamRank
     return r || null
   }
 
-  // 단계 헤더 컴포넌트
   function StepHeader({ step, title, desc, done, disabled, open, onToggle, color }) {
     return (
       <button
@@ -698,13 +712,11 @@ function SeasonTransition() {
 
             {archiveOpen && (
               <div className="p-4 bg-slate-900/40 space-y-3">
-                {/* 리그 우승팀 */}
                 <div className="flex items-center gap-3 py-2 border-b border-slate-700/40">
                   <span className="text-slate-300 text-sm font-medium w-28 flex-shrink-0">🏆 리그 우승팀</span>
                   <span className="text-emerald-400 font-bold">{computed.leagueChampion || '-'}</span>
                 </div>
 
-                {/* 득점왕 */}
                 <div className="flex items-center gap-3 py-2 border-b border-slate-700/40">
                   <span className="text-slate-300 text-sm font-medium w-28 flex-shrink-0">👟 득점왕</span>
                   <div className="flex-1">
@@ -720,7 +732,6 @@ function SeasonTransition() {
                   </div>
                 </div>
 
-                {/* 팀 명단 / 득점기록 요약 */}
                 <div className="flex items-center gap-3 py-2 border-b border-slate-700/40">
                   <span className="text-slate-300 text-sm font-medium w-28 flex-shrink-0">👥 팀 명단</span>
                   <span className="text-slate-400 text-sm">
@@ -730,7 +741,6 @@ function SeasonTransition() {
                   </span>
                 </div>
 
-                {/* 챔스 우승팀 */}
                 <div className="flex items-center gap-3 py-2 border-b border-slate-700/40">
                   <span className="text-slate-300 text-sm font-medium w-28 flex-shrink-0">👑 챔스 우승팀</span>
                   <div className="flex-1">
@@ -741,7 +751,6 @@ function SeasonTransition() {
                   </div>
                 </div>
 
-                {/* 챔스 MVP */}
                 <div className="flex items-center gap-3 py-2 border-b border-slate-700/40">
                   <span className="text-slate-300 text-sm font-medium w-28 flex-shrink-0">⭐ 챔스 MVP</span>
                   <div className="flex-1">
@@ -754,7 +763,6 @@ function SeasonTransition() {
                   </div>
                 </div>
 
-                {/* 비고 */}
                 <div className="flex items-center gap-3 py-2">
                   <span className="text-slate-300 text-sm font-medium w-28 flex-shrink-0">📝 비고</span>
                   <input
@@ -825,7 +833,6 @@ function SeasonTransition() {
                       </button>
                     </div>
 
-                    {/* 사유별 접기/펼치기 */}
                     <div className="space-y-2">
                       {starResult.groups.map((g, gi) => {
                         const info = STAR_REASONS.find((r) => r.key === g.reason) || { label: g.reason, color: '#94a3b8' }
@@ -854,7 +861,6 @@ function SeasonTransition() {
                               </span>
                             </button>
 
-                            {/* ✅ 팀별 열(컬럼) 나열 */}
                             {isOpen && !empty && (
                               <div className={`p-2 bg-slate-900/50 ${scrollX ? 'overflow-x-auto' : ''}`}>
                                 <div
@@ -877,7 +883,6 @@ function SeasonTransition() {
                                         className="rounded-lg border overflow-hidden"
                                         style={{ borderColor: `${tc}40`, background: `${tc}0d` }}
                                       >
-                                        {/* 팀 헤더 */}
                                         <div
                                           className="flex items-center justify-center gap-1 px-1.5 py-1.5 border-b"
                                           style={{ borderColor: `${tc}26`, background: `${tc}14` }}
@@ -897,7 +902,6 @@ function SeasonTransition() {
                                           <span className="text-[10px] text-slate-400 flex-shrink-0">({colChecked})</span>
                                         </div>
 
-                                        {/* 선수 목록 (세로) */}
                                         <div className="p-1.5 space-y-1">
                                           {col.list.map((c) => (
                                             <label
@@ -931,7 +935,6 @@ function SeasonTransition() {
                       })}
                     </div>
 
-                    {/* 수동 추가 */}
                     <div className="mt-4 pt-3 border-t border-slate-700/50 flex flex-wrap gap-2">
                       <select
                         value={starAddPlayerId} onChange={(e) => setStarAddPlayerId(e.target.value)}
