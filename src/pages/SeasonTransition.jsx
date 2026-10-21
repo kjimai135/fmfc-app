@@ -52,6 +52,7 @@ const STAR_REASONS = [
   { key: '리그우승', label: '🏆 리그 우승', color: '#fbbf24' },
   { key: '득점왕', label: '👟 득점왕', color: '#10b981' },
   { key: '베스트 플레이어', label: '📊 베스트 플레이어', color: '#60a5fa' },
+  { key: '베스트키퍼', label: '🧤 베스트 키퍼', color: '#2dd4bf' },
   { key: '챔스우승', label: '👑 챔스 우승', color: '#f59e0b' },
   { key: '챔스MVP', label: '⭐ 챔스 MVP', color: '#a78bfa' },
   { key: '주장', label: '🎖️ 주장', color: '#f472b6' },
@@ -387,8 +388,8 @@ function SeasonTransition() {
           : [],
       })
 
-      // 3. 베스트 플레이어 (⚽ 리그 출석률 기준 · 1등 5명 / 2등 3명 / 3등 1명)
-      const quotas = [5, 3, 1]
+      // 3. 베스트 플레이어 (⚽ 리그 출석률 기준 · 1등 4명 / 2등 3명 / 3등 2명)
+      const quotas = [4, 3, 2]
       const bestCandidates = []
       let hasTie = false
       standings.slice(0, 3).forEach((st, ri) => {
@@ -419,9 +420,16 @@ function SeasonTransition() {
       })
       groups.push({
         reason: '베스트 플레이어',
-        note: `⚽ 리그 출석률 기준 · 1위 5명·2위 3명·3위 1명 (리그 ${leagueGames}경기)`,
+        note: `⚽ 리그 출석률 기준 · 1위 4명·2위 3명·3위 2명 (리그 ${leagueGames}경기)`,
         tie: hasTie,
         candidates: bestCandidates,
+      })
+
+      // 3-2. 베스트 키퍼 (수동 선택 · 아래 "+ 선수 추가"로 지정)
+      groups.push({
+        reason: '베스트키퍼',
+        note: '🧤 수동 선택 (아래에서 선수 추가)',
+        candidates: [],
       })
 
       // 4. 챔스 우승 (아카이브 값 사용 · 🏆 챔스 참석 여부)

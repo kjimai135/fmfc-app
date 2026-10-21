@@ -197,6 +197,26 @@ function AttendanceHistory() {
       ? Math.max(...sameTeam.map(a => a.check_order || 0)) + 1
       : 1
 
+    // 🔥 그 날짜 경기의 season 조회 (없으면 현재 시즌 → 그것도 없으면 null)
+    let seasonVal = null
+    const { data: matchRow } = await supabase
+      .from('matches')
+      .select('season')
+      .eq('game_date', selectedDate)
+      .limit(1)
+      .maybeSingle()
+    if (matchRow?.season) {
+      seasonVal = matchRow.season
+    } else {
+      // 경기가 없으면 app_settings의 현재 시즌 사용
+      const { data: seasonRow } = await supabase
+        .from('app_settings')
+        .select('value')
+        .eq('key', 'season_label')
+        .maybeSingle()
+      seasonVal = seasonRow?.value || null
+    }
+
     const { error } = await supabase
       .from('attendance')
       .insert({
@@ -207,6 +227,7 @@ function AttendanceHistory() {
         game_date: selectedDate,
         check_order: nextOrder,
         checked_at: new Date().toISOString(),
+        season: seasonVal,  // 🔥 시즌 자동 추가!
       })
 
     if (error) {
