@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
@@ -22,6 +22,7 @@ function PollVote() {
   const [modalMemo, setModalMemo] = useState('')
   // 📝 메모 보기 팝업
   const [memoPopup, setMemoPopup] = useState(null)
+  const memoTouchStart = useRef(null)
 
   useEffect(() => {
     fetchPoll()
@@ -156,13 +157,22 @@ function PollVote() {
     setModalMemo(getPlayerMemo(player.id))
   }
 
-  // 📝 메모 보기 팝업 열기
+  // 📝 메모 보기 팝업 열기 (해당 팀의 조퇴·늦참 메모 전체)
   function openMemoPopup(player) {
-    const r = responses.find(x => x.player_id === player.id)
+    const teamName = player.current_team || '미배정'
+    // 같은 팀 선수들의 조퇴/늦참 메모 모으기
+    const teamMemos = players
+      .filter(p => (p.current_team || '미배정') === teamName)
+      .map(p => {
+        const r = responses.find(x => x.player_id === p.id)
+        if (!r || !(r.response === '조퇴' || r.response === '늦참') || !r.memo || !r.memo.trim()) return null
+        return { name: p.name, response: r.response, memo: r.memo.trim() }
+      })
+      .filter(Boolean)
+
     setMemoPopup({
-      name: player.name,
-      memo: r?.memo || '',
-      response: r?.response || '',
+      team: teamName,
+      list: teamMemos,
     })
   }
 
@@ -238,18 +248,7 @@ function PollVote() {
   const myPlayer = myPlayerId ? players.find(p => p.id === myPlayerId) : null
   const myResponse = myPlayer ? getPlayerResponse(myPlayer.id) : null
 
-  const memoList = validResponses
-    .filter(r => (r.response === '조퇴' || r.response === '늦참') && r.memo && r.memo.trim())
-    .map(r => {
-      const p = players.find(x => x.id === r.player_id)
-      return {
-        id: r.id,
-        name: r.player_name,
-        team: p?.current_team || r.team || '미배정',
-        response: r.response,
-        memo: r.memo.trim(),
-      }
-    })
+
 
   function splitByAvailability(list) {
     const coming = list.filter(p => {
@@ -541,42 +540,22 @@ function PollVote() {
         </div>
       </div>
 
-      {/* 📝 조퇴·늦참 메모 목록 (하단) */}
-      {memoList.length > 0 && (
-        <div className="mt-6 bg-slate-800 border border-slate-700 rounded-2xl overflow-hidden">
-          <div className="px-4 py-3 border-b border-slate-700 bg-slate-900/40">
-            <h3 className="text-white font-bold text-base">📝 조퇴 · 늦참 메모</h3>
-          </div>
-          <div className="divide-y divide-slate-700/40">
-            {memoList.map(m => {
-              const tagColor = LAMP_COLORS[m.response]
-              const nameColor = getPlayerNameColor(
-                teams.find(t => t.name === m.team)?.color || '#cbd5e1'
-              )
-              return (
-                <div key={m.id} className="flex items-center gap-3 px-4 py-3">
-                  <span
-                    className="inline-flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-full flex-shrink-0"
-                    style={{ background: `${tagColor}22`, color: tagColor, border: `1px solid ${tagColor}55` }}
-                  >
-                    {m.response === '조퇴' ? '🏃' : '⏰'} {m.response}
-                  </span>
-                  <span className="font-bold text-sm flex-shrink-0" style={{ color: nameColor }}>
-                    {m.name}
-                  </span>
-                  <span className="text-slate-500 text-xs flex-shrink-0">({m.team})</span>
-                  <span className="text-slate-200 text-sm ml-1 break-words">{m.memo}</span>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      )}
 
-      {/* 📝 메모 보기 팝업 */}
+
+      {/* 📝 메모 보기 팝업 (팀 전체 메모 · 스와이프로 닫기) */}
       {memoPopup && (
         <div
           onClick={() => setMemoPopup(null)}
+          onTouchStart={(e) => { memoTouchStart.current = { x: e.touches[0].clientX, y: e.touches[0].clientY } }}
+          onTouchEnd={(e) => {
+            const s = memoTouchStart.current
+            if (!s) return
+            const dx = e.changedTouches[0].clientX - s.x
+            const dy = e.changedTouches[0].clientY - s.y
+            // 일정 거리 이상 스와이프하면 닫기
+            if (Math.abs(dx) > 60 || Math.abs(dy) > 60) setMemoPopup(null)
+            memoTouchStart.current = null
+          }}
           style={{
             position: 'fixed',
             inset: 0,
@@ -585,32 +564,56 @@ function PollVote() {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            padding: '20px',
+            padding: '16px',
           }}
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="bg-slate-800 border border-slate-600 rounded-2xl p-5 w-full max-w-xs"
-            style={{ boxShadow: '0 20px 60px rgba(0,0,0,0.5)' }}
+            className="bg-slate-800 border border-slate-600 rounded-2xl w-full flex flex-col"
+            style={{ boxShadow: '0 20px 60px rgba(0,0,0,0.5)', maxWidth: '460px', maxHeight: '80vh' }}
           >
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-white font-bold text-base">
-                📝 {memoPopup.name}
-                {memoPopup.response && (
-                  <span className="ml-2 text-xs font-medium" style={{ color: LAMP_COLORS[memoPopup.response] || '#94a3b8' }}>
-                    {memoPopup.response === '조퇴' ? '🏃' : memoPopup.response === '늦참' ? '⏰' : ''} {memoPopup.response}
-                  </span>
-                )}
+            {/* 헤더 */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-700 flex-shrink-0">
+              <h3 className="text-white font-bold text-lg">
+                📝 <span style={{ color: getPlayerNameColor(teams.find(t => t.name === memoPopup.team)?.color || '#cbd5e1') }}>
+                  {memoPopup.team}
+                </span> 메모
+                <span className="text-slate-400 text-sm font-normal ml-2">({memoPopup.list.length}명)</span>
               </h3>
               <button
                 onClick={() => setMemoPopup(null)}
-                className="text-slate-400 hover:text-white text-lg leading-none px-1"
+                className="text-slate-400 hover:text-white text-2xl leading-none px-2"
               >
                 ✕
               </button>
             </div>
-            <div className="bg-slate-900/60 rounded-xl p-4 text-slate-100 text-sm break-words">
-              {memoPopup.memo || '(메모 없음)'}
+
+            {/* 메모 리스트 (스크롤) */}
+            <div className="overflow-y-auto p-3 space-y-2">
+              {memoPopup.list.length === 0 ? (
+                <p className="text-slate-400 text-center py-8 text-sm">조퇴·늦참 메모가 없습니다.</p>
+              ) : (
+                memoPopup.list.map((m, i) => {
+                  const tagColor = LAMP_COLORS[m.response]
+                  return (
+                    <div key={i} className="bg-slate-900/60 rounded-xl px-3 py-2.5 flex items-center gap-2 flex-wrap">
+                      <span
+                        className="inline-flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-full flex-shrink-0"
+                        style={{ background: `${tagColor}22`, color: tagColor, border: `1px solid ${tagColor}55` }}
+                      >
+                        {m.response === '조퇴' ? '🏃' : '⏰'} {m.response}
+                      </span>
+                      <span className="text-white font-bold text-sm flex-shrink-0">{m.name}</span>
+                      <span className="text-slate-200 text-sm break-words">{m.memo}</span>
+                    </div>
+                  )
+                })
+              )}
+            </div>
+
+            {/* 하단 안내 */}
+            <div className="px-5 py-2.5 border-t border-slate-700 flex-shrink-0">
+              <p className="text-slate-500 text-xs text-center">← 스와이프하거나 ✕를 눌러 닫기 →</p>
             </div>
           </div>
         </div>
