@@ -196,7 +196,7 @@ function PollVote() {
     '불참': '#ef4444',
   }
 
-  const NO_ABSENT_PLAYERS = ['신동진']
+  const NO_ABSENT_PLAYERS = ['']
 
   const ALL_VOTE_OPTIONS = [
     { key: '참석', emoji: '🔵', base: 'bg-blue-500/15 text-blue-300 border-blue-500/30', active: 'bg-blue-500 text-white border-blue-400' },
