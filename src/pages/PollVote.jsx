@@ -17,6 +17,12 @@ function PollVote() {
   const [loading, setLoading] = useState(false)
   const [modalPlayer, setModalPlayer] = useState(null)
 
+  // 📝 메모 입력 상태
+  const [myMemo, setMyMemo] = useState('')
+  const [modalMemo, setModalMemo] = useState('')
+  // 📝 메모 보기 팝업
+  const [memoPopup, setMemoPopup] = useState(null)
+
   useEffect(() => {
     fetchPoll()
     fetchPlayers()
@@ -28,6 +34,12 @@ function PollVote() {
       fetchResponses()
     }
   }, [poll])
+
+  useEffect(() => {
+    if (!myPlayerId) return
+    const mine = responses.find(r => r.player_id === myPlayerId)
+    setMyMemo(mine?.memo || '')
+  }, [responses, myPlayerId])
 
   async function fetchPoll() {
     const { data } = await supabase.from('polls').select('*').eq('id', id).single()
@@ -60,12 +72,19 @@ function PollVote() {
     return false
   }
 
-  async function handleVote(player, response) {
+  function getPlayerMemo(playerId) {
+    return responses.find(r => r.player_id === playerId)?.memo || ''
+  }
+
+  async function handleVote(player, response, memoValue) {
     if (!player || !poll) return
     if (!canEditPlayer(player)) {
       alert('본인의 참석 여부만 변경할 수 있습니다.')
       return
     }
+    const isMemoType = response === '조퇴' || response === '늦참'
+    const memoToSave = isMemoType ? (memoValue || '').trim() : null
+
     setLoading(true)
     const existing = responses.find(r => r.player_id === player.id)
     if (existing) {
@@ -73,7 +92,8 @@ function PollVote() {
         .from('poll_responses')
         .update({
           response,
-          team: player.current_team || null, // 🔥 현재 팀으로 갱신
+          team: player.current_team || null,
+          memo: memoToSave,
           responded_at: new Date().toISOString(),
         })
         .eq('id', existing.id)
@@ -84,11 +104,25 @@ function PollVote() {
         player_name: player.name,
         team: player.current_team || null,
         response,
+        memo: memoToSave,
         season: poll.season,
       }])
     }
     setLoading(false)
-    setModalPlayer(null)
+    await fetchResponses()
+  }
+
+  async function saveMemoOnly(player, memoValue) {
+    if (!player || !poll) return
+    if (!canEditPlayer(player)) return
+    const existing = responses.find(r => r.player_id === player.id)
+    if (!existing) return
+    setLoading(true)
+    await supabase
+      .from('poll_responses')
+      .update({ memo: (memoValue || '').trim() || null })
+      .eq('id', existing.id)
+    setLoading(false)
     fetchResponses()
   }
 
@@ -107,6 +141,7 @@ function PollVote() {
     await supabase.from('poll_responses').delete().eq('id', existing.id)
     setLoading(false)
     setModalPlayer(null)
+    setModalMemo('')
     fetchResponses()
   }
 
@@ -118,6 +153,17 @@ function PollVote() {
       return
     }
     setModalPlayer(player)
+    setModalMemo(getPlayerMemo(player.id))
+  }
+
+  // 📝 메모 보기 팝업 열기
+  function openMemoPopup(player) {
+    const r = responses.find(x => x.player_id === player.id)
+    setMemoPopup({
+      name: player.name,
+      memo: r?.memo || '',
+      response: r?.response || '',
+    })
   }
 
   function getPlayerNameColor(teamColor) {
@@ -133,7 +179,6 @@ function PollVote() {
     return responses.find(r => r.player_id === playerId)?.response || null
   }
 
-  // 💡 상태별 램프 색상 (참석=파랑, 조퇴=초록, 늦참=노랑, 불참=빨강)
   const LAMP_COLORS = {
     '참석': '#3b82f6',
     '조퇴': '#22c55e',
@@ -141,10 +186,8 @@ function PollVote() {
     '불참': '#ef4444',
   }
 
-  // 🚫 불참 버튼을 숨길 선수 (필요 없으면 [] 로 비우면 됨)
   const NO_ABSENT_PLAYERS = ['신동진']
 
-  // 투표 상태 선택 버튼 정의 (참석 → 조퇴 → 늦참 → 불참)
   const ALL_VOTE_OPTIONS = [
     { key: '참석', emoji: '🔵', base: 'bg-blue-500/15 text-blue-300 border-blue-500/30', active: 'bg-blue-500 text-white border-blue-400' },
     { key: '조퇴', emoji: '🏃', base: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30', active: 'bg-emerald-500 text-white border-emerald-400' },
@@ -171,7 +214,6 @@ function PollVote() {
   const unassignedPlayers = players.filter(p => !p.current_team || !teamNamesList.includes(p.current_team))
   const assignedPlayers = players.filter(p => p.current_team && teamNamesList.includes(p.current_team))
 
-  // ✅ 팀별 통계 — 선수의 "현재 팀" 기준으로 집계 (시즌 전환 후에도 정확)
   function getTeamStats(teamName) {
     const teamPlayers = players.filter(p => p.current_team === teamName)
     const resps = teamPlayers.map(p => getPlayerResponse(p.id))
@@ -195,6 +237,19 @@ function PollVote() {
   const modalCurrentResponse = modalPlayer ? getPlayerResponse(modalPlayer.id) : null
   const myPlayer = myPlayerId ? players.find(p => p.id === myPlayerId) : null
   const myResponse = myPlayer ? getPlayerResponse(myPlayer.id) : null
+
+  const memoList = validResponses
+    .filter(r => (r.response === '조퇴' || r.response === '늦참') && r.memo && r.memo.trim())
+    .map(r => {
+      const p = players.find(x => x.id === r.player_id)
+      return {
+        id: r.id,
+        name: r.player_name,
+        team: p?.current_team || r.team || '미배정',
+        response: r.response,
+        memo: r.memo.trim(),
+      }
+    })
 
   function splitByAvailability(list) {
     const coming = list.filter(p => {
@@ -227,7 +282,6 @@ function PollVote() {
     )
   }
 
-  // 📊 통계 줄 (참석 → 조퇴 → 늦참 → 불참 → 미투표)
   function StatsRow({ stats }) {
     return (
       <div
@@ -243,26 +297,41 @@ function PollVote() {
     )
   }
 
+  // 👤 선수 행 (button → div로 변경: 내부 📝 클릭 충돌 방지)
   function renderPlayerRow(player, nameColor) {
     const resp = getPlayerResponse(player.id)
+    const hasMemo = !!getPlayerMemo(player.id)
     const isMe = myPlayerId && player.id === myPlayerId
     const editable = !isMe && canEditPlayer(player)
 
     return (
-      <button
+      <div
         key={player.id}
-        onClick={() => onClickPlayer(player)}
-        disabled={isMe}
-        className={`w-full flex items-center gap-1.5 rounded-lg px-3 py-2 transition-colors border ${
+        onClick={() => { if (!isMe) onClickPlayer(player) }}
+        className={`w-full flex items-center gap-1.5 rounded-lg px-3 py-2 transition-colors border select-none ${
           isMe
             ? 'bg-emerald-500/20 border-emerald-400 shadow-md shadow-emerald-500/20'
             : editable
             ? 'bg-slate-800/50 hover:bg-slate-700 cursor-pointer border-transparent'
-            : 'bg-slate-800/30 cursor-default border-transparent'
+            : 'bg-slate-800/30 cursor-pointer border-transparent'
         }`}
-        title={isMe ? '내 투표는 위 "내 투표" 카드에서 변경하세요' : editable ? '클릭하여 참석 여부 선택' : '본인 것만 변경 가능'}
+        title={isMe ? '내 투표는 위 "내 투표" 카드에서 변경하세요' : editable ? '클릭하여 참석 여부 선택' : '클릭하면 메모 보기'}
       >
-        <span style={{ width: '14px', flexShrink: 0 }} aria-hidden="true"></span>
+        {/* 📝 메모 아이콘 (클릭 시 메모만 팝업) */}
+        <span style={{ width: '16px', flexShrink: 0 }}>
+          {hasMemo && (
+            <span
+              onClick={(e) => {
+                e.stopPropagation()
+                openMemoPopup(player)
+              }}
+              className="text-[12px] cursor-pointer hover:scale-125 inline-block transition-transform"
+              title="메모 보기"
+            >
+              📝
+            </span>
+          )}
+        </span>
         <span
           className={`flex-1 min-w-0 text-sm flex items-center justify-center text-center ${isMe ? 'font-extrabold' : 'font-medium'}`}
           style={{ color: isMe ? '#6ee7b7' : nameColor }}
@@ -270,7 +339,7 @@ function PollVote() {
           <span className="truncate">{player.name}</span>
         </span>
         <StatusLamp resp={resp} />
-      </button>
+      </div>
     )
   }
 
@@ -286,6 +355,9 @@ function PollVote() {
       </div>
     )
   }
+
+  const showMyMemo = myResponse === '조퇴' || myResponse === '늦참'
+  const showModalMemo = modalCurrentResponse === '조퇴' || modalCurrentResponse === '늦참'
 
   return (
     <div className="max-w-full mx-auto">
@@ -314,7 +386,7 @@ function PollVote() {
               return (
                 <button
                   key={opt.key}
-                  onClick={() => handleVote(myPlayer, opt.key)}
+                  onClick={() => handleVote(myPlayer, opt.key, myMemo)}
                   disabled={loading}
                   className={`py-4 rounded-xl font-bold text-sm border transition-colors disabled:opacity-50 ${
                     isActive ? opt.active : opt.base
@@ -325,6 +397,30 @@ function PollVote() {
               )
             })}
           </div>
+
+          {showMyMemo && (
+            <div className="mb-3 bg-slate-900/50 border border-slate-600 rounded-xl p-3">
+              <label className="block text-slate-300 text-xs font-medium mb-1.5">
+                📝 {myResponse} 메모
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={myMemo}
+                  onChange={(e) => setMyMemo(e.target.value)}
+                  placeholder="시간·사유 등을 입력하세요"
+                  className="flex-1 bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-emerald-500"
+                />
+                <button
+                  onClick={() => saveMemoOnly(myPlayer, myMemo)}
+                  disabled={loading}
+                  className="bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold px-4 rounded-lg transition-colors disabled:opacity-50 whitespace-nowrap"
+                >
+                  저장
+                </button>
+              </div>
+            </div>
+          )}
 
           {myResponse && (
             <button
@@ -345,9 +441,9 @@ function PollVote() {
       {/* 안내 문구 */}
       <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl px-4 py-3 mb-4 text-emerald-200 text-sm">
         {canEditAll ? (
-          <>👑 관리자·임원·주장은 아래 목록에서 <b>다른 선수</b>의 참석 여부도 변경할 수 있습니다. (본인 것은 위 "내 투표"에서 변경)</>
+          <>👑 관리자·임원·주장은 아래 목록에서 <b>다른 선수</b>의 참석 여부도 변경할 수 있습니다. (본인 것은 위 "내 투표"에서 변경) · 📝 아이콘을 누르면 메모를 볼 수 있어요.</>
         ) : (
-          <>👇 아래는 전체 <b>참석 현황</b>입니다. 본인 투표는 위 "내 투표"에서 변경해주세요.</>
+          <>👇 아래는 전체 <b>참석 현황</b>입니다. 📝 아이콘을 누르면 조퇴·늦참 메모를 볼 수 있어요.</>
         )}
       </div>
 
@@ -445,6 +541,81 @@ function PollVote() {
         </div>
       </div>
 
+      {/* 📝 조퇴·늦참 메모 목록 (하단) */}
+      {memoList.length > 0 && (
+        <div className="mt-6 bg-slate-800 border border-slate-700 rounded-2xl overflow-hidden">
+          <div className="px-4 py-3 border-b border-slate-700 bg-slate-900/40">
+            <h3 className="text-white font-bold text-base">📝 조퇴 · 늦참 메모</h3>
+          </div>
+          <div className="divide-y divide-slate-700/40">
+            {memoList.map(m => {
+              const tagColor = LAMP_COLORS[m.response]
+              const nameColor = getPlayerNameColor(
+                teams.find(t => t.name === m.team)?.color || '#cbd5e1'
+              )
+              return (
+                <div key={m.id} className="flex items-center gap-3 px-4 py-3">
+                  <span
+                    className="inline-flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-full flex-shrink-0"
+                    style={{ background: `${tagColor}22`, color: tagColor, border: `1px solid ${tagColor}55` }}
+                  >
+                    {m.response === '조퇴' ? '🏃' : '⏰'} {m.response}
+                  </span>
+                  <span className="font-bold text-sm flex-shrink-0" style={{ color: nameColor }}>
+                    {m.name}
+                  </span>
+                  <span className="text-slate-500 text-xs flex-shrink-0">({m.team})</span>
+                  <span className="text-slate-200 text-sm ml-1 break-words">{m.memo}</span>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* 📝 메모 보기 팝업 */}
+      {memoPopup && (
+        <div
+          onClick={() => setMemoPopup(null)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.6)',
+            zIndex: 110,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '20px',
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-slate-800 border border-slate-600 rounded-2xl p-5 w-full max-w-xs"
+            style={{ boxShadow: '0 20px 60px rgba(0,0,0,0.5)' }}
+          >
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-white font-bold text-base">
+                📝 {memoPopup.name}
+                {memoPopup.response && (
+                  <span className="ml-2 text-xs font-medium" style={{ color: LAMP_COLORS[memoPopup.response] || '#94a3b8' }}>
+                    {memoPopup.response === '조퇴' ? '🏃' : memoPopup.response === '늦참' ? '⏰' : ''} {memoPopup.response}
+                  </span>
+                )}
+              </h3>
+              <button
+                onClick={() => setMemoPopup(null)}
+                className="text-slate-400 hover:text-white text-lg leading-none px-1"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="bg-slate-900/60 rounded-xl p-4 text-slate-100 text-sm break-words">
+              {memoPopup.memo || '(메모 없음)'}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 🗳️ 투표 선택 모달 */}
       {modalPlayer && (
         <div
@@ -495,7 +666,7 @@ function PollVote() {
                 return (
                   <button
                     key={opt.key}
-                    onClick={() => handleVote(modalPlayer, opt.key)}
+                    onClick={() => handleVote(modalPlayer, opt.key, modalMemo)}
                     disabled={loading}
                     className={`py-5 rounded-xl font-bold text-base border transition-colors disabled:opacity-50 ${
                       isActive ? opt.active : opt.base
@@ -507,6 +678,30 @@ function PollVote() {
                 )
               })}
             </div>
+
+            {showModalMemo && (
+              <div className="mb-4 bg-slate-900/50 border border-slate-600 rounded-xl p-3">
+                <label className="block text-slate-300 text-xs font-medium mb-1.5">
+                  📝 {modalCurrentResponse} 메모
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={modalMemo}
+                    onChange={(e) => setModalMemo(e.target.value)}
+                    placeholder="시간·사유 등을 입력하세요"
+                    className="flex-1 bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-emerald-500"
+                  />
+                  <button
+                    onClick={() => saveMemoOnly(modalPlayer, modalMemo)}
+                    disabled={loading}
+                    className="bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold px-4 rounded-lg transition-colors disabled:opacity-50 whitespace-nowrap"
+                  >
+                    저장
+                  </button>
+                </div>
+              </div>
+            )}
 
             {modalCurrentResponse && (
               <button

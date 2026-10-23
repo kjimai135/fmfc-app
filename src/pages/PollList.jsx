@@ -5,15 +5,11 @@ import { useAuth } from '../contexts/AuthContext'
 import { calcRounds } from '../lib/rounds'
 
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토']
-
-// 지난(종료) 투표를 몇 개까지 보관할지
 const PAST_KEEP = 4
 
 function PollList() {
   const { role, profile } = useAuth()
-  // 🔑 투표 생성(자동/수동) 권한: 관리자·임원만
   const canManagePolls = role === 'admin' || role === 'executive'
-  // 🙋 본인 선수 ID
   const myPlayerId = profile?.player_id || null
 
   const [polls, setPolls] = useState([])
@@ -23,18 +19,16 @@ function PollList() {
   const [editDate, setEditDate] = useState('')
   const [editTime, setEditTime] = useState('')
   const [editLocation, setEditLocation] = useState('')
-  const [showPast, setShowPast] = useState(false) // 지난 투표 접기/펼치기
+  const [showPast, setShowPast] = useState(false)
 
-  // 🔄 현재 시즌
   const [currentSeason, setCurrentSeason] = useState('')
-
-  // 📊 투표 응답 데이터 (D-7 이하 경기의 현황 표시용)
   const [responses, setResponses] = useState([])
-
-  // 🔢 날짜별 라운드 맵 { 'YYYY-MM-DD': {first, second} }
   const [roundMap, setRoundMap] = useState({})
 
-  // 오늘 날짜 키 (YYYY-MM-DD)
+  // 📝 카드별 메모 입력 상태 { pollId: '메모내용' }
+  const [memoInputs, setMemoInputs] = useState({})
+  const [memoSaving, setMemoSaving] = useState(false)
+
   const pad = (n) => String(n).padStart(2, '0')
   const todayKey = (() => {
     const d = new Date()
@@ -53,7 +47,6 @@ function PollList() {
     }
   }, [currentSeason])
 
-  // 🔄 현재 시즌 조회
   async function fetchSeason() {
     const { data } = await supabase
       .from('app_settings')
@@ -91,7 +84,6 @@ function PollList() {
     setPolls(all)
     setLoading(false)
 
-    // 🔢 각 경기의 라운드 계산
     const rmap = {}
     for (const p of all) {
       if (p.game_date) {
@@ -102,7 +94,6 @@ function PollList() {
     setRoundMap(rmap)
   }
 
-  // 🔥 투표 응답 조회
   async function fetchResponses() {
     if (!currentSeason) return
     const { data } = await supabase
@@ -110,9 +101,19 @@ function PollList() {
       .select('*')
       .eq('season', currentSeason)
     setResponses(data || [])
+
+    // 🔄 내 메모를 입력칸에 동기화
+    if (myPlayerId && data) {
+      const mine = {}
+      data.forEach(r => {
+        if (r.player_id === myPlayerId && r.memo) {
+          mine[r.poll_id] = r.memo
+        }
+      })
+      setMemoInputs(prev => ({ ...mine, ...prev }))
+    }
   }
 
-  // 📅 경기 스케쥴(확정=노란색)에 맞춰 투표 자동 생성
   async function generateFromSchedule() {
     if (!canManagePolls || !currentSeason) return
     if (generating) return
@@ -289,7 +290,7 @@ function PollList() {
     return { label: '종료', tone: 'past', days: diff }
   }
 
-  // 🔥 빠른 출석체크
+  // 🔥 빠른 출석체크 (memo 포함)
   async function handleQuickAttendance(pollId, status) {
     if (!myPlayerId) {
       alert('계정에 연결된 선수 정보가 없습니다. 관리자에게 문의해주세요.')
@@ -297,14 +298,17 @@ function PollList() {
     }
 
     const existing = responses.find(r => r.poll_id === pollId && r.player_id === myPlayerId)
+    // 조퇴/늦참이면 입력된 메모 유지, 아니면 null
+    const memoToSave = (status === '조퇴' || status === '늦참') ? (memoInputs[pollId] || '').trim() || null : null
 
     if (existing) {
       if (existing.response === status) {
+        // 같은 버튼 다시 → 취소
         await supabase.from('poll_responses').delete().eq('id', existing.id)
       } else {
         await supabase
           .from('poll_responses')
-          .update({ response: status, responded_at: new Date().toISOString() })
+          .update({ response: status, memo: memoToSave, responded_at: new Date().toISOString() })
           .eq('id', existing.id)
       }
     } else {
@@ -320,6 +324,7 @@ function PollList() {
         player_name: playerData?.name || '이름없음',
         team: playerData?.current_team || null,
         response: status,
+        memo: memoToSave,
         season: currentSeason,
       }])
     }
@@ -327,18 +332,33 @@ function PollList() {
     fetchResponses()
   }
 
+  // 📝 메모만 저장
+  async function saveMemo(pollId) {
+    if (!myPlayerId) return
+    const existing = responses.find(r => r.poll_id === pollId && r.player_id === myPlayerId)
+    if (!existing) {
+      alert('먼저 조퇴 또는 늦참을 선택해주세요.')
+      return
+    }
+    setMemoSaving(true)
+    await supabase
+      .from('poll_responses')
+      .update({ memo: (memoInputs[pollId] || '').trim() || null })
+      .eq('id', existing.id)
+    setMemoSaving(false)
+    fetchResponses()
+  }
+
   function getMyResponse(pollId) {
     return responses.find(r => r.poll_id === pollId && r.player_id === myPlayerId)?.response || null
   }
 
-  // 예정(오늘 이후) / 지난(종료) 분리
   const upcomingPolls = polls.filter((p) => p.game_date && p.game_date >= todayKey)
   const pastPolls = polls
     .filter((p) => p.game_date && p.game_date < todayKey)
     .sort((a, b) => b.game_date.localeCompare(a.game_date))
     .slice(0, PAST_KEEP)
 
-  // 🔥 이번 주(D-7 이하) / 다가오는(D-7 초과) 분리
   function isWithinWeekPoll(poll) {
     const { dObj } = parseDate(poll.game_date)
     const dday = getDday(dObj)
@@ -347,15 +367,13 @@ function PollList() {
   const thisWeekPolls = upcomingPolls.filter(isWithinWeekPoll)
   const laterPolls = upcomingPolls.filter(p => !isWithinWeekPoll(p))
 
-     // 🔥 투표 옵션 정의 (참석 → 조퇴 → 늦참 → 불참 · 색상 통일)
-    const voteOptions = [
-      { key: '참석', emoji: '🔵', base: 'bg-blue-500/15 text-blue-300 border-blue-500/30', active: 'bg-blue-500 text-white border-blue-400' },
-      { key: '조퇴', emoji: '🏃', base: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30', active: 'bg-emerald-500 text-white border-emerald-400' },
-      { key: '늦참', emoji: '⏰', base: 'bg-yellow-500/15 text-yellow-300 border-yellow-500/30', active: 'bg-yellow-500 text-slate-900 border-yellow-400' },
-      { key: '불참', emoji: '❌', base: 'bg-red-500/15 text-red-300 border-red-500/30', active: 'bg-red-500 text-white border-red-400' },
-    ]
+  const voteOptions = [
+    { key: '참석', emoji: '🔵', base: 'bg-blue-500/15 text-blue-300 border-blue-500/30', active: 'bg-blue-500 text-white border-blue-400' },
+    { key: '조퇴', emoji: '🏃', base: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30', active: 'bg-emerald-500 text-white border-emerald-400' },
+    { key: '늦참', emoji: '⏰', base: 'bg-yellow-500/15 text-yellow-300 border-yellow-500/30', active: 'bg-yellow-500 text-slate-900 border-yellow-400' },
+    { key: '불참', emoji: '❌', base: 'bg-red-500/15 text-red-300 border-red-500/30', active: 'bg-red-500 text-white border-red-400' },
+  ]
 
-  // 🃏 개별 카드 렌더링
   function renderPollCard(poll) {
     const { month, day, weekday, dObj } = parseDate(poll.game_date)
     const dday = getDday(dObj)
@@ -364,8 +382,9 @@ function PollList() {
     const isWithinWeek = isWithinWeekPoll(poll)
     const myResponse = getMyResponse(poll.id)
     const round = roundMap[poll.game_date]
+    // 📝 내가 조퇴/늦참이면 메모칸 표시
+    const showMemo = myResponse === '조퇴' || myResponse === '늦참'
 
-    /* ✏️ 수정 모드 */
     if (editingId === poll.id) {
       return (
         <div key={poll.id} className="bg-slate-800 rounded-2xl p-5 border border-emerald-500/40">
@@ -420,7 +439,6 @@ function PollList() {
       )
     }
 
-    /* 🃏 카드 */
     return (
       <div
         key={poll.id}
@@ -433,7 +451,6 @@ function PollList() {
           backdropFilter: 'blur(10px)',
         }}
       >
-        {/* 상단 컬러 액센트 라인 */}
         <div
           className="h-1 w-full"
           style={{
@@ -444,9 +461,7 @@ function PollList() {
         />
 
         <div className="p-4">
-          {/* 헤더: 날짜 + 정보 */}
           <div className="flex items-center gap-3 mb-3">
-            {/* 날짜 원형 배지 */}
             <div
               className="flex flex-col items-center justify-center rounded-2xl w-[58px] h-[58px] flex-shrink-0"
               style={{
@@ -462,7 +477,6 @@ function PollList() {
               </span>
             </div>
 
-            {/* 정보 배지들 */}
             <div className="flex-1 min-w-0">
               <div className="flex flex-wrap items-center gap-1.5">
                 {dday && (
@@ -491,7 +505,6 @@ function PollList() {
               </div>
             </div>
 
-            {/* 관리 버튼 */}
             {canManagePolls && (
               <div className="flex items-center gap-1 flex-shrink-0">
                 <button
@@ -512,10 +525,8 @@ function PollList() {
             )}
           </div>
 
-          {/* 🔥 이번 주: 출석 버튼 */}
           {isWithinWeek ? (
             <div>
-                            {/* 4개 버튼 (테두리 색상 강조 · 선택 시 또렷하게) */}
               <div className="grid grid-cols-4 gap-2 mb-2.5">
                 {voteOptions.map(opt => {
                   const isActive = myResponse === opt.key
@@ -529,7 +540,6 @@ function PollList() {
                           : `${opt.base} opacity-80 hover:opacity-100 hover:scale-[1.01]`
                       }`}
                     >
-                      {/* 선택 시 체크 배지 */}
                       {isActive && (
                         <span className="absolute top-1 right-1.5 text-[10px]">✔</span>
                       )}
@@ -540,6 +550,31 @@ function PollList() {
                 })}
               </div>
 
+              {/* 📝 조퇴/늦참 메모 입력 */}
+              {showMemo && (
+                <div className="mb-2.5 bg-slate-900/50 border border-slate-600 rounded-xl p-2.5">
+                  <label className="block text-slate-300 text-[11px] font-medium mb-1.5">
+                    📝 {myResponse} 메모
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={memoInputs[poll.id] || ''}
+                      onChange={(e) => setMemoInputs(prev => ({ ...prev, [poll.id]: e.target.value }))}
+                      placeholder="시간·사유 입력"
+                      className="flex-1 bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-emerald-500"
+                    />
+                    <button
+                      onClick={() => saveMemo(poll.id)}
+                      disabled={memoSaving}
+                      className="bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold px-4 rounded-lg transition-colors disabled:opacity-50 whitespace-nowrap"
+                    >
+                      저장
+                    </button>
+                  </div>
+                </div>
+              )}
+
               <Link
                 to={`/polls/${poll.id}`}
                 className="flex items-center justify-center gap-1.5 w-full text-center py-2.5 rounded-xl text-sm font-bold transition-colors border border-sky-500/30 text-sky-300 hover:bg-sky-500/10"
@@ -548,7 +583,6 @@ function PollList() {
               </Link>
             </div>
           ) : (
-            /* 📅 다가오는: 투표 버튼 */
             <Link
               to={`/polls/${poll.id}`}
               className="flex items-center justify-center gap-2 w-full text-center py-3.5 rounded-xl font-bold text-base transition-all"
@@ -568,7 +602,6 @@ function PollList() {
 
   return (
     <div>
-      {/* 헤더 */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
         <div>
           <h1 className="text-3xl font-bold text-white flex items-center gap-2">
@@ -613,7 +646,6 @@ function PollList() {
         </div>
       ) : (
         <>
-          {/* 🔥 이번 주 경기 (D-7 이하) */}
           {thisWeekPolls.length > 0 && (
             <div className="mb-6">
               <div className="flex items-center gap-2 mb-3">
@@ -629,7 +661,6 @@ function PollList() {
             </div>
           )}
 
-          {/* 📅 다가오는 경기 (D-7 초과) */}
           {laterPolls.length > 0 && (
             <div className="mb-6">
               <div className="flex items-center gap-2 mb-3">
@@ -645,7 +676,6 @@ function PollList() {
             </div>
           )}
 
-          {/* 예정 경기 없음 */}
           {upcomingPolls.length === 0 && (
             <div className="text-center py-12 text-slate-400 bg-slate-800/40 border border-dashed border-slate-700 rounded-2xl">
               <p className="text-4xl mb-3">📅</p>
@@ -653,7 +683,6 @@ function PollList() {
             </div>
           )}
 
-          {/* 🕓 지난 경기 */}
           {pastPolls.length > 0 && (
             <div className="mt-6">
               <button
@@ -679,7 +708,6 @@ function PollList() {
         </>
       )}
 
-      {/* ⬇️ 하단 여백 */}
       <div style={{ height: '60px', width: '100%' }} aria-hidden="true"></div>
     </div>
   )
