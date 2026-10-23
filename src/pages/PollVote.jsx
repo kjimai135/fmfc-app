@@ -299,7 +299,8 @@ function PollVote() {
   // 👤 선수 행 (button → div로 변경: 내부 📝 클릭 충돌 방지)
   function renderPlayerRow(player, nameColor) {
     const resp = getPlayerResponse(player.id)
-    const hasMemo = !!getPlayerMemo(player.id)
+    // 📝 조퇴/늦참 + 메모 있을 때만 아이콘 표시
+    const hasMemo = (resp === '조퇴' || resp === '늦참') && !!getPlayerMemo(player.id)
     const isMe = myPlayerId && player.id === myPlayerId
     const editable = !isMe && canEditPlayer(player)
 
