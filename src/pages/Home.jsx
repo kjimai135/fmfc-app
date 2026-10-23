@@ -1,6 +1,9 @@
 import { Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 
+// 📜 회칙 PDF 링크 (구글 드라이브 미리보기)
+const RULES_PDF_URL = 'https://drive.google.com/file/d/1P66pI9RcZEF9WM5Tcu2eXPdCJqc-yWE4/view?usp=sharing'
+
 // 권한 한글 이름
 const ROLE_LABELS = {
   admin: '관리자',
@@ -27,7 +30,6 @@ const dashboardMenu = [
   { to: '/letter', icon: '💌', label: '마음의 편지', desc: '회장님께 익명으로 전하기', roles: ['admin', 'executive', 'captain', 'member'], group: 'general' },
 
   // 🔧 관리
-    // 🔧 관리
   { to: '/matches', icon: '⚽', label: '경기 생성 및 기록', desc: '경기 생성·스코어 기록', roles: ['admin', 'executive', 'captain'], group: 'manage' },
   { to: '/referee', icon: '🚦', label: '심판 배정', desc: '쿼터별 주심·부심 배정', roles: ['admin', 'executive'], group: 'manage' },
   { to: '/stars', icon: '⭐', label: '별 사용 및 잔여현황', desc: '보유 별 · 사용·교환 내역', roles: ['admin', 'executive'], group: 'manage' },
@@ -72,7 +74,7 @@ function Home() {
   return (
     <div className="max-w-5xl mx-auto">
       {/* 환영 헤더 */}
-      <div className="mb-8">
+      <div className="mb-5">
         <div className="flex items-center gap-3 mb-2">
           <h1 className="text-3xl font-bold text-white">
             안녕하세요, {profile?.name || '회원'}님
@@ -81,8 +83,24 @@ function Home() {
             {ROLE_LABELS[role] || role}
           </span>
         </div>
-
       </div>
+
+      {/* 📜 회칙 보기 버튼 */}
+      <a
+        href={RULES_PDF_URL}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="flex items-center justify-between gap-3 bg-gradient-to-r from-amber-500/20 to-orange-500/10 hover:from-amber-500/30 hover:to-orange-500/20 border border-amber-500/40 rounded-2xl px-5 py-4 mb-8 transition-all duration-200 hover:-translate-y-0.5"
+      >
+        <div className="flex items-center gap-3">
+          <span className="text-3xl">📜</span>
+          <div>
+            <p className="text-white font-bold text-base">FM FC 회칙 보기</p>
+            <p className="text-amber-200/70 text-xs mt-0.5">클럽 회칙 전문을 확인하세요 (PDF)</p>
+          </div>
+        </div>
+        <span className="text-amber-300 text-sm font-bold flex-shrink-0">열기 →</span>
+      </a>
 
       {/* 그룹별 섹션 */}
       {sections.map((sec) => (
