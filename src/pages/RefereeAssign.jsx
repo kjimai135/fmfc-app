@@ -408,9 +408,18 @@ function RefereeAssign() {
         <option value="">-</option>
         {candidates.map(c => {
           const cnt = getRefCount(c.player_id)
+          const isUsed = used.has(c.player_id)
           return (
-            <option key={c.player_id} value={c.player_id} disabled={used.has(c.player_id)}>
-              {c.name} ({cnt}){used.has(c.player_id) ? ' 배정' : ''}
+            <option
+              key={c.player_id}
+              value={c.player_id}
+              disabled={isUsed}
+              style={{
+                color: isUsed ? '#64748b' : getStatusColor(c.response),
+                background: '#1e293b',
+              }}
+            >
+              {c.name} ({cnt}){isUsed ? ' 배정' : ''}
             </option>
           )
         })}
