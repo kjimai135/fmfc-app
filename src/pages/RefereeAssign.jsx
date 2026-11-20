@@ -552,10 +552,10 @@ function RefereeAssign() {
               <>
                 {/* 범례 */}
                 <div className="flex flex-wrap items-center gap-3 mb-2 text-xs bg-slate-800/40 border border-slate-700 rounded-xl px-3 py-1.5">
-                  <span className="text-slate-400">색상:</span>
                   <span className="flex items-center gap-1">🔵 참석</span>
                   <span className="flex items-center gap-1">🟢 조퇴</span>
                   <span className="flex items-center gap-1">🟡 늦참</span>
+                  <span className="flex items-center gap-1">(N)=이번 시즌 심판 횟수</span>
                 </div>
 
                 {/* 📋 통합 표 */}
@@ -616,7 +616,7 @@ function RefereeAssign() {
                   </div>
                 )}
                 <p className="text-slate-500 text-xs mt-2 text-center">
-                  ※ 선택 즉시 반영됩니다. 저장 버튼을 눌러야 최종 저장됩니다. · 🔵참석 🟢조퇴 🟡늦참 · (N)=이번 시즌 심판 횟수
+                  ※ 선택 즉시 반영됩니다. 저장 버튼을 눌러야 최종 저장됩니다. 
                 </p>
               </>
             )}
