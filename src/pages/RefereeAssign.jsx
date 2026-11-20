@@ -405,7 +405,7 @@ function RefereeAssign() {
         onChange={(e) => assignSlot(match, r, subIndex, e.target.value)}
         onMouseDown={(e) => e.stopPropagation()}
         disabled={!canAssign || candidates.length === 0}
-        className="w-full rounded-lg px-1 py-3 text-sm font-bold focus:outline-none disabled:opacity-40 text-center"
+        className="w-full rounded-lg px-0.5 py-3 text-xs font-bold focus:outline-none disabled:opacity-40 text-center"
         style={{
           background: roleBg,
           border: `2px solid ${roleBorder}`,
