@@ -19,6 +19,14 @@ function statusEmoji(response) {
   return ''
 }
 
+// 🎨 투표 상태 색 점 (iOS 포함 모든 기기에서 보임)
+function statusDot(response) {
+  if (response === '참석') return '🔵'
+  if (response === '조퇴') return '🟢'
+  if (response === '늦참') return '🟡'
+  return '⚪'
+}
+
 const TABS = [
   { key: 'assign', label: '🚦 심판 배정' },
   { key: 'stats', label: '📊 배정 현황' },
@@ -61,7 +69,7 @@ function RefereeAssign() {
   useEffect(() => {
     fetchCurrentSeason()
     fetchTeams()
-    fetchAllAssignments() // 🔢 배정 탭에서도 횟수 표시용으로 로드
+    fetchAllAssignments()
   }, [])
 
   useEffect(() => {
@@ -248,7 +256,7 @@ function RefereeAssign() {
     setSaving(false)
     alert('✅ 심판 배정이 저장되었습니다!')
     fetchData(selectedDate)
-    fetchAllAssignments() // 🔢 저장 후 횟수 갱신
+    fetchAllAssignments()
   }
 
   function resetAssignments() {
@@ -292,7 +300,6 @@ function RefereeAssign() {
     setPickerOpen(v => !v)
   }
 
-  // 🔢 선수별 전체 심판 횟수 (현재 시즌 기준)
   function getRefCount(playerId) {
     const source = currentSeason
       ? allAssignments.filter(a => a.season === currentSeason)
@@ -393,7 +400,7 @@ function RefereeAssign() {
     const roleBorder = isMain ? 'rgba(250,204,21,0.55)' : 'rgba(56,189,248,0.55)'
 
     return (
-        <select
+      <select
         value={value}
         onChange={(e) => assignSlot(match, r, subIndex, e.target.value)}
         onMouseDown={(e) => e.stopPropagation()}
@@ -410,16 +417,8 @@ function RefereeAssign() {
           const cnt = getRefCount(c.player_id)
           const isUsed = used.has(c.player_id)
           return (
-            <option
-              key={c.player_id}
-              value={c.player_id}
-              disabled={isUsed}
-              style={{
-                color: isUsed ? '#64748b' : getStatusColor(c.response),
-                background: '#1e293b',
-              }}
-            >
-              {c.name} ({cnt}){isUsed ? ' 배정' : ''}
+            <option key={c.player_id} value={c.player_id} disabled={isUsed}>
+              {statusDot(c.response)} {c.name} ({cnt}){isUsed ? ' 배정' : ''}
             </option>
           )
         })}
@@ -554,9 +553,9 @@ function RefereeAssign() {
                 {/* 범례 */}
                 <div className="flex flex-wrap items-center gap-3 mb-2 text-xs bg-slate-800/40 border border-slate-700 rounded-xl px-3 py-1.5">
                   <span className="text-slate-400">색상:</span>
-                  <span className="flex items-center gap-1"><span style={{ color: '#3b82f6' }}>●</span> 참석</span>
-                  <span className="flex items-center gap-1"><span style={{ color: '#22c55e' }}>●</span> 🏃조퇴</span>
-                  <span className="flex items-center gap-1"><span style={{ color: '#eab308' }}>●</span> ⏰늦참</span>
+                  <span className="flex items-center gap-1">🔵 참석</span>
+                  <span className="flex items-center gap-1">🟢 조퇴</span>
+                  <span className="flex items-center gap-1">🟡 늦참</span>
                 </div>
 
                 {/* 📋 통합 표 */}
@@ -617,7 +616,7 @@ function RefereeAssign() {
                   </div>
                 )}
                 <p className="text-slate-500 text-xs mt-2 text-center">
-                  ※ 선택 즉시 반영됩니다. 저장 버튼을 눌러야 최종 저장됩니다. · [N회]=이번 시즌 심판 횟수
+                  ※ 선택 즉시 반영됩니다. 저장 버튼을 눌러야 최종 저장됩니다. · 🔵참석 🟢조퇴 🟡늦참 · (N)=이번 시즌 심판 횟수
                 </p>
               </>
             )}
