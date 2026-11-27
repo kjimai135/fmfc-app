@@ -112,7 +112,7 @@ function AttendanceHistory() {
     fetchAttendance(selectedDate)
   }
 
-  // 🔀 순서 변경 (같은 팀 안에서 위/아래로 이동) · check_order 기준
+  // 🔀 순서 변경 (같은 팀 안에서 위/아래로 이동) · 화면 즉시 반영
   async function moveRecord(teamName, idx, direction) {
     if (!canEdit) return
 
@@ -123,22 +123,29 @@ function AttendanceHistory() {
     const targetIdx = direction === 'up' ? idx - 1 : idx + 1
     if (targetIdx < 0 || targetIdx >= list.length) return
 
-    setMovingId(list[idx].id)
-
+    // 배열에서 위치 교환
     const reordered = [...list]
     const tmp = reordered[idx]
     reordered[idx] = reordered[targetIdx]
     reordered[targetIdx] = tmp
 
-    for (let i = 0; i < reordered.length; i++) {
-      await supabase
-        .from('attendance')
-        .update({ check_order: i + 1 })
-        .eq('id', reordered[i].id)
-    }
+    // ⚡ 1) 화면 즉시 반영 (새 check_order를 state에 바로 적용)
+    const orderMap = {}
+    reordered.forEach((r, i) => { orderMap[r.id] = i + 1 })
+    setAttendance(prev =>
+      prev.map(a =>
+        orderMap[a.id] !== undefined ? { ...a, check_order: orderMap[a.id] } : a
+      )
+    )
 
-    await fetchAttendance(selectedDate)
-    setMovingId(null)
+    // 💾 2) DB는 뒤에서 저장 (화면은 이미 바뀜)
+    for (const r of reordered) {
+      supabase
+        .from('attendance')
+        .update({ check_order: orderMap[r.id] })
+        .eq('id', r.id)
+        .then(() => {})
+    }
   }
 
   async function deleteAllForDate() {
