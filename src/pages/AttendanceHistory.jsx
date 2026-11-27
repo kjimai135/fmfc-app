@@ -4,9 +4,7 @@ import { useAuth } from '../contexts/AuthContext'
 
 function AttendanceHistory() {
   const { role, profile } = useAuth()
-  // ✅ 수정 권한: 관리자·임원·주장/부주장
   const canEdit = role === 'admin' || role === 'executive' || role === 'captain'
-  // 🙋 본인 선수 id
   const myPlayerId = profile?.player_id || null
 
   const [attendance, setAttendance] = useState([])
@@ -18,18 +16,15 @@ function AttendanceHistory() {
   const [availableDates, setAvailableDates] = useState([])
   const [loading, setLoading] = useState(true)
 
-  // 📅 최근 경기 드롭다운
   const [dateMenuOpen, setDateMenuOpen] = useState(false)
   const dateMenuRef = useRef(null)
 
-  // 수동 추가 폼 상태
   const [showAddForm, setShowAddForm] = useState(false)
   const [addPlayerId, setAddPlayerId] = useState('')
   const [addTeam, setAddTeam] = useState('')
   const [addStatus, setAddStatus] = useState('출석')
   const [saving, setSaving] = useState(false)
 
-  // 🔀 순서 변경 중 표시
   const [movingId, setMovingId] = useState(null)
 
   useEffect(() => {
@@ -45,7 +40,6 @@ function AttendanceHistory() {
     }
   }, [selectedDate])
 
-  // 📅 드롭다운 바깥 클릭 시 닫기
   useEffect(() => {
     function handleClickOutside(e) {
       if (dateMenuRef.current && !dateMenuRef.current.contains(e.target)) {
@@ -99,7 +93,6 @@ function AttendanceHistory() {
     setLoading(false)
   }
 
-  // ✅ 개별 선수 상태 수정
   async function updateStatus(recordId, newStatus) {
     if (!canEdit) return
     await supabase
@@ -109,7 +102,6 @@ function AttendanceHistory() {
     fetchAttendance(selectedDate)
   }
 
-  // ✅ 개별 선수 기록 삭제
   async function deleteRecord(recordId, playerName) {
     if (!canEdit) return
     if (!window.confirm(`${playerName} 선수의 출석 기록을 삭제(불참 처리)할까요?`)) return
@@ -120,7 +112,7 @@ function AttendanceHistory() {
     fetchAttendance(selectedDate)
   }
 
-  // 🔀 순서 변경 (같은 팀 안에서 위/아래로 이동)
+  // 🔀 순서 변경 (같은 팀 안에서 위/아래로 이동) · check_order 기준
   async function moveRecord(teamName, idx, direction) {
     if (!canEdit) return
 
@@ -133,13 +125,11 @@ function AttendanceHistory() {
 
     setMovingId(list[idx].id)
 
-    // 배열에서 위치 교환
     const reordered = [...list]
     const tmp = reordered[idx]
     reordered[idx] = reordered[targetIdx]
     reordered[targetIdx] = tmp
 
-    // 1..n 으로 순서 재부여
     for (let i = 0; i < reordered.length; i++) {
       await supabase
         .from('attendance')
@@ -151,7 +141,6 @@ function AttendanceHistory() {
     setMovingId(null)
   }
 
-  // ✅ 선택한 날짜 전체 삭제 — 2단계 재확인
   async function deleteAllForDate() {
     if (!canEdit) return
     const count = attendance.length
@@ -166,7 +155,6 @@ function AttendanceHistory() {
     fetchAttendance(selectedDate)
   }
 
-  // 🧑 선수 선택 시 → 소속팀 자동 채움 (수정 가능)
   function handleSelectPlayer(playerId) {
     setAddPlayerId(playerId)
     const p = players.find(x => x.id === playerId)
@@ -175,7 +163,6 @@ function AttendanceHistory() {
     }
   }
 
-  // ✅ 선수 수동 추가
   async function addAttendance() {
     if (!canEdit) return
     if (!addPlayerId) {
@@ -197,7 +184,6 @@ function AttendanceHistory() {
       ? Math.max(...sameTeam.map(a => a.check_order || 0)) + 1
       : 1
 
-    // 🔥 그 날짜 경기의 season 조회 (없으면 현재 시즌 → 그것도 없으면 null)
     let seasonVal = null
     const { data: matchRow } = await supabase
       .from('matches')
@@ -208,7 +194,6 @@ function AttendanceHistory() {
     if (matchRow?.season) {
       seasonVal = matchRow.season
     } else {
-      // 경기가 없으면 app_settings의 현재 시즌 사용
       const { data: seasonRow } = await supabase
         .from('app_settings')
         .select('value')
@@ -227,7 +212,7 @@ function AttendanceHistory() {
         game_date: selectedDate,
         check_order: nextOrder,
         checked_at: new Date().toISOString(),
-        season: seasonVal,  // 🔥 시즌 자동 추가!
+        season: seasonVal,
       })
 
     if (error) {
@@ -242,7 +227,7 @@ function AttendanceHistory() {
     setSaving(false)
   }
 
-   const statusIcon = (s) => {
+  const statusIcon = (s) => {
     switch(s) {
       case '출석': return '🔵'
       case '조퇴': return '🏃'
@@ -250,16 +235,6 @@ function AttendanceHistory() {
       case '불참': return '❌'
       default: return ''
     }
-  }
-
-  // 🚗 유효 도착시각 계산 (픽업이면 실제 출석시각 - 1시간)
-  function getEffectiveTime(record) {
-    if (!record.checked_at) return 0
-    let t = new Date(record.checked_at).getTime()
-    if (record.is_pickup) {
-      t -= 60 * 60 * 1000 // 1시간 일찍
-    }
-    return t
   }
 
   function getTeamColor(teamName) {
@@ -272,7 +247,6 @@ function AttendanceHistory() {
     return color
   }
 
-  // 📅 날짜에 요일 붙이기
   function fmtDateLabel(dateStr) {
     if (!dateStr) return ''
     const d = new Date(dateStr + 'T00:00:00')
@@ -282,12 +256,11 @@ function AttendanceHistory() {
   }
 
   const recordedTeams = [...new Set(attendance.map(a => a.team))]
-    const statusOptions = ['출석', '조퇴', '늦참']
+  const statusOptions = ['출석', '조퇴', '늦참']
 
   const alreadyIds = new Set(attendance.map(a => a.player_id).filter(Boolean))
   const selectablePlayers = players.filter(p => !alreadyIds.has(p.id))
 
-  // 선택된 선수 정보 (미배정 안내용)
   const selectedPlayerObj = players.find(p => p.id === addPlayerId)
   const isUnassignedPlayer = !!addPlayerId && !selectedPlayerObj?.current_team
 
@@ -295,7 +268,6 @@ function AttendanceHistory() {
     <div>
       <h1 className="text-3xl font-bold text-white mb-6">📋 출석현황</h1>
 
-      {/* 🔒 읽기 전용 안내 */}
       {!canEdit && (
         <div className="bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 mb-6 text-slate-400 text-sm flex items-center gap-2">
           <span>🔒</span>
@@ -315,7 +287,6 @@ function AttendanceHistory() {
           />
         </div>
 
-        {/* 📅 최근 경기 — 드롭다운 */}
         <div className="relative" ref={dateMenuRef}>
           <label className="block text-slate-300 text-sm font-medium mb-2">최근 경기</label>
           <button
@@ -366,7 +337,6 @@ function AttendanceHistory() {
         </div>
       </div>
 
-      {/* 상단 버튼 */}
       {canEdit && (
         <div className="flex flex-wrap items-center gap-2 mb-4">
           <button
@@ -378,7 +348,6 @@ function AttendanceHistory() {
         </div>
       )}
 
-      {/* ✅ 수동 추가 폼 (팀 자동 채움 · 수정 가능) */}
       {canEdit && showAddForm && (
         <div className="bg-slate-800 border border-emerald-500/40 rounded-xl p-4 mb-6">
           <p className="text-slate-300 text-sm mb-3">
@@ -474,14 +443,7 @@ function AttendanceHistory() {
         recordedTeams.map(teamName => {
           const teamAttendance = attendance
             .filter(a => a.team === teamName)
-            .sort((a, b) => {
-              // 🔀 수동 순서(check_order)가 있으면 우선, 없으면 유효 도착시각
-              // 🚗 픽업이면 1시간 일찍 온 것으로 계산
-              const ta = getEffectiveTime(a)
-              const tb = getEffectiveTime(b)
-              if (ta !== tb) return ta - tb
-              return (a.check_order || 0) - (b.check_order || 0)
-            })
+            .sort((a, b) => (a.check_order || 0) - (b.check_order || 0))
           if (teamAttendance.length === 0) return null
           const teamColor = getTeamColor(teamName)
 
@@ -552,7 +514,6 @@ function AttendanceHistory() {
                           {canEdit && (
                             <td className="px-4 py-14">
                               <div className="flex items-center justify-center gap-1">
-                                {/* 🔼 위로 */}
                                 <button
                                   onClick={() => moveRecord(teamName, idx, 'up')}
                                   disabled={idx === 0 || isMoving}
@@ -561,7 +522,6 @@ function AttendanceHistory() {
                                 >
                                   ▲
                                 </button>
-                                {/* 🔽 아래로 */}
                                 <button
                                   onClick={() => moveRecord(teamName, idx, 'down')}
                                   disabled={idx === teamAttendance.length - 1 || isMoving}
@@ -570,7 +530,6 @@ function AttendanceHistory() {
                                 >
                                   ▼
                                 </button>
-                                {/* 🗑️ 삭제 */}
                                 <button
                                   onClick={() => deleteRecord(record.id, record.player_name)}
                                   className="text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded px-1.5 py-1 text-sm transition-colors ml-1"
@@ -592,7 +551,6 @@ function AttendanceHistory() {
         })
       )}
 
-      {/* ⬇️ 기록 전체 삭제 */}
       {canEdit && attendance.length > 0 && !loading && (
         <div style={{ marginTop: '80px', paddingTop: '28px', borderTop: '1px solid rgba(71,85,105,0.4)' }}>
           <div className="flex justify-center">
@@ -609,7 +567,6 @@ function AttendanceHistory() {
         </div>
       )}
 
-      {/* 하단 여백 */}
       <div style={{ height: '60px', width: '100%' }} aria-hidden="true"></div>
     </div>
   )
